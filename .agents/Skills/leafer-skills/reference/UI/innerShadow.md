@@ -1,0 +1,85 @@
+<script setup>
+import Case from '/component/Case.vue'
+</script>
+
+# innerShadow
+
+元素的内阴影。
+
+<case name="InnerShadow" editor=false></case>
+
+## 关键属性
+
+### innerShadow: [`ShadowEffect`](../interface/ui/Effect.md#shadoweffect) | [`ShadowEffect`](../interface/ui/Effect.md#shadoweffect)[]
+
+内阴影， 支持多个内阴影叠加。
+
+```ts
+interface ShadowEffect {
+  x: number
+  y: number
+  blur: number
+  spread?: number
+  color: Color
+  blendMode?: BlendMode
+  visible?: boolean
+  scaleFixed?: 'zoom-in' ｜ false // 缩放时是否固定原有比例，zoom-in表示仅在放大时固定比例（缩小时仍跟随缩小）
+}
+```
+
+## 归属
+
+### [UI 元素](../display/UI.md)
+
+## 示例
+
+<case name="InnerShadow" index=0 editor=false></case>
+
+### 绘制内阴影
+
+::: code-group
+```ts
+// #内阴影 (Leafer)
+import { Leafer, Rect } from 'leafer-ui'
+
+const leafer = new Leafer({ view: window })
+
+const rect = new Rect({
+    width: 100,
+    height: 100,
+    cornerRadius: 30,
+    fill: '#32cd79',
+    innerShadow: { // [!code hl:6]
+        x: 10,
+        y: 5,
+        blur: 20,
+        color: '#FF0000AA'
+    }
+})
+
+leafer.add(rect)
+```
+```ts
+// #内阴影 (App)
+import { App, Rect } from 'leafer-ui'
+import '@leafer-in/editor' // 导入图形编辑器插件
+import '@leafer-in/viewport' // 导入视口插件 (可选)
+
+const app = new App({ view: window, editor: {} })
+
+const rect = new Rect({
+    width: 100,
+    height: 100,
+    cornerRadius: 30,
+    fill: '#32cd79',
+    innerShadow: { // [!code hl:6]
+        x: 10,
+        y: 5,
+        blur: 20,
+        color: '#FF0000AA'
+    }
+})
+
+app.tree.add(rect)
+```
+:::

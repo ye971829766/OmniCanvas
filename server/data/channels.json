@@ -1,0 +1,44 @@
+[
+  {
+    "name": "MN",
+    "baseUrl": "https://www.mnapi.com/v1",
+    "type": "all",
+    "weight": 10,
+    "models": [
+      "*"
+    ],
+    "status": true,
+    "notes": "",
+    "apiKey": "sk-4NbkexOFZYIL6AwCQeU8ofUlZWlyjdsohu1PgUytGNgDv7Rc",
+    "id": "ed4b66c7-0bc3-496a-86f9-deb54f0b4364",
+    "createdAt": "2026-06-12T03:55:04.828Z"
+  },
+  {
+    "name": "ePhone",
+    "baseUrl": "https://api.ephone.ai/v1",
+    "type": "all",
+    "weight": 10,
+    "models": [
+      "*"
+    ],
+    "status": true,
+    "notes": "",
+    "apiKey": "sk-ceeKOAZwZ1ZT1pZ3dQW0vWkvO8vrzHXKGeBCtoytwHOCR5Ir",
+    "id": "64e0a0f1-5b86-4f27-9645-18483e006445",
+    "createdAt": "2026-06-12T04:00:13.830Z"
+  },
+  {
+    "name": "云雾",
+    "baseUrl": "https://yunwu.ai/v1",
+    "type": "all",
+    "weight": 10,
+    "status": true,
+    "notes": "",
+    "models": [
+      "*"
+    ],
+    "apiKey": "sk-tegdSZoS4cfkQ1pN5zl3PSAjcL31zT7mNNQKPBvNp85eOB0H",
+    "id": "de5a5bf0-1ec7-42db-a075-3f66c6f54bf8",
+    "createdAt": "2026-06-12T06:57:09.359Z"
+  }
+]

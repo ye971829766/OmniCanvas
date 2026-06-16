@@ -1,0 +1,45 @@
+# 层级
+
+## 关键方法
+
+### toTop ( )
+
+移动选中元素到最顶层（所属 Group 中）。
+
+### toBottom ( )
+
+移动选中元素到最底层（所属 Group 中）。
+
+## 归属
+
+### [Editor 元素](../index.md#editor-元素)
+
+## 示例
+
+### 将元素置于顶层
+
+```ts
+// #图形编辑器 [变动层级 toTop()]
+import { App, Rect } from 'leafer-ui'
+import '@leafer-in/editor' // 导入图形编辑器插件
+import '@leafer-in/viewport' // 导入视口插件 (可选)
+
+const app = new App({
+    view: window,
+    editor: {}
+})
+
+app.tree.add(Rect.one({ editable: true, fill: '#FEB027', cornerRadius: [20, 0, 0, 20] }, 100, 100))
+app.tree.add(Rect.one({ editable: true, fill: '#FFE04B', cornerRadius: [0, 20, 20, 0] }, 150, 100))
+
+app.editor.select(app.tree.children[0])
+
+setTimeout(() => {
+
+    // 将元素置于顶层 
+    app.editor.toTop() // [!code hl]
+
+}, 1000)
+
+
+```

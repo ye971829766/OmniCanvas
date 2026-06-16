@@ -1,0 +1,514 @@
+<template>
+  <main class="canvas-container">
+    <div class="dot-grid"></div>
+    <div
+      class="flex-1 relative overflow-hidden w-full h-full"
+      ref="canvasRef"
+    ></div>
+    <ElementInfoLabel
+      v-if="selectTarget"
+      :target="selectTarget"
+      :version="toolbarVersion"
+    />
+    <FloatToolbar
+      v-if="selectTarget"
+      :canvas-app="canvasApp"
+      :target="selectTarget"
+      :version="toolbarVersion"
+      :class="[
+        'absolute transform -translate-x-1/2 z-50 pointer-events-auto',
+        selectTarget.tag === 'ImageGen' || selectTarget.tag === 'VideoGen'
+          ? 'translate-y-0 pt-3'
+          : '-translate-y-full pb-3',
+      ]"
+      :style="toolbarStyle"
+      @change="() => recordHistoryDebounced()"
+      @action="handleToolbarAction"
+    />
+
+    <ViboardToolbar
+      v-model="activeTool"
+      @change-hue="onHueChange"
+      @change-saturation="onSaturationChange"
+      @change-lightness="onLightnessChange"
+      @change-alpha="onAlphaChange"
+      @change-thickness="onThicknessChange"
+      @change-font-size="onFontSizeChange"
+      @change-font-family="onFontFamilyChange"
+      @submit-link="onSubmitLink"
+      @upload-file="onUploadFile"
+    />
+
+    <LayerPanel
+      :canvas-app="canvasApp"
+      :record-history-debounced="recordHistoryDebounced"
+    />
+
+    <ZoomController
+      :canvas-app="canvasApp"
+    />
+
+    <AgentPanel
+      :canvas-app="canvasApp"
+      :record-history="recordHistoryDebounced"
+    />
+  </main>
+</template>
+
+<script setup lang="ts">
+import { ref, useTemplateRef, watch } from "vue";
+import "@/components/canvas/utils/proxyData.ts";
+import FloatToolbar from "@/components/canvas/floatToolbar/index.vue";
+import ElementInfoLabel from "@/components/canvas/floatToolbar/ElementInfoLabel.vue";
+import ViboardToolbar from "@/components/ViboardToolbar.vue";
+import { VideoNode } from "@/components/canvas/nodes/VideoNode";
+import { useCanvas } from "@/composables/useCanvas";
+import {
+  uploadImage,
+  uploadVideo,
+  type ImageModelOptionsResponse,
+} from "@/utils/api";
+import LayerPanel from "@/components/canvas/LayerPanel.vue";
+import AgentPanel from "@/components/AgentPanel.vue";
+import ZoomController from "@/components/canvas/ZoomController.vue";
+import { isImageFile, isVideoFile } from "@/utils/utils.ts";
+import { Image } from "leafer-ui";
+
+const option = ref<{
+  model: string;
+  size: string;
+  quality: string;
+  aspectRatio: string;
+  options: ImageModelOptionsResponse | null;
+}>({
+  model: "gpt-image-2",
+  size: "1024x1024",
+  quality: "standard",
+  aspectRatio: "1:1",
+  options: null,
+});
+
+watch(
+  () => option.value,
+  (value) => {
+    console.log(value);
+  },
+  {
+    deep: true,
+  },
+);
+
+const canvasRef = useTemplateRef("canvasRef");
+
+// State for bottom toolbar controls
+const hue = ref(45);
+const saturation = ref(100);
+const lightness = ref(50);
+const alpha = ref(100);
+const thickness = ref(4);
+const fontSize = ref(24);
+const fontFamily = ref("Inter");
+
+// Core Canvas Composable
+const {
+  canvasApp,
+  activeTool,
+  selectTarget,
+  toolbarStyle,
+  toolbarVersion,
+  recordHistoryDebounced,
+  addImageGenNode,
+  addVideoGenNode,
+} = useCanvas(
+  canvasRef,
+  { hue, saturation, lightness, alpha },
+  thickness,
+  fontSize,
+  fontFamily,
+);
+
+watch(activeTool, (newTool) => {
+  if (newTool === "image-gen") {
+    addImageGenNode();
+    activeTool.value = "select";
+  } else if (newTool === "video-gen") {
+    addVideoGenNode();
+    activeTool.value = "select";
+  }
+});
+
+const onHueChange = (newHue: number) => {
+  hue.value = newHue;
+};
+
+const onSaturationChange = (newSat: number) => {
+  saturation.value = Math.round(newSat);
+};
+
+const onLightnessChange = (newLightness: number) => {
+  lightness.value = Math.round(newLightness);
+};
+
+const onAlphaChange = (newAlpha: number) => {
+  alpha.value = Math.round(newAlpha);
+};
+
+const onThicknessChange = (newThickness: number) => {
+  thickness.value = newThickness;
+};
+
+const onFontSizeChange = (newSize: number) => {
+  fontSize.value = newSize;
+};
+
+const onFontFamilyChange = (newFamily: string) => {
+  fontFamily.value = newFamily;
+};
+
+const onSubmitLink = (url: string) => {
+  alert(`Submitted Link to Parent: ${url}`);
+};
+
+const onUploadFile = async (file: File) => {
+  console.log(file, isImageFile(file));
+  try {
+    if (isImageFile(file)) {
+      const res = await uploadImage(file);
+      if (res && canvasApp.value && canvasApp.value.tree) {
+        // 获取图片原始尺寸
+        const img = new window.Image();
+        img.src = res.imageUrl;
+
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => {
+            const naturalWidth = img.naturalWidth;
+            const naturalHeight = img.naturalHeight;
+
+            // 计算合适的显示尺寸（最大宽度 600px，保持宽高比）
+            const maxWidth = 600;
+            let displayWidth = naturalWidth;
+            let displayHeight = naturalHeight;
+
+            if (naturalWidth > maxWidth) {
+              const scale = maxWidth / naturalWidth;
+              displayWidth = maxWidth;
+              displayHeight = Math.round(naturalHeight * scale);
+            }
+
+            // 在画布较大范围内随机位置放置元素（避免堆在一起）
+            const canvasRange = 2000; // 画布范围
+            const x = Math.random() * canvasRange;
+            const y = Math.random() * canvasRange;
+
+            const image = new Image({
+              x,
+              y,
+              width: displayWidth,
+              height: displayHeight,
+              url: res.imageUrl,
+              editable: true,
+            });
+            if (image && canvasApp.value?.tree) {
+              canvasApp.value.tree.add(image);
+              recordHistoryDebounced();
+
+              // 平滑移动画布到该元素
+              setTimeout(() => {
+                if (canvasApp.value?.tree) {
+                  (canvasApp.value.tree as any).zoom(
+                    image,
+                    100,
+                    undefined,
+                    0.8,
+                  );
+                }
+              }, 100);
+            }
+            resolve();
+          };
+          img.onerror = reject;
+        });
+      }
+    }
+    if (isVideoFile(file)) {
+      const res = await uploadVideo(file);
+      if (res && canvasApp.value && canvasApp.value.tree) {
+        const { videoUrl, thumbnailUrl } = res;
+
+        // 获取视频原始尺寸
+        const video = document.createElement("video");
+        video.src = videoUrl;
+        video.muted = true;
+
+        await new Promise<void>((resolve, reject) => {
+          video.onloadedmetadata = () => {
+            const naturalWidth = video.videoWidth;
+            const naturalHeight = video.videoHeight;
+
+            // 计算合适的显示尺寸（最大宽度 600px，保持宽高比）
+            const maxWidth = 600;
+            let displayWidth = naturalWidth;
+            let displayHeight = naturalHeight;
+
+            if (naturalWidth > maxWidth) {
+              const scale = maxWidth / naturalWidth;
+              displayWidth = maxWidth;
+              displayHeight = Math.round(naturalHeight * scale);
+            }
+
+            // 在画布较大范围内随机位置放置元素（避免堆在一起）
+            const canvasRange = 2000; // 画布范围
+            const x = Math.random() * canvasRange;
+            const y = Math.random() * canvasRange;
+
+            VideoNode.create({
+              x,
+              y,
+              width: displayWidth,
+              height: displayHeight,
+              videoUrl: videoUrl,
+              thumbnailUrl: thumbnailUrl,
+              editable: true,
+            })
+              .then((videoNode) => {
+                if (videoNode && canvasApp.value?.tree) {
+                  canvasApp.value.tree.add(videoNode);
+                  recordHistoryDebounced();
+
+                  // 平滑移动画布到该元素
+                  setTimeout(() => {
+                    if (canvasApp.value?.tree) {
+                      (canvasApp.value.tree as any).zoom(
+                        videoNode,
+                        100,
+                        undefined,
+                        0.8,
+                      );
+                    }
+                  }, 100);
+                }
+                resolve();
+              })
+              .catch(reject);
+          };
+          video.onerror = reject;
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Failed to upload video:", error);
+    alert("Upload failed. Please make sure the backend server is running.");
+  }
+};
+
+const handleToolbarAction = ({ action }: { action: string }) => {
+  const app = canvasApp.value;
+  if (!app || !app.editor) return;
+
+  if (action === "group") {
+    if (typeof app.editor.group === "function") {
+      app.editor.group();
+      recordHistoryDebounced(0);
+    }
+  } else if (action === "ungroup") {
+    if (typeof app.editor.ungroup === "function") {
+      app.editor.ungroup();
+      recordHistoryDebounced(0);
+    }
+  } else if (action === "export-multiple") {
+    // 导出多个选中的元素
+    if (app.editor.list && app.editor.list.length > 0) {
+      const timestamp = Date.now();
+      const fileName = `multiple_selection_${timestamp}.png`;
+
+      // 先编组
+      const group = app.editor.group();
+
+      // 导出编组后的元素
+      if (group && typeof group.export === "function") {
+        group
+          .export(fileName, { padding: 0 })
+          .catch((err: any) => {
+            console.error("[App] export multiple failed:", err);
+          })
+          .finally(() => {
+            // 导出完成后立即解组
+            app.editor.ungroup();
+          });
+      }
+    }
+  }
+};
+</script>
+
+<style>
+/* Global CSS variables & layout */
+:root {
+  --blue-bg: var(--p-primary-100, var(--p-surface-100));
+  --blue-text: var(--p-primary-color);
+  --brand-bg: var(--p-primary-100, var(--p-surface-100));
+  --brand-text: var(--p-primary-color);
+  --bg-color: var(--p-surface-50);
+  --border-color: var(--p-surface-200);
+  --text-primary: var(--p-text-color);
+  --text-secondary: var(--p-text-muted-color);
+  --tooltip-bg: var(--p-surface-900);
+  --zinc-100: var(--p-surface-100);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  height: 100vh;
+  width: 100vw;
+}
+
+html {
+  font-size: 14px;
+}
+
+body {
+  font-family: var(--font-family-sans);
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  overflow: hidden;
+  margin: 0;
+  font-size: 1rem;
+}
+
+/* Canvas Container */
+.canvas-container {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Dot Grid Background */
+.dot-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(#e4e4e7 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+  z-index: -1;
+}
+
+/* Demo Info */
+.demo-info {
+  position: absolute;
+  top: 48px;
+  text-align: center;
+  max-width: 500px;
+  z-index: 10;
+  padding: 0 20px;
+  pointer-events: none;
+}
+
+.demo-info h1 {
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+}
+
+.demo-info p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+#status-panel {
+  margin-top: 16px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  display: inline-block;
+  pointer-events: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.state-val {
+  color: var(--brand-text);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.state-detail {
+  margin-top: 4px;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+}
+
+.state-val-small {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-family: var(--font-family-mono);
+}
+
+/* Global Scrollbar Styles (Matching PrimeVue ScrollPanel styling, shown only on hover) */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: var(--p-scrollpanel-bar-border-radius, 99px);
+  transition: background-color 0.2s ease;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: var(--p-scrollpanel-bar-background, rgba(0, 0, 0, 0.18));
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--p-scrollpanel-bar-hover-background, rgba(0, 0, 0, 0.35));
+}
+
+.p-dark ::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.p-dark *:hover::-webkit-scrollbar-thumb {
+  background: var(--p-scrollpanel-bar-background, rgba(255, 255, 255, 0.18));
+}
+
+.p-dark *:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--p-scrollpanel-bar-hover-background, rgba(255, 255, 255, 0.35));
+}
+
+/* Firefox Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover {
+  scrollbar-color: var(--p-scrollpanel-bar-background, rgba(0, 0, 0, 0.18)) transparent;
+}
+
+.p-dark * {
+  scrollbar-color: transparent transparent;
+}
+
+.p-dark *:hover {
+  scrollbar-color: var(--p-scrollpanel-bar-background, rgba(255, 255, 255, 0.18)) transparent;
+}
+</style>

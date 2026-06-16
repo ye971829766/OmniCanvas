@@ -1,0 +1,28 @@
+{
+  "name": "server",
+  "module": "src/main.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.1.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "scripts": {
+    "dev": "bun --watch run src/main.ts"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@nestjs/common": "^11.1.26",
+    "@nestjs/core": "^11.1.26",
+    "@nestjs/platform-express": "^11.1.26",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "openai": "^6.42.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  }
+}

@@ -1,0 +1,69 @@
+# name
+
+元素的名称，可通过 [find()](./find.md) / [findOne()](./findOne.md) 的函数条件查找。
+
+## 关键属性
+
+### name: `string`
+
+元素的名称，默认为空。
+
+## 归属
+
+### [UI 元素](../display/UI.md)
+
+## 示例
+
+### 通过 函数 查找 name
+
+::: tip 注意事项
+需安装 [查找元素插件](../../plugin/in/find/index.md) 才能使用，或直接安装 [leafer-game](../../guide/install/game/start.md)、 [leafer-editor](../../guide/install/editor/start.md) （已集成查找元素插件）
+:::
+
+::: code-group
+```ts
+// #查找功能 [通过 name 查找 (Leafer)]
+import { Leafer, Rect, Ellipse } from 'leafer-ui'
+import '@leafer-in/find' // 导入查找元素插件 // [!code hl] 
+
+const leafer = new Leafer({ view: window })
+
+const rect1 = new Rect({ name: 'hello', fill: '#32cd79', stroke: 'black' })
+const rect2 = new Rect({ fill: '#32cd79', x: 150 })
+const ellipse = new Ellipse({ name: 'hello', fill: '#32cd79', stroke: 'black', x: 300 })
+
+leafer.add(rect1)
+leafer.add(rect2)
+leafer.add(ellipse)
+
+console.log(
+    leafer.find(function (item) {  // [!code hl:3] 
+        return item.name === 'hello' ? 1 : 0 // [rect1, ellipse]
+    })
+)
+```
+```ts
+// #查找功能 [通过 name 查找 (App)]
+import { App, Rect, Ellipse } from 'leafer-ui'
+import '@leafer-in/editor' // 导入图形编辑器插件
+import '@leafer-in/viewport' // 导入视口插件 (可选)
+
+import '@leafer-in/find' // 导入查找元素插件 // [!code hl] 
+
+const app = new App({ view: window, editor: {} })
+
+const rect1 = new Rect({ name: 'hello', fill: '#32cd79', stroke: 'black' })
+const rect2 = new Rect({ fill: '#32cd79', x: 150 })
+const ellipse = new Ellipse({ name: 'hello', fill: '#32cd79', stroke: 'black', x: 300 })
+
+app.tree.add(rect1)
+app.tree.add(rect2)
+app.tree.add(ellipse)
+
+console.log(
+    app.find(function (item) {  // [!code hl:3] 
+        return item.name === 'hello' ? 1 : 0 // [rect1, ellipse]
+    })
+)
+```
+:::

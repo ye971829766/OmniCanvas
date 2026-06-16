@@ -1,0 +1,1367 @@
+<html>
+    <style>
+        /* Reset and Variables */
+:root {
+	--blue-bg: #dbeafe;
+	--blue-text: #2563eb;
+	--brand-bg: #dedcff;
+	--brand-text: #6c5cff;
+	--bg-color: #fafafa;
+	--border-color: #e4e4e7;
+	--text-primary: #18181b;
+	--text-secondary: #71717a;
+	--tooltip-bg: #18181b;
+	--zinc-100: #f4f4f5;
+	--font-family-sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI",
+		Roboto, sans-serif;
+	--font-family-mono: "Inter", monospace;
+}
+
+* {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	font-family: var(--font-family-sans);
+	background-color: var(--bg-color);
+	color: var(--text-primary);
+	overflow: hidden;
+	height: 100vh;
+	width: 100vw;
+}
+
+/* Canvas Container */
+.canvas-container {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+
+/* Dot Grid Background */
+.dot-grid {
+	position: absolute;
+	inset: 0;
+	background-image: radial-gradient(#e4e4e7 1.5px, transparent 1.5px);
+	background-size: 24px 24px;
+	z-index: 1;
+}
+
+/* Demo Info */
+.demo-info {
+	position: absolute;
+	top: 48px;
+	text-align: center;
+	max-width: 500px;
+	z-index: 10;
+	padding: 0 20px;
+}
+
+.demo-info h1 {
+	font-size: 2rem;
+	font-weight: 600;
+	margin-bottom: 8px;
+	letter-spacing: -0.025em;
+	color: var(--text-primary);
+}
+
+.demo-info p {
+	font-size: 0.95rem;
+	color: var(--text-secondary);
+	line-height: 1.5;
+}
+
+kbd {
+	background: white;
+	border: 1px solid var(--border-color);
+	border-radius: 4px;
+	padding: 2px 6px;
+	font-size: 0.8rem;
+	font-family: var(--font-family-mono);
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+}
+
+#status-panel {
+	margin-top: 16px;
+	font-size: 0.85rem;
+	font-weight: 500;
+	color: var(--text-secondary);
+	background: white;
+	padding: 6px 12px;
+	border-radius: 9999px;
+	border: 1px solid var(--border-color);
+	display: inline-block;
+}
+
+#current-tool {
+	color: var(--brand-text);
+	font-weight: 600;
+}
+
+/* Toolbar Floating Wrapper */
+.toolbar-wrapper {
+	position: absolute;
+	bottom: 40px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 100;
+	pointer-events: none;
+}
+
+.toolbar-container {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 8px;
+	background-color: rgba(255, 255, 255, 0.9);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	border: 1px solid var(--border-color);
+	border-radius: 16px;
+	box-shadow: 0 10px 25px -10px rgba(0, 0, 0, 0.05),
+		0 1px 3px rgba(0, 0, 0, 0.01);
+	pointer-events: auto;
+	overflow: visible; /* CRITICAL: let shared pill hop outside boundary */
+}
+
+/* Shared Hover Pill Background */
+.hover-pill {
+	position: absolute;
+	top: 6px;
+	bottom: 6px;
+	border-radius: 8px;
+	z-index: 0;
+	pointer-events: none;
+	background-color: var(--zinc-100);
+	opacity: 0;
+	/* stiffness: 350, damping: 30 spring equivalent */
+	transition: left 0.35s cubic-bezier(0.2, 0.9, 0.4, 1),
+		width 0.35s cubic-bezier(0.2, 0.9, 0.4, 1), opacity 0.2s ease;
+}
+
+/* Shared Active Pill Background */
+.active-pill {
+	position: absolute;
+	top: 6px;
+	bottom: 6px;
+	border-radius: 8px;
+	z-index: 1;
+	pointer-events: none;
+	transition: left 0.45s cubic-bezier(0.25, 1, 0.5, 1),
+		width 0.45s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.25s ease;
+	transform-style: preserve-3d;
+	perspective: 1000px;
+}
+
+.active-pill.blue-bg {
+	background-color: var(--blue-bg);
+}
+
+.active-pill.brand-bg {
+	background-color: var(--brand-bg);
+}
+
+/* Tool Buttons */
+.tool-btn {
+	position: relative;
+	width: 40px;
+	height: 40px;
+	border: none;
+	background: transparent;
+	border-radius: 8px;
+	cursor: pointer;
+	outline: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-secondary);
+	transition: color 0.2s ease;
+	z-index: 2; /* Sits above active pill */
+}
+
+.tool-btn:hover {
+	color: var(--text-primary);
+}
+
+.tool-btn.active {
+	color: var(--blue-text);
+}
+
+.tool-btn.active.brand {
+	color: var(--brand-text);
+}
+
+/* Icon Wrappers */
+.icon-wrapper {
+	position: relative;
+	z-index: 2;
+	width: 20px;
+	height: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.icon-svg {
+	width: 20px;
+	height: 20px;
+	stroke-width: 2px;
+}
+
+/* Divider styling */
+.divider {
+	width: 1px;
+	height: 20px;
+	background-color: var(--border-color);
+	margin: 0 4px;
+	z-index: 2;
+}
+
+/* Custom Sticky outline icon */
+.sticky-outline {
+	width: 16px;
+	height: 16px;
+	border: 2px solid currentColor;
+	border-radius: 2px;
+	transition: border-color 0.2s ease;
+}
+
+/* Micro-animations on Hover */
+.tool-btn:not(.active):hover .select-icon {
+	transform: scale(1.1) rotate(-15deg) translate(-1px, -1px);
+}
+
+.tool-btn:not(.active):hover .pan-icon {
+	animation: wiggle 0.4s ease-in-out;
+}
+
+.tool-btn:not(.active):hover .frame-icon {
+	transform: scale(1.1);
+}
+
+.tool-btn:not(.active):hover .sticky-icon {
+	transform: scale(1.15) rotate(10deg) translateY(-1px);
+}
+
+.tool-btn:not(.active):hover .text-icon {
+	transform: scale(1.1) translateY(-2px);
+}
+
+.tool-btn:not(.active):hover .marker-icon {
+	transform: scale(1.1) rotate(-20deg) translate(2px, -2px);
+}
+
+.tool-btn:not(.active):hover .shape-icon {
+	transform: scale(1.15);
+}
+
+.tool-btn:not(.active):hover .link-icon {
+	transform: scale(1.1);
+}
+
+/* Wiggle animation keyframes */
+@keyframes wiggle {
+	0%,
+	100% {
+		transform: scale(1.1) rotate(0deg);
+	}
+	20% {
+		transform: scale(1.1) rotate(-15deg);
+	}
+	40% {
+		transform: scale(1.1) rotate(15deg);
+	}
+	60% {
+		transform: scale(1.1) rotate(-10deg);
+	}
+	80% {
+		transform: scale(1.1) rotate(5deg);
+	}
+}
+
+/* Active Icon Pop Animation */
+.tool-btn.active .icon-wrapper {
+	animation: icon-pop 0.45s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes icon-pop {
+	0% {
+		transform: scale(1);
+	}
+	35% {
+		transform: scale(0.8);
+	}
+	70% {
+		transform: scale(1.2);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+
+/* Tooltip */
+.tooltip-wrapper {
+	position: relative;
+	display: inline-block;
+	z-index: 3;
+}
+
+.tooltip {
+	position: absolute;
+	top: 50px;
+	left: 50%;
+	transform: translateX(-50%) translateY(-4px);
+	background-color: var(--tooltip-bg);
+	color: white;
+	padding: 5px 8px;
+	border-radius: 6px;
+	font-size: 0.75rem;
+	font-weight: 500;
+	white-space: nowrap;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+	z-index: 1000;
+}
+
+.tooltip .shortcut {
+	color: #a1a1aa;
+	margin-left: 4px;
+	font-family: var(--font-family-mono);
+	font-size: 0.7rem;
+}
+
+.tooltip-wrapper:hover .tooltip {
+	opacity: 1;
+	transform: translateX(-50%) translateY(0);
+}
+
+/* Dynamic Active Spin Hop Animation Class on Shared Pill */
+.spin-hop-clockwise {
+	animation: hop-cw 0.45s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.spin-hop-counter {
+	animation: hop-ccw 0.45s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes hop-cw {
+	0% {
+		transform: translateY(0) rotate(0deg) scale(1);
+	}
+	30% {
+		transform: translateY(-50px) rotate(180deg) scale(1.15);
+	}
+	75% {
+		transform: translateY(0) rotate(385deg) scale(0.9);
+	}
+	100% {
+		transform: translateY(0) rotate(360deg) scale(1);
+	}
+}
+
+@keyframes hop-ccw {
+	0% {
+		transform: translateY(0) rotate(0deg) scale(1);
+	}
+	30% {
+		transform: translateY(-50px) rotate(-180deg) scale(1.15);
+	}
+	75% {
+		transform: translateY(0) rotate(-385deg) scale(0.9);
+	}
+	100% {
+		transform: translateY(0) rotate(-360deg) scale(1);
+	}
+}
+
+/* --- Secondary Properties Toolbar Styles --- */
+
+.properties-toolbar-wrapper {
+	position: absolute;
+	bottom: 104px;
+	left: 50%;
+	transform: translateX(-50%) translateY(10px);
+	width: 380px;
+	height: 52px;
+	background-color: rgba(255, 255, 255, 0.9);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	border: 1px solid var(--border-color);
+	border-radius: 9999px;
+	box-shadow: 0 10px 25px -10px rgba(0, 0, 0, 0.08);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 10px;
+	opacity: 0;
+	pointer-events: none;
+	z-index: 99;
+	transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.25, 1, 0.5, 1),
+		width 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+	overflow: visible; /* CRITICAL: let custom slider swatch thumbs pop outside menu boundary */
+}
+
+/* Dynamic Widths based on active panel */
+.properties-toolbar-wrapper.panel-sticky {
+	width: 280px;
+}
+
+.properties-toolbar-wrapper.panel-marker {
+	width: 220px;
+}
+
+.properties-toolbar-wrapper.panel-marker .thickness-wrapper {
+	width: 180px;
+}
+
+.properties-toolbar-wrapper.panel-text {
+	width: 160px;
+}
+
+.properties-toolbar-wrapper.panel-link {
+	width: 380px;
+}
+
+.properties-toolbar-wrapper.active {
+	opacity: 1;
+	transform: translateX(-50%) translateY(0);
+	pointer-events: auto;
+}
+
+.property-panel {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: visible; /* Let sliders bulge and thumbs morph outward */
+}
+
+.hidden {
+	display: none !important;
+}
+
+.panel-divider {
+	width: 1px;
+	height: 20px;
+	background-color: var(--border-color);
+	margin: 0 12px;
+	flex-shrink: 0;
+}
+
+/* Panel Buttons */
+.panel-icon-btn {
+	position: relative;
+	background: transparent;
+	border: none;
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+	cursor: pointer;
+	color: var(--text-secondary);
+	transition: color 0.2s;
+	outline: none;
+}
+
+.panel-icon-btn:hover {
+	color: var(--text-primary);
+}
+
+.panel-icon-btn.active {
+	color: var(--text-primary);
+}
+
+.btn-hover-shim {
+	position: absolute;
+	inset: 0;
+	border-radius: 6px;
+	background-color: var(--zinc-100);
+	opacity: 0;
+	transform: scale(0.96);
+	transition: opacity 0.15s, transform 0.15s;
+	z-index: -1;
+}
+
+.panel-icon-btn:hover .btn-hover-shim,
+.panel-icon-btn.active .btn-hover-shim {
+	opacity: 1;
+	transform: scale(1);
+}
+
+.panel-icon {
+	width: 16px;
+	height: 16px;
+	position: relative;
+	z-index: 2;
+	transition: transform 0.25s cubic-bezier(0.2, 1, 0.2, 1);
+}
+
+/* Micro-animations */
+.panel-icon-btn:hover .marker-pencil,
+.panel-icon-btn:hover .marker-highlighter {
+	transform: scale(1.1) rotate(-15deg);
+}
+
+.panel-icon-btn:hover .marker-eraser {
+	transform: scale(1.15) rotate(15deg);
+}
+
+/* Sticky Colors list */
+.sticky-colors-list {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+}
+
+.sticky-color-btn {
+	position: relative;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	border: 1px solid rgba(0, 0, 0, 0.05);
+	cursor: pointer;
+	outline: none;
+	transition: transform 0.2s cubic-bezier(0.2, 1, 0.2, 1);
+}
+
+.sticky-color-btn:hover {
+	transform: scale(1.15);
+}
+
+.sticky-color-btn.active {
+	transform: scale(1.1);
+	box-shadow: 0 0 0 2px var(--text-primary), 0 0 0 4px white;
+}
+
+/* Slider wrappers */
+.slider-wrapper {
+	position: relative;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	overflow: visible;
+	touch-action: none;
+}
+
+.thickness-wrapper {
+	width: 90px;
+}
+
+.color-wrapper {
+	width: 140px;
+}
+
+/* Custom sliders */
+.custom-slider {
+	position: relative;
+	width: 100%;
+	height: 32px;
+	cursor: pointer;
+	overflow: visible;
+}
+
+.slider-svg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.slider-track-path {
+	transition: stroke 0.15s ease, fill 0.15s ease;
+}
+
+.slider-thumb {
+	position: absolute;
+	pointer-events: none;
+	z-index: 1000;
+	transform: translate(-50%, -50%);
+	top: 16px;
+	left: 0;
+	transition: left 0.05s linear;
+}
+
+/* Thickness Slider Thumb */
+.thickness-thumb {
+	width: 20px;
+	height: 20px;
+	background: white;
+	border: 1px solid var(--border-color);
+	box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: transform 0.3s cubic-bezier(0.2, 1, 0.2, 1),
+		width 0.3s cubic-bezier(0.2, 1, 0.2, 1),
+		height 0.3s cubic-bezier(0.2, 1, 0.2, 1);
+}
+
+.thumb-inner-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	transition: background-color 0.15s ease, width 0.15s ease, height 0.15s ease;
+}
+
+.thickness-thumb.dragging {
+	transform: translate(-50%, -50%) translateY(-28px);
+	width: 32px;
+	height: 32px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	transition: none !important;
+}
+
+/* Color Slider Swatch */
+.color-thumb {
+	width: 32px;
+	height: 50px;
+	margin-top: -25px;
+}
+
+.color-swatch-svg {
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.12));
+}
+
+.color-swatch-svg path {
+	transition: d 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), fill 0.15s ease,
+		transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Text size controls */
+.text-size-controls {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.font-size-indicator {
+	font-family: var(--font-family-mono);
+	font-size: 0.8rem;
+	font-weight: 600;
+	width: 44px;
+	text-align: center;
+	color: var(--text-primary);
+}
+
+/* Link Submit form */
+.link-submit-form {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+}
+
+#link-input {
+	flex: 1;
+	background-color: var(--zinc-100);
+	border: 1px solid rgba(228, 228, 231, 0.5);
+	border-radius: 9999px;
+	padding: 6px 12px;
+	height: 32px;
+	font-size: 0.85rem;
+	font-family: var(--font-family-sans);
+	color: var(--text-primary);
+	outline: none;
+	transition: background 0.15s, border-color 0.15s;
+}
+
+#link-input:focus {
+	background-color: white;
+	border-color: var(--brand-text);
+	box-shadow: 0 0 0 3px rgba(108, 92, 255, 0.15);
+}
+
+.submit-btn {
+	background-color: var(--brand-text);
+	border: none;
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	box-shadow: 0 2px 6px rgba(108, 92, 255, 0.25);
+	flex-shrink: 0;
+	transition: background 0.2s, transform 0.2s;
+}
+
+.submit-btn:hover {
+	background-color: #5a4be8;
+	transform: scale(1.05);
+}
+
+.submit-btn:active {
+	transform: scale(0.95);
+}
+
+.file-upload-label {
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	color: var(--text-secondary);
+	cursor: pointer;
+	flex-shrink: 0;
+	transition: background 0.2s, color 0.2s;
+}
+
+.file-upload-label:hover {
+	background-color: var(--zinc-100);
+	color: var(--text-primary);
+}
+
+    </style>
+<body>
+	<main class="canvas-container">
+		<!-- Dot Grid Background -->
+		<div class="dot-grid"></div>
+
+		<div class="demo-info">
+			<h1>Interactive Toolbar</h1>
+			<p>Click tools to trigger the Viboard <strong>hopping fill effect</strong>. The background fill slides between buttons while jumping and spinning in mid-air. Keyboard shortcuts: <kbd>V</kbd> <kbd>P</kbd> <kbd>F</kbd> <kbd>S</kbd> <kbd>T</kbd> <kbd>M</kbd> <kbd>K</kbd> <kbd>L</kbd></p>
+			<div id="status-panel">Selected: <span id="current-tool">Select</span></div>
+		</div>
+
+		<!-- Properties Panel Toolbar (Floats above main toolbar) -->
+		<div class="properties-toolbar-wrapper" id="properties-toolbar-wrapper">
+
+			<!-- Panel 1: Sticky Notes Colors -->
+			<div class="property-panel hidden" id="panel-sticky">
+				<div class="sticky-colors-list">
+					<button type="button" class="sticky-color-btn active" data-hue="55" style="background-color: hsl(55, 90%, 85%);"></button>
+					<button type="button" class="sticky-color-btn" data-hue="30" style="background-color: hsl(30, 90%, 85%);"></button>
+					<button type="button" class="sticky-color-btn" data-hue="140" style="background-color: hsl(140, 90%, 85%);"></button>
+					<button type="button" class="sticky-color-btn" data-hue="210" style="background-color: hsl(210, 90%, 85%);"></button>
+					<button type="button" class="sticky-color-btn" data-hue="280" style="background-color: hsl(280, 90%, 85%);"></button>
+					<button type="button" class="sticky-color-btn" data-hue="330" style="background-color: hsl(330, 90%, 85%);"></button>
+					<button type="button" class="sticky-color-btn" data-hue="0" style="background-color: hsl(0, 90%, 85%);"></button>
+				</div>
+			</div>
+
+			<!-- Panel 2: Marker Properties (Thickness Slider Only) -->
+			<div class="property-panel hidden" id="panel-marker">
+				<!-- Thickness Slider (Tapered Bulgable Track) -->
+				<div class="slider-wrapper thickness-wrapper">
+					<div class="custom-slider" id="thickness-slider">
+						<svg class="slider-svg" viewBox="0 0 100 32" preserveAspectRatio="none">
+							<path class="slider-track-path" id="thickness-track" fill="hsl(45, 90%, 65%)" d=""></path>
+						</svg>
+						<div class="slider-thumb thickness-thumb" id="thickness-thumb">
+							<div class="thumb-inner-dot" id="thickness-dot" style="background-color: hsl(45, 90%, 65%);"></div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Panel 4: Text Properties (Font Size Increments Only) -->
+			<div class="property-panel hidden" id="panel-text">
+				<div class="text-size-controls">
+					<button type="button" class="panel-icon-btn" id="font-decrease-btn" title="Smaller">
+						<div class="btn-hover-shim"></div>
+						<i data-lucide="minus" class="panel-icon"></i>
+					</button>
+					<span class="font-size-indicator" id="font-size-indicator">24px</span>
+					<button type="button" class="panel-icon-btn" id="font-increase-btn" title="Larger">
+						<div class="btn-hover-shim"></div>
+						<i data-lucide="plus" class="panel-icon"></i>
+					</button>
+				</div>
+			</div>
+
+			<!-- Panel 5: Link Upload form -->
+			<div class="property-panel hidden" id="panel-link">
+				<form class="link-submit-form" id="link-form">
+					<input type="url" required id="link-input" placeholder="https://example.com" autocomplete="off">
+					<button type="submit" class="submit-btn" title="Submit Link">
+						<i data-lucide="corner-down-left" class="panel-icon" style="color: white;"></i>
+					</button>
+				</form>
+				<label class="file-upload-label" title="Upload Image File">
+					<i data-lucide="upload" class="panel-icon"></i>
+					<input type="file" id="file-input" accept="image/*" style="display: none;">
+				</label>
+			</div>
+
+		</div>
+
+		<!-- Toolbar Wrapper -->
+		<div class="toolbar-wrapper">
+			<div class="toolbar-container" id="main-toolbar">
+
+				<!-- Shared Hover Pill Background -->
+				<div id="hover-pill" class="hover-pill"></div>
+
+				<!-- Shared Active Pill Background -->
+				<div id="active-pill" class="active-pill blue-bg"></div>
+
+				<!-- Select Tool -->
+				<div class="tooltip-wrapper">
+					<button type="button" class="tool-btn active blue" data-tool="select" data-shortcut="V">
+						<div class="icon-wrapper select-icon">
+							<i data-lucide="mouse-pointer-2" class="icon-svg"></i>
+						</div>
+					</button>
+					<span class="tooltip">Select <span class="shortcut">V</span></span>
+				</div>
+
+				<!-- Pan Tool -->
+				<div class="tooltip-wrapper">
+					<button type="button" class="tool-btn blue" data-tool="pan" data-shortcut="P">
+						<div class="icon-wrapper pan-icon">
+							<i data-lucide="hand" class="icon-svg"></i>
+						</div>
+					</button>
+					<span class="tooltip">Pan <span class="shortcut">P</span></span>
+				</div>
+
+				<!-- Frame Tool -->
+				<div class="tooltip-wrapper">
+					<button type="button" class="tool-btn blue" data-tool="frame" data-shortcut="F">
+						<div class="icon-wrapper frame-icon">
+							<i data-lucide="frame" class="icon-svg"></i>
+						</div>
+					</button>
+					<span class="tooltip">Frame <span class="shortcut">F</span></span>
+				</div>
+
+				<!-- Divider -->
+				<div class="divider"></div>
+
+				<!-- Sticky Tool -->
+				<div class="tooltip-wrapper">
+					<button type="button" class="tool-btn brand" data-tool="sticky" data-shortcut="S">
+						<div class="icon-wrapper sticky-icon">
+							<div class="sticky-outline"></div>
+						</div>
+					</button>
+					<span class="tooltip">Sticky <span class="shortcut">S</span></span>
+				</div>
+
+				<!-- Text Tool -->
+				<div class="tooltip-wrapper">
+					<button type="button" class="tool-btn brand" data-tool="text" data-shortcut="T">
+						<div class="icon-wrapper text-icon">
+							<i data-lucide="type" class="icon-svg"></i>
+						</div>
+					</button>
+					<span class="tooltip">Text <span class="shortcut">T</span></span>
+				</div>
+
+				<!-- Marker Tool -->
+				<div class="tooltip-wrapper">
+					<button type="button" class="tool-btn brand" data-tool="marker" data-shortcut="M">
+						<div class="icon-wrapper marker-icon">
+							<i data-lucide="pencil" class="icon-svg"></i>
+						</div>
+					</button>
+					<span class="tooltip">Marker <span class="shortcut">M</span></span>
+				</div>
+
+				<!-- Shape Tool -->
+				<div class="tooltip-wrapper">
+					<button type="button" class="tool-btn brand" data-tool="shape" data-shortcut="K">
+						<div class="icon-wrapper shape-icon">
+							<i data-lucide="circle" class="icon-svg"></i>
+						</div>
+					</button>
+					<span class="tooltip">Shape <span class="shortcut">K</span></span>
+				</div>
+
+				<!-- Link Tool -->
+				<div class="tooltip-wrapper">
+					<button type="button" class="tool-btn brand" data-tool="link" data-shortcut="L">
+						<div class="icon-wrapper link-icon">
+							<i data-lucide="upload" class="icon-svg"></i>
+						</div>
+					</button>
+					<span class="tooltip">Upload Link <span class="shortcut">L</span></span>
+				</div>
+
+			</div>
+		</div>
+	</main>
+
+	<script src="https://unpkg.com/lucide@latest"></script>
+	<script>
+        document.addEventListener("DOMContentLoaded", () => {
+	// Initialize Lucide Icons
+	lucide.createIcons();
+
+	const toolbar = document.getElementById("main-toolbar");
+	const activePill = document.getElementById("active-pill");
+	const hoverPill = document.getElementById("hover-pill");
+	const propertiesWrapper = document.getElementById(
+		"properties-toolbar-wrapper"
+	);
+	const panels = Array.from(
+		propertiesWrapper.querySelectorAll(".property-panel")
+	);
+	const buttons = Array.from(toolbar.querySelectorAll(".tool-btn"));
+	const statusSpan = document.getElementById("current-tool");
+
+	// List of tools in order to calculate navigation index
+	const toolOrder = [
+		"select",
+		"pan",
+		"frame",
+		"sticky",
+		"text",
+		"marker",
+		"shape",
+		"link"
+	];
+
+	let currentTool = "select";
+	let hoveredTool = null;
+
+	// Track independent WAAPI animations to replicate Framer Motion's separate transition tracks
+	let yAnim = null;
+	let rotateAnim = null;
+	let scaleAnim = null;
+
+	// Helper to precisely calculate the button's bounds relative to the toolbar's padding box
+	function getBtnCoords(btn) {
+		const btnRect = btn.getBoundingClientRect();
+		const toolbarRect = toolbar.getBoundingClientRect();
+		const style = window.getComputedStyle(toolbar);
+		const borderLeft = parseFloat(style.borderLeftWidth) || 0;
+
+		return {
+			left: btnRect.left - toolbarRect.left - borderLeft,
+			width: btnRect.width
+		};
+	}
+
+	// Align active pill position instantly on load
+	function initPillPosition() {
+		const activeBtn = toolbar.querySelector(`[data-tool="${currentTool}"]`);
+		if (!activeBtn) return;
+
+		const coords = getBtnCoords(activeBtn);
+
+		// Temporarily turn off transitions for initial snap
+		const prevTransition = activePill.style.transition;
+		const prevHoverTransition = hoverPill.style.transition;
+		activePill.style.transition = "none";
+		hoverPill.style.transition = "none";
+
+		activePill.style.left = `${coords.left}px`;
+		activePill.style.width = `${coords.width}px`;
+
+		hoverPill.style.left = `${coords.left}px`;
+		hoverPill.style.width = `${coords.width}px`;
+
+		void activePill.offsetWidth; // Force a reflow
+		activePill.style.transition = prevTransition;
+		hoverPill.style.transition = prevHoverTransition;
+	}
+
+	// Run on load and after short layout-settling delays
+	initPillPosition();
+	setTimeout(initPillPosition, 50);
+	setTimeout(initPillPosition, 200);
+
+	// Update hover pill position and opacity
+	function updateHoverPill() {
+		const targetTool = hoveredTool || currentTool;
+		const targetBtn = toolbar.querySelector(`[data-tool="${targetTool}"]`);
+		if (!targetBtn) return;
+
+		const coords = getBtnCoords(targetBtn);
+		hoverPill.style.left = `${coords.left}px`;
+		hoverPill.style.width = `${coords.width}px`;
+
+		if (hoveredTool && hoveredTool !== currentTool) {
+			hoverPill.style.opacity = "1";
+		} else {
+			hoverPill.style.opacity = "0";
+		}
+	}
+
+	// Function to handle tool selection and animate
+	function selectTool(toolName) {
+		if (currentTool === toolName) return;
+
+		const prevIndex = toolOrder.indexOf(currentTool);
+		const nextIndex = toolOrder.indexOf(toolName);
+
+		const prevBtn = toolbar.querySelector(`[data-tool="${currentTool}"]`);
+		const nextBtn = toolbar.querySelector(`[data-tool="${toolName}"]`);
+
+		if (!nextBtn) return;
+
+		// Calculate spin direction (clockwise if moving right, counter if left)
+		const direction = nextIndex > prevIndex ? "clockwise" : "counter";
+
+		// Remove active state from previous tool
+		if (prevBtn) {
+			prevBtn.classList.remove("active");
+		}
+
+		// Add active state to next tool
+		nextBtn.classList.add("active");
+
+		// Immediately hide properties panel on hop start
+		propertiesWrapper.classList.remove("active");
+		propertiesWrapper.className = "properties-toolbar-wrapper";
+		panels.forEach((p) => p.classList.add("hidden"));
+
+		// Update active pill layout coordinates (horizontal slide via CSS transition spring)
+		const coords = getBtnCoords(nextBtn);
+		activePill.style.left = `${coords.left}px`;
+		activePill.style.width = `${coords.width}px`;
+
+		// Swap theme classes on active pill
+		if (nextBtn.classList.contains("blue")) {
+			activePill.className = "active-pill blue-bg";
+		} else {
+			activePill.className = "active-pill brand-bg";
+		}
+
+		// Cancel any ongoing WAAPI kinematics animations
+		if (yAnim) yAnim.cancel();
+		if (rotateAnim) rotateAnim.cancel();
+		if (scaleAnim) scaleAnim.cancel();
+
+		// Viboard original exact hop timings:
+		// Layout (horizontal slide): spring 250/25 (approx 0.45s) -> Handled by CSS left/width transition
+		// Y (hop): duration 0.4s, times [0, 0.5, 1], ease ["circOut", "circIn"], height -50px
+		// Rotate: duration 0.45s, times [0, 0.85, 1], ease ["easeInOut", "easeOut"], degrees 385/360
+		// Scale: duration 0.45s, times [0, 0.4, 0.85, 1], ease ["easeOut", "easeIn", "easeOut"]
+
+		// Framer motion easing equivalents
+		const circOut = "cubic-bezier(0, 0.55, 0.45, 1)";
+		const circIn = "cubic-bezier(0.55, 0, 1, 0.45)";
+		const easeInOut = "cubic-bezier(0.42, 0, 0.58, 1)";
+		const easeOut = "cubic-bezier(0, 0, 0.58, 1)";
+		const easeIn = "cubic-bezier(0.42, 0, 1, 1)";
+
+		// Track 1: Y (Vertical Hop) - Duration 400ms
+		yAnim = activePill.animate(
+			[
+				{ translate: "0 0", easing: circOut },
+				{ translate: "0 -50px", offset: 0.5, easing: circIn },
+				{ translate: "0 0", offset: 1 }
+			],
+			{ duration: 400, fill: "forwards" }
+		);
+
+		// Track 2: Rotate - Duration 450ms
+		const rotVal = direction === "clockwise" ? 360 : -360;
+		const overRotVal = direction === "clockwise" ? 385 : -385;
+		rotateAnim = activePill.animate(
+			[
+				{ rotate: "0deg", easing: easeInOut },
+				{ rotate: `${overRotVal}deg`, offset: 0.85, easing: easeOut },
+				{ rotate: `${rotVal}deg`, offset: 1 }
+			],
+			{ duration: 450, fill: "forwards" }
+		);
+
+		// Track 3: Scale (squash and stretch) - Duration 450ms
+		scaleAnim = activePill.animate(
+			[
+				{ scale: "1", easing: easeOut },
+				{ scale: "1.15", offset: 0.4, easing: easeIn },
+				{ scale: "0.9", offset: 0.85, easing: easeOut },
+				{ scale: "1", offset: 1 }
+			],
+			{ duration: 450, fill: "forwards" }
+		);
+
+		// Clear WAAPI overrides on completion to prevent subpixel issues
+		const currentRotAnim = rotateAnim;
+		rotateAnim.onfinish = () => {
+			if (rotateAnim === currentRotAnim) {
+				if (yAnim) {
+					yAnim.cancel();
+					yAnim = null;
+				}
+				if (rotateAnim) {
+					rotateAnim.cancel();
+					rotateAnim = null;
+				}
+				if (scaleAnim) {
+					scaleAnim.cancel();
+					scaleAnim = null;
+				}
+
+				// Pop up the appropriate property toolbar if the newly selected tool has one
+				const activePanel = document.getElementById(`panel-${toolName}`);
+				if (activePanel) {
+					activePanel.classList.remove("hidden");
+					propertiesWrapper.classList.add("active");
+					propertiesWrapper.classList.add(`panel-${toolName}`);
+				}
+			}
+		};
+
+		// Update state
+		currentTool = toolName;
+		updateHoverPill(); // Fades out the hover pill if we just selected the hovered tool
+
+		// Format display text
+		let displayName = toolName.charAt(0).toUpperCase() + toolName.slice(1);
+		if (toolName === "select") displayName = "Select";
+		if (toolName === "pan") displayName = "Pan / Hand";
+		if (toolName === "link") displayName = "Upload Link";
+		statusSpan.textContent = displayName;
+	}
+
+	// Click and hover listeners on buttons
+	buttons.forEach((button) => {
+		button.addEventListener("click", (e) => {
+			const tool = button.getAttribute("data-tool");
+			selectTool(tool);
+		});
+
+		button.addEventListener("pointerenter", () => {
+			hoveredTool = button.getAttribute("data-tool");
+			updateHoverPill();
+		});
+
+		button.addEventListener("pointerleave", () => {
+			hoveredTool = null;
+			updateHoverPill();
+		});
+	});
+
+	// Keyboard shortcut listener
+	window.addEventListener("keydown", (e) => {
+		// Ignore shortcut if user is typing in inputs or contenteditables
+		const isInput =
+			e.target instanceof HTMLInputElement ||
+			e.target instanceof HTMLTextAreaElement ||
+			e.target.isContentEditable;
+		if (isInput) return;
+
+		const key = e.key.toLowerCase();
+
+		// Map keys to tools
+		const shortcuts = {
+			v: "select",
+			p: "pan",
+			f: "frame",
+			s: "sticky",
+			t: "text",
+			m: "marker",
+			k: "shape",
+			l: "link"
+		};
+
+		if (shortcuts[key]) {
+			e.preventDefault();
+			selectTool(shortcuts[key]);
+		}
+	});
+
+	// Recalculate position on window resize to ensure correct centering
+	window.addEventListener("resize", initPillPosition);
+
+	// ==========================================
+	// --- Secondary Properties Toolbar Logic ---
+	// ==========================================
+
+	// Sliders Elements
+	const thicknessSlider = document.getElementById("thickness-slider");
+	const thicknessTrack = document.getElementById("thickness-track");
+	const thicknessThumb = document.getElementById("thickness-thumb");
+	const thicknessDot = document.getElementById("thickness-dot");
+
+	// Property State
+	let activeHue = 45;
+	let activeThickness = 8;
+	let activeTextSize = 24;
+
+	// --- Sticky Note Panel Logic ---
+	const stickyColorsList = document
+		.getElementById("panel-sticky")
+		.querySelector(".sticky-colors-list");
+	stickyColorsList.addEventListener("click", (e) => {
+		const btn = e.target.closest(".sticky-color-btn");
+		if (!btn) return;
+		stickyColorsList
+			.querySelectorAll(".sticky-color-btn")
+			.forEach((b) => b.classList.remove("active"));
+		btn.classList.add("active");
+		updateGlobalColor(btn.getAttribute("data-hue"));
+	});
+
+	// --- Text Size Controls Logic ---
+	const fontSizeIndicator = document.getElementById("font-size-indicator");
+	document.getElementById("font-decrease-btn").addEventListener("click", () => {
+		activeTextSize = Math.max(12, activeTextSize - 2);
+		fontSizeIndicator.textContent = `${activeTextSize}px`;
+	});
+	document.getElementById("font-increase-btn").addEventListener("click", () => {
+		activeTextSize = Math.min(64, activeTextSize + 2);
+		fontSizeIndicator.textContent = `${activeTextSize}px`;
+	});
+
+	// --- Link Submit Logic ---
+	const linkForm = document.getElementById("link-form");
+	linkForm.addEventListener("submit", (e) => {
+		e.preventDefault();
+		const input = document.getElementById("link-input");
+		alert(`Link Submitted: ${input.value}`);
+		input.value = "";
+	});
+
+	// --- Color Sync helper ---
+	function updateGlobalColor(hue) {
+		activeHue = hue;
+		const hslString = `hsl(${hue}, 90%, 65%)`;
+
+		if (thicknessTrack) thicknessTrack.setAttribute("fill", hslString);
+		if (thicknessDot) thicknessDot.style.backgroundColor = hslString;
+	}
+
+	// --- Thickness Slider Bulge Physics ---
+	function setupThicknessSlider() {
+		let isDragging = false;
+		let dragScale = 0;
+		let dragY = 0;
+
+		updateSlider();
+
+		function updateSlider() {
+			const percentage = (activeThickness - 1) / 19;
+			thicknessThumb.style.left = `calc(5% + ${percentage * 90}%)`;
+
+			thicknessDot.style.width = `${activeThickness}px`;
+			thicknessDot.style.height = `${activeThickness}px`;
+
+			const cx = 5 + percentage * 90;
+			const t_min = 2;
+			const t_max = 16;
+			const T_cx = t_min + percentage * (t_max - t_min);
+
+			const p1y_top = 16 - t_min / 2;
+			const p1y_bot = 16 + t_min / 2;
+			const p2y_top = 16 - t_max / 2;
+			const p2y_bot = 16 + t_max / 2;
+
+			const bulge = dragScale * 3;
+			const c_y_top = 16 - T_cx / 2 - bulge;
+			const c_y_bot = 16 + T_cx / 2 + bulge;
+
+			const d = `M 5 ${p1y_top} Q ${cx} ${c_y_top} 95 ${p2y_top} A ${t_max / 2} ${
+				t_max / 2
+			} 0 0 1 95 ${p2y_bot} Q ${cx} ${c_y_bot} 5 ${p1y_bot} A ${t_min / 2} ${
+				t_min / 2
+			} 0 0 1 5 ${p1y_top} Z`;
+			thicknessTrack.setAttribute("d", d);
+		}
+
+		function calculateValue(clientX) {
+			const rect = thicknessSlider.getBoundingClientRect();
+			const left = rect.left + rect.width * 0.05;
+			const right = rect.left + rect.width * 0.95;
+			const width = right - left;
+
+			let x = clientX - left;
+			x = Math.max(0, Math.min(width, x));
+
+			const percentage = x / width;
+			const thickness = Math.round(1 + percentage * 19);
+
+			activeThickness = thickness;
+
+			if (!isDragging) {
+				thicknessThumb.style.width = `${Math.max(16, thickness + 8)}px`;
+				thicknessThumb.style.height = `${Math.max(16, thickness + 8)}px`;
+			}
+			updateSlider();
+		}
+
+		function springBack() {
+			if (isDragging) return;
+
+			dragScale = dragScale * 0.75;
+			dragY = dragY * 0.75;
+
+			if (dragScale < 0.05) dragScale = 0;
+			if (Math.abs(dragY) < 0.1) dragY = 0;
+
+			updateSlider();
+
+			if (dragScale !== 0 || dragY !== 0) {
+				thicknessThumb.style.transform = `translate(-50%, -50%) translateY(${
+					dragY - 28 * dragScale
+				}px)`;
+				requestAnimationFrame(springBack);
+			} else {
+				thicknessThumb.style.transform = "";
+				thicknessThumb.classList.remove("dragging");
+				thicknessThumb.style.width = `${Math.max(16, activeThickness + 8)}px`;
+				thicknessThumb.style.height = `${Math.max(16, activeThickness + 8)}px`;
+			}
+		}
+
+		thicknessSlider.addEventListener("pointerdown", (e) => {
+			isDragging = true;
+			dragScale = 1;
+			thicknessSlider.setPointerCapture(e.pointerId);
+
+			thicknessThumb.classList.add("dragging");
+			thicknessThumb.style.width = "";
+			thicknessThumb.style.height = "";
+
+			calculateValue(e.clientX);
+		});
+
+		thicknessSlider.addEventListener("pointermove", (e) => {
+			if (!isDragging) return;
+			calculateValue(e.clientX);
+
+			const rect = thicknessSlider.getBoundingClientRect();
+			const cy = rect.top + rect.height / 2;
+			const rawDiff = e.clientY - cy;
+
+			const resistance = 0.4;
+			dragY = Math.max(-30, Math.min(30, rawDiff * resistance));
+
+			thicknessThumb.style.transform = `translate(-50%, -50%) translateY(${
+				dragY - 28
+			}px)`;
+		});
+
+		const handleRelease = () => {
+			if (!isDragging) return;
+			isDragging = false;
+			springBack();
+		};
+
+		thicknessSlider.addEventListener("pointerup", handleRelease);
+		thicknessSlider.addEventListener("pointercancel", handleRelease);
+	}
+
+	setupThicknessSlider();
+});
+
+    </script>
+</body>
+
+</html>

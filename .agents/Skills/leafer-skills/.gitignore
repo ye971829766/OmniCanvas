@@ -1,0 +1,16 @@
+dist
+cache
+node_modules
+
+package.json
+pnpm-lock.yaml
+vite.config.js
+.vitepress
+
+.DS_Store
+.idea
+.vscode
+
+.eslintcache
+*.tsbuildinfo
+*.log

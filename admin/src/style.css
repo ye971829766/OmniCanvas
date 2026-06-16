@@ -1,0 +1,121 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #09090b;
+  color: #fafafa;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Override Element Plus Dark Theme Variables for Premium Vibration Theme */
+html.dark {
+  --el-bg-color: #09090b;
+  --el-bg-color-page: #09090b;
+  --el-bg-color-overlay: #141416;
+  --el-border-color-light: #27272a;
+  --el-border-color: #27272a;
+  --el-text-color-primary: #fafafa;
+  --el-text-color-regular: #a1a1aa;
+  --el-text-color-secondary: #71717a;
+  
+  /* Brand color (Orange-ish / viboard themed) */
+  --el-color-primary: #f97316;
+  --el-color-primary-light-3: #fb923c;
+  --el-color-primary-light-5: #fdba74;
+  --el-color-primary-light-7: #fed7aa;
+  --el-color-primary-light-9: #ffedd5;
+  --el-color-primary-dark-2: #ea580c;
+}
+
+/* Dashboard Premium Styles */
+.dashboard-stat-card {
+  background: linear-gradient(145deg, #141416, #1c1c1e) !important;
+  border: 1px solid #27272a !important;
+  border-radius: 12px !important;
+  transition: all 0.3s ease;
+}
+.dashboard-stat-card:hover {
+  border-color: #f97316 !important;
+  box-shadow: 0 8px 30px rgba(249, 115, 22, 0.15);
+}
+.dashboard-stat-icon {
+  font-size: 28px;
+  opacity: 0.85;
+}
+
+/* Chat bubble styling for sandbox */
+.sandbox-chat-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background-color: #0c0c0e;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 16px;
+  width: 100%;
+  min-height: 250px;
+  box-sizing: border-box;
+}
+.chat-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.chat-bubble.user {
+  align-self: flex-end;
+  background-color: #f97316;
+  color: #fff;
+  border-bottom-right-radius: 2px;
+}
+.chat-bubble.assistant {
+  align-self: flex-start;
+  background-color: #1e1e20;
+  color: #e4e4e7;
+  border-top-left-radius: 2px;
+  border: 1px solid #27272a;
+}
+
+/* Diagnostic code terminal */
+.diagnostic-terminal {
+  background-color: #0c0c0e;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  padding: 12px;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 11px;
+  color: #10b981;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  box-sizing: border-box;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+

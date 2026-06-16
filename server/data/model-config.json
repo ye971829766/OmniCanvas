@@ -1,0 +1,21 @@
+{
+  "mappings": [
+    {
+      "id": "gpt-image-2",
+      "label": "GPT IMAGE 2",
+      "purpose": "image",
+      "channelId": "de5a5bf0-1ec7-42db-a075-3f66c6f54bf8",
+      "upstreamModel": "gpt-image-2",
+      "enabled": true,
+      "iconUrl": "http://localhost:3000/files/575e2670-578d-440e-a4e8-c916dede3c75.png"
+    },
+    {
+      "id": "seedance2.0",
+      "label": "Seedance2.0",
+      "purpose": "video",
+      "channelId": "64e0a0f1-5b86-4f27-9645-18483e006445",
+      "upstreamModel": "doubao-seedance-2-0-fast-260128",
+      "enabled": true
+    }
+  ]
+}
