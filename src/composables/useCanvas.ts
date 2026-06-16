@@ -124,7 +124,6 @@ Pen.prototype.addAt = function (this: any, child: any, index: number) {
   return originalPenAddAt.call(this, child, index);
 };
 
-
 import { useCanvasFrame } from "./useCanvasFrame";
 import { useCanvasToolbar } from "./useCanvasToolbar";
 import { useCanvasShape } from "./useCanvasShape";
@@ -530,6 +529,7 @@ export function useCanvas(
 
     const app = new App({
       view: canvasRef.value,
+
       editor: {
         editBoxType: "box",
         hideOnMove: false,
@@ -554,6 +554,18 @@ export function useCanvas(
         type: "design",
       },
     });
+
+    // Rename the auto-generated leafer-app-view class to hide library details
+    const viewEl = canvasRef.value.querySelector(".leafer-app-view");
+    const canvasEl = canvasRef.value.querySelector(".leafer-canvas-view");
+    if (viewEl) {
+      viewEl.classList.remove("leafer-app-view");
+      viewEl.classList.add("viboard-canvas-view");
+    }
+    if (canvasEl) {
+      canvasEl.classList.remove("leafer-canvas-view");
+      canvasEl.classList.add("viboard-canvas-view");
+    }
 
     canvasApp.value = app;
     (window as any).canvasApp = app;
@@ -693,7 +705,7 @@ export function useCanvas(
     setTimeout(() => {
       try {
         if (app.tree && app.tree.children && app.tree.children.length > 0) {
-          (app.tree as any).zoom('fit', 80, undefined, 0); // 0 duration for instant fit on load
+          (app.tree as any).zoom("fit", 80, undefined, 0); // 0 duration for instant fit on load
         }
       } catch (err) {
         console.warn("Failed to auto-zoom canvas on initialization:", err);
