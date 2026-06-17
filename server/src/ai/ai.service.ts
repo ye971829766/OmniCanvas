@@ -500,7 +500,10 @@ export class AiService {
   ): Promise<ImageModelOptionsResponse> {
     const mapping = await this.resolveModelMapping("image", model);
     const targetModel = mapping ? mapping.upstreamModel : model;
-    const result = await this.getImageModelOptionsInternal(targetModel, mapping);
+    const result = await this.getImageModelOptionsInternal(
+      targetModel,
+      mapping,
+    );
     result.model = model;
     return result;
   }
@@ -1088,7 +1091,13 @@ export class AiService {
         const baseUrl = channel.baseUrl;
         const nativeBaseUrl = baseUrl.replace(/\/v1\/?$/, "") + "/v1beta";
         const url = `${nativeBaseUrl}/models/${upstreamModel}:generateContent?key=${apiKey}`;
-        console.log(url);
+        const isYunWu = baseUrl.includes("yunwu.ai");
+        const googleClient = new GoogleGenAI({
+          apiKey: apiKey,
+          httpOptions: {
+            baseUrl: isYunWu ? url : baseUrl,
+          },
+        });
 
         const contentsParts: any[] = [{ text: prompt }];
 
@@ -1114,7 +1123,10 @@ export class AiService {
         // Resolve a valid imageSize (quality) for native Gemini
         let quality = "1K";
         let defaultSize = "1K";
-        if (upstreamModel.toLowerCase().includes("3.1") || upstreamModel.toLowerCase().includes("banana-2")) {
+        if (
+          upstreamModel.toLowerCase().includes("3.1") ||
+          upstreamModel.toLowerCase().includes("banana-2")
+        ) {
           defaultSize = "2K";
         }
         quality = defaultSize;
@@ -1135,7 +1147,20 @@ export class AiService {
         if (typeof body?.aspectRatio === "string" && body.aspectRatio.trim()) {
           const val = body.aspectRatio.trim();
           const validRatios = new Set([
-            "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"
+            "1:1",
+            "1:4",
+            "1:8",
+            "2:3",
+            "3:2",
+            "3:4",
+            "4:1",
+            "4:3",
+            "4:5",
+            "5:4",
+            "8:1",
+            "9:16",
+            "16:9",
+            "21:9",
           ]);
           if (validRatios.has(val)) {
             aspectRatio = val;
@@ -1150,7 +1175,7 @@ export class AiService {
             },
           ],
           generationConfig: {
-            responseModalities: ["TEXT", "IMAGE"],
+            responseModalities: ["IMAGE"],
             imageConfig: {
               aspectRatio,
               imageSize: quality,
@@ -1158,26 +1183,34 @@ export class AiService {
           },
         };
 
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
+        const responseFromGeminiSdk = await googleClient.models.generateContent(
+          {
+            model: upstreamModel,
+            contents: payload.contents,
+            config: payload.generationConfig,
           },
-          body: JSON.stringify(payload),
-          verbose: true,
-        } as any);
+        );
 
-        const responseBody = await this.readJsonSafely(response);
-        if (!response.ok) {
-          throw new Error(
-            this.parseProviderError(responseBody) ||
-              "Yunwu image generation failed",
-          );
-        }
+        // const response = await fetch(url, {
+        //   method: "POST",
+        //   headers: {
+        //     "Content-Type": "application/json",
+        //     Authorization: `Bearer ${apiKey}`,
+        //   },
+        //   body: JSON.stringify(payload),
+        //   verbose: true,
+        // } as any);
+
+        // const responseBody = await this.readJsonSafely(response);
+        // if (!response.ok) {
+        //   throw new Error(
+        //     this.parseProviderError(responseBody) ||
+        //       "Yunwu image generation failed",
+        //   );
+        // }
 
         const filename = await this.filesService.saveGeneratedImage(
-          responseBody,
+          responseFromGeminiSdk,
           outputFormat,
         );
         imageUrl = `${originUrl}/files/${filename}`;

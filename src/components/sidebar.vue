@@ -28,7 +28,7 @@
               <!-- Show Expand Button when collapsed and hovered -->
               <Button
                 v-else
-                variant="outlined"
+                text
                 rounded
                 size="small"
                 title="展开"
@@ -55,9 +55,9 @@
           <Transition name="fade">
             <Button
               v-if="renderExpandedContent"
-              variant="outlined"
               rounded
               size="small"
+              text
               title="收起"
               class="flex items-center justify-center p-0"
               @click="collapsed = true"

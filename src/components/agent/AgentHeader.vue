@@ -29,13 +29,7 @@ const emit = defineEmits<{
       >
         <RotateCcw :size="14" />
       </button>
-      <Button
-        variant="outlined"
-        rounded
-        size="small"
-        title="收起"
-        @click="emit('collapse')"
-      >
+      <Button text rounded size="small" title="收起" @click="emit('collapse')">
         <PanelRightClose :size="18" />
       </Button>
     </div>
