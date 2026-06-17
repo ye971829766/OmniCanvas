@@ -1,5 +1,14 @@
 <template>
   <main class="canvas-container">
+    <div
+      v-if="canvasLoading"
+      class="absolute inset-0 w-full h-full z-100 flex justify-center items-center bg-white/50 backdrop-blur-sm z-1000"
+    >
+      <ProgressBar
+        mode="indeterminate"
+        style="height: 6px; width: 200px"
+      ></ProgressBar>
+    </div>
     <div class="dot-grid"></div>
     <div
       class="flex-1 relative overflow-hidden w-full h-full"
@@ -44,19 +53,59 @@
       :record-history-debounced="recordHistoryDebounced"
     />
 
-    <ZoomController
-      :canvas-app="canvasApp"
-    />
-
-    <AgentPanel
-      :canvas-app="canvasApp"
-      :record-history="recordHistoryDebounced"
-    />
+    <div class="absolute right-4 top-4 z-40 flex items-center gap-3">
+      <ZoomController
+        :canvas-app="canvasApp"
+        :style="{
+          transition:
+            'transform ' +
+            (agentPanelCollapsed ? '0.35s' : '0.25s') +
+            ' cubic-bezier(0.45, 0, 0.55, 1)',
+          transform: agentPanelCollapsed
+            ? 'translateX(0)'
+            : 'translateX(-360px)',
+        }"
+      />
+      <button
+        class="agent-launcher-btn cursor-pointer flex items-center justify-center"
+        title="打开 AI 助手"
+        @click="emit('toggle-agent')"
+        :style="{
+          transition:
+            'transform ' +
+            (agentPanelCollapsed ? '0.35s' : '0.25s') +
+            ' cubic-bezier(0.45, 0, 0.55, 1), opacity ' +
+            (agentPanelCollapsed ? '0.35s' : '0.25s') +
+            ' ease',
+          transform: agentPanelCollapsed
+            ? 'translateX(0)'
+            : 'translateX(400px)',
+          opacity: agentPanelCollapsed ? 1 : 0,
+          pointerEvents: agentPanelCollapsed ? 'auto' : 'none',
+        }"
+      >
+        <img
+          :src="logoImg"
+          alt="PlotTwist"
+          class="w-28px h-28px rounded-full object-cover"
+        />
+      </button>
+    </div>
   </main>
 </template>
 
 <script setup lang="ts">
-import { ref, useTemplateRef, watch } from "vue";
+import { ref, useTemplateRef, watch, toRef } from "vue";
+import logoImg from "@/assets/logo.jpg";
+
+const props = defineProps<{
+  agentPanelCollapsed: boolean;
+  activeWorkspaceId: string | number | null;
+}>();
+
+const emit = defineEmits<{
+  (e: "toggle-agent"): void;
+}>();
 import "@/components/canvas/utils/proxyData.ts";
 import FloatToolbar from "@/components/canvas/floatToolbar/index.vue";
 import ElementInfoLabel from "@/components/canvas/floatToolbar/ElementInfoLabel.vue";
@@ -69,9 +118,12 @@ import {
   type ImageModelOptionsResponse,
 } from "@/utils/api";
 import LayerPanel from "@/components/canvas/LayerPanel.vue";
-import AgentPanel from "@/components/AgentPanel.vue";
 import ZoomController from "@/components/canvas/ZoomController.vue";
-import { isImageFile, isVideoFile } from "@/utils/utils.ts";
+import {
+  getRandomCoordinates,
+  isImageFile,
+  isVideoFile,
+} from "@/utils/utils.ts";
 import { Image } from "leafer-ui";
 
 const option = ref<{
@@ -111,6 +163,7 @@ const fontFamily = ref("Inter");
 
 // Core Canvas Composable
 const {
+  loading: canvasLoading,
   canvasApp,
   activeTool,
   selectTarget,
@@ -125,6 +178,7 @@ const {
   thickness,
   fontSize,
   fontFamily,
+  toRef(props, "activeWorkspaceId"),
 );
 
 watch(activeTool, (newTool) => {
@@ -184,27 +238,17 @@ const onUploadFile = async (file: File) => {
             const naturalWidth = img.naturalWidth;
             const naturalHeight = img.naturalHeight;
 
-            // 计算合适的显示尺寸（最大宽度 600px，保持宽高比）
-            const maxWidth = 600;
-            let displayWidth = naturalWidth;
-            let displayHeight = naturalHeight;
-
-            if (naturalWidth > maxWidth) {
-              const scale = maxWidth / naturalWidth;
-              displayWidth = maxWidth;
-              displayHeight = Math.round(naturalHeight * scale);
-            }
-
             // 在画布较大范围内随机位置放置元素（避免堆在一起）
-            const canvasRange = 2000; // 画布范围
-            const x = Math.random() * canvasRange;
-            const y = Math.random() * canvasRange;
+
+            const { x, y } = getRandomCoordinates({
+              range: 2000,
+            });
 
             const image = new Image({
               x,
               y,
-              width: displayWidth,
-              height: displayHeight,
+              width: naturalWidth,
+              height: naturalHeight,
               url: res.imageUrl,
               editable: true,
             });
@@ -245,27 +289,16 @@ const onUploadFile = async (file: File) => {
             const naturalWidth = video.videoWidth;
             const naturalHeight = video.videoHeight;
 
-            // 计算合适的显示尺寸（最大宽度 600px，保持宽高比）
-            const maxWidth = 600;
-            let displayWidth = naturalWidth;
-            let displayHeight = naturalHeight;
-
-            if (naturalWidth > maxWidth) {
-              const scale = maxWidth / naturalWidth;
-              displayWidth = maxWidth;
-              displayHeight = Math.round(naturalHeight * scale);
-            }
-
             // 在画布较大范围内随机位置放置元素（避免堆在一起）
-            const canvasRange = 2000; // 画布范围
-            const x = Math.random() * canvasRange;
-            const y = Math.random() * canvasRange;
+            const { x, y } = getRandomCoordinates({
+              range: 2000,
+            });
 
             VideoNode.create({
               x,
               y,
-              width: displayWidth,
-              height: displayHeight,
+              width: naturalWidth,
+              height: naturalHeight,
               videoUrl: videoUrl,
               thumbnailUrl: thumbnailUrl,
               editable: true,
@@ -339,6 +372,11 @@ const handleToolbarAction = ({ action }: { action: string }) => {
     }
   }
 };
+
+defineExpose({
+  canvasApp,
+  recordHistoryDebounced,
+});
 </script>
 
 <style>
@@ -491,7 +529,10 @@ body {
 }
 
 .p-dark *:hover::-webkit-scrollbar-thumb:hover {
-  background: var(--p-scrollpanel-bar-hover-background, rgba(255, 255, 255, 0.35));
+  background: var(
+    --p-scrollpanel-bar-hover-background,
+    rgba(255, 255, 255, 0.35)
+  );
 }
 
 /* Firefox Support */
@@ -501,7 +542,8 @@ body {
 }
 
 *:hover {
-  scrollbar-color: var(--p-scrollpanel-bar-background, rgba(0, 0, 0, 0.18)) transparent;
+  scrollbar-color: var(--p-scrollpanel-bar-background, rgba(0, 0, 0, 0.18))
+    transparent;
 }
 
 .p-dark * {
@@ -509,6 +551,59 @@ body {
 }
 
 .p-dark *:hover {
-  scrollbar-color: var(--p-scrollpanel-bar-background, rgba(255, 255, 255, 0.18)) transparent;
+  scrollbar-color: var(
+      --p-scrollpanel-bar-background,
+      rgba(255, 255, 255, 0.18)
+    )
+    transparent;
+}
+
+/* AI Launcher Button Styles */
+.agent-launcher-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color, var(--p-surface-200));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    background-color 0.2s;
+  padding: 0;
+}
+
+.p-dark .agent-launcher-btn {
+  background-color: rgba(30, 30, 30, 0.85);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.agent-launcher-btn:hover {
+  background-color: var(--p-surface-100);
+  transform: scale(1.08);
+}
+
+.agent-launcher-btn:active {
+  transform: scale(0.92);
+}
+
+/* Launcher transition */
+.launcher-enter-active {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.launcher-leave-active {
+  transition: all 0.2s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+.launcher-enter-from {
+  transform: scale(0) rotate(-45deg);
+  opacity: 0;
+}
+.launcher-leave-to {
+  transform: scale(0) rotate(45deg);
+  opacity: 0;
 }
 </style>

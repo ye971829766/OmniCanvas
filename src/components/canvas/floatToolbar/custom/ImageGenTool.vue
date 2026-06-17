@@ -357,13 +357,20 @@ const handleGenerate = async () => {
 
   const targetAny = props.target as any;
   targetAny.set({
-    generationStatus: "generating",
     prompt: promptText.value,
     model: selectedModel.value,
     size: selectedSize.value,
     quality: selectedQuality.value,
     aspectRatio: selectedAspectRatio.value,
     errorMessage: "",
+  });
+
+  if (targetAny.app && typeof (targetAny.app as any).recordHistory === "function") {
+    (targetAny.app as any).recordHistory();
+  }
+
+  targetAny.set({
+    generationStatus: "generating",
   });
 
   emit("change", { key: "generationStatus", value: "generating" });

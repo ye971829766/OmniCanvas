@@ -5,6 +5,7 @@ import { AiModule } from "./ai/ai.module";
 import { ChannelsModule } from "./channels/channels.module";
 import { ModelConfigModule } from "./model-config/model-config.module";
 import { AgentModule } from "./agent/agent.module";
+import { WorkspacesModule } from "./workspaces/workspaces.module";
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { AgentModule } from "./agent/agent.module";
     ChannelsModule,
     ModelConfigModule,
     AgentModule,
+    WorkspacesModule,
   ],
   controllers: [AppController],
 })

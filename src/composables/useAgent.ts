@@ -67,17 +67,146 @@ export interface NodeState {
   error?: string;
 }
 
-export function useAgent(canvasApp: Ref<any>, recordHistory?: () => void) {
+function parseHistoryMessage(
+  msg: any,
+  index: number,
+  allMessages: any[]
+): ChatMessage | null {
+  if (msg.role === "system" || msg.role === "tool") {
+    return null;
+  }
+
+  const id = `hist-${index}-${Math.random().toString(36).slice(2, 6)}`;
+  if (msg.role === "user") {
+    let text = "";
+    const images: string[] = [];
+    if (typeof msg.content === "string") {
+      text = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === "text") {
+          text = part.text || "";
+        } else if (part.type === "image_url" && part.image_url?.url) {
+          images.push(part.image_url.url);
+        }
+      }
+    }
+    return {
+      id,
+      role: "user",
+      text,
+      tools: [],
+      streaming: false,
+      images: images.length > 0 ? images : undefined,
+    };
+  }
+
+  if (msg.role === "assistant") {
+    const text = msg.content || "";
+    const tools: { id: string; name: string; done: boolean }[] = [];
+    if (Array.isArray(msg.tool_calls)) {
+      for (const tc of msg.tool_calls) {
+        const toolCallId = tc.id;
+        const isDone = allMessages.some(
+          (m) => m.role === "tool" && m.tool_call_id === toolCallId
+        );
+        tools.push({
+          id: toolCallId,
+          name: tc.function?.name || "",
+          done: isDone,
+        });
+      }
+    }
+    return {
+      id,
+      role: "assistant",
+      text,
+      tools,
+      streaming: false,
+    };
+  }
+
+  return null;
+}
+
+export function useAgent(
+  canvasApp: Ref<any>,
+  recordHistory?: () => void,
+  activeWorkspaceIdRef?: Ref<string | number | null>,
+) {
   const messages = ref<ChatMessage[]>([]);
   const running = ref(false);
-  const sessionId = shallowRef(
-    `agent-${Math.random().toString(36).slice(2, 10)}`,
-  );
+  const sessionId = shallowRef("");
 
   // refId -> leafer node, so update_node / generation_started can find nodes
   const nodeMap = new Map<string, any>();
   const nodeStates = ref<Record<string, NodeState>>({});
   let abort: AbortController | null = null;
+
+  const scanTreeAndPopulateNodeMap = (node: any) => {
+    if (node && node.refId) {
+      nodeMap.set(node.refId, node);
+      const tag = node.tag || node.__tag;
+      if (tag === "Image") {
+        nodeStates.value[node.refId] = {
+          refId: node.refId,
+          type: "image",
+          status: "done",
+          url: node.url,
+        };
+      } else if (tag === "VideoNode") {
+        nodeStates.value[node.refId] = {
+          refId: node.refId,
+          type: "video",
+          status: "done",
+          url: node.videoUrl,
+          thumbnailUrl: node.thumbnailUrl,
+        };
+      }
+    }
+    if (node.children) {
+      node.children.forEach(scanTreeAndPopulateNodeMap);
+    }
+  };
+
+  // Watch active workspace ID to reload history and sessionId
+  watch(
+    () => activeWorkspaceIdRef?.value,
+    async (newId) => {
+      if (newId) {
+        sessionId.value = String(newId);
+        messages.value = [];
+        nodeMap.clear();
+        nodeStates.value = {};
+
+        // Sync nodeMap with current tree
+        const app = canvasApp.value;
+        if (app?.tree?.children) {
+          app.tree.children.forEach(scanTreeAndPopulateNodeMap);
+        }
+
+        try {
+          const res = await fetch(`${AGENT_BASE_URL}/agent/${sessionId.value}/history`);
+          if (res.ok) {
+            const rawHistory = await res.json();
+            if (Array.isArray(rawHistory)) {
+              const parsed: ChatMessage[] = [];
+              rawHistory.forEach((msg, idx) => {
+                const parsedMsg = parseHistoryMessage(msg, idx, rawHistory);
+                if (parsedMsg) {
+                  parsed.push(parsedMsg);
+                }
+              });
+              messages.value = parsed;
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load agent chat history:", err);
+        }
+      }
+    },
+    { immediate: true },
+  );
 
   // Listen to child.add on app.tree globally to update nodeMap and nodeStates
   watch(
@@ -400,7 +529,10 @@ export function useAgent(canvasApp: Ref<any>, recordHistory?: () => void) {
     messages.value = [];
     nodeMap.clear();
     nodeStates.value = {};
-    sessionId.value = `agent-${Math.random().toString(36).slice(2, 10)}`;
+    const app = canvasApp.value;
+    if (app?.tree?.children) {
+      app.tree.children.forEach(scanTreeAndPopulateNodeMap);
+    }
     // best-effort clear server-side history
     fetch(`${AGENT_BASE_URL}/agent/${sessionId.value}`, {
       method: "DELETE",

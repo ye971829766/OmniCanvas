@@ -161,7 +161,9 @@ export function useCanvas(
   thicknessState?: Ref<number>,
   fontSizeState?: Ref<number>,
   fontFamilyState?: Ref<string>,
+  activeWorkspaceIdRef?: Ref<string | number | null>,
 ) {
+  const loading = ref(true);
   const canvasApp = shallowRef<App | null>(null);
   const activeTool = ref("select");
 
@@ -175,8 +177,8 @@ export function useCanvas(
   const colors = colorState || defaultColors;
 
   // History Composable
-  const { recordHistory, recordHistoryDebounced, undo, redo, loadCanvasState } =
-    useCanvasHistory(canvasApp);
+  const { recordHistory, recordHistoryDebounced, undo, redo, loadCanvasState, saveCanvasState } =
+    useCanvasHistory(canvasApp, activeWorkspaceIdRef);
 
   // Sub-composable for frame creation and containment logic
   const { enableFrameDraw, disableFrameDraw, attachFrameListeners } =
@@ -382,10 +384,6 @@ export function useCanvas(
       "gap",
       "padding",
       "lockRatio",
-      "generationRequest",
-      "generationStatus",
-      "resultImages",
-      "errorMessage",
     ];
     if (
       trackedProperties.includes(e.attrName) ||
@@ -544,10 +542,10 @@ export function useCanvas(
         },
       },
       zoom: {
-        min: 0.2,
-        max: 200,
+        min: 0.01,
+        max: 2,
       },
-      wheel: { preventDefault: true },
+      wheel: { preventDefault: true, zoomSpeed: 0.05 },
       touch: { preventDefault: true },
       pointer: { preventDefaultMenu: true },
       tree: {
@@ -569,6 +567,8 @@ export function useCanvas(
 
     canvasApp.value = app;
     (window as any).canvasApp = app;
+    (app as any).recordHistory = recordHistory;
+    (app as any).recordHistoryDebounced = recordHistoryDebounced;
 
     // Register custom pen cursor in Leafer UI
     Cursor.set("pen", {
@@ -699,7 +699,7 @@ export function useCanvas(
     };
 
     // Restore saved elements or add initial ImageGen element
-    loadCanvasState();
+    await loadCanvasState();
 
     // Zoom to fit all elements on initialization
     setTimeout(() => {
@@ -882,6 +882,59 @@ export function useCanvas(
     };
 
     app.editor.on(EditorEvent.SELECT, updatePropertyWatchers);
+
+    // Watch active workspace ID to reload canvas
+    if (activeWorkspaceIdRef) {
+      watch(
+        () => activeWorkspaceIdRef.value,
+        async (newId, oldId) => {
+          if (newId && newId !== oldId && app.tree) {
+            loading.value = true;
+            if (oldId) {
+              await saveCanvasState(oldId);
+            }
+            await loadCanvasState(newId);
+
+            // Resume frame and task start/polling listeners for the newly loaded nodes
+            app.tree.children.forEach((child: any) => {
+              initFrameListeners(child);
+              if (child.tag === "ImageGen" || child.__tag === "ImageGen") {
+                attachTaskStartListener(child);
+                if (child.generationStatus === "generating" && child.taskId) {
+                  resumeNodePolling(child);
+                }
+              }
+              if (child.tag === "VideoGen" || child.__tag === "VideoGen") {
+                attachVideoTaskStartListener(child);
+                if (child.generationStatus === "generating" && child.taskId) {
+                  resumeVideoNodePolling(child);
+                }
+              }
+            });
+
+            // Auto-zoom to fit elements
+            setTimeout(() => {
+              try {
+                if (app.tree.children && app.tree.children.length > 0) {
+                  (app.tree as any).zoom("fit", 80, undefined, 0);
+                }
+                loading.value = false;
+              } catch (err) {
+                console.warn(
+                  "Failed to zoom to fit after workspace change:",
+                  err,
+                );
+                loading.value = false;
+              }
+            }, 150);
+          }
+        },
+        {
+          immediate: true,
+          deep: true,
+        },
+      );
+    }
   };
 
   const preventPageZoom = (e: WheelEvent) => {
@@ -907,6 +960,9 @@ export function useCanvas(
       el.off(PropertyEvent.CHANGE, onPropertyChange);
     });
     watchedElements = [];
+    if (activeWorkspaceIdRef?.value) {
+      void saveCanvasState(activeWorkspaceIdRef.value);
+    }
     if (canvasApp.value) {
       canvasApp.value.destroy();
     }
@@ -966,6 +1022,7 @@ export function useCanvas(
   };
 
   return {
+    loading,
     canvasApp,
     activeTool,
     selectTarget,

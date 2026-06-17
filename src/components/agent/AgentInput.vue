@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onBeforeUnmount } from "vue";
+import { ref, watch, computed, onBeforeUnmount, onMounted } from "vue";
 import { useEditor, EditorContent } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -7,14 +7,17 @@ import Mention from "@tiptap/extension-mention";
 import {
   Plus,
   BookOpen,
-  Smile,
   ChevronDown,
   Lightbulb,
   Square,
   ArrowUp,
   X,
-  Sparkles,
+  Image as ImageIcon,
+  Type as TypeIcon,
+  Circle as CircleIcon,
+  Play as PlayIcon,
 } from "lucide-vue-next";
+import { getModelConfig } from "@/utils/api";
 
 function compressImage(
   file: File,
@@ -65,6 +68,7 @@ function compressImage(
 const props = defineProps<{
   modelValue: string;
   running: boolean;
+  canvasApp?: any;
 }>();
 
 const emit = defineEmits<{
@@ -76,65 +80,114 @@ const emit = defineEmits<{
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const isFocused = ref(false);
 const isDragging = ref(false);
-const showEmojiPicker = ref(false);
 const showMentions = ref(false);
 const mentionsQuery = ref("");
 const selectedMentionIndex = ref(0);
 const attachments = ref<string[]>([]);
 const mentionCommandCallback = ref<any>(null);
 
-const quickEmojis = ["😊", "👍", "🎉", "🔥", "💡", "🎨", "❤️"];
+const modelsList = ref<any[]>([]);
 
-const mentionOptions = [
-  {
-    name: "set_frame",
-    label: "设置画板 (set_frame)",
-    desc: "在画布中创建或修改画框",
-  },
-  {
-    name: "generate_image",
-    label: "生成图片 (generate_image)",
-    desc: "生成并放置AI设计图像",
-  },
-  {
-    name: "generate_video",
-    label: "生成视频 (generate_video)",
-    desc: "生成并播放精美视频",
-  },
-  {
-    name: "add_text",
-    label: "添加文字 (add_text)",
-    desc: "插入标题或段落文本",
-  },
-  {
-    name: "add_rect",
-    label: "添加图形 (add_rect)",
-    desc: "在画布中绘制矩形等图形",
-  },
-  {
-    name: "auto_layout",
-    label: "自动布局 (auto_layout)",
-    desc: "智能重排画布元素",
-  },
-  {
-    name: "set_brand",
-    label: "设置品牌 (set_brand)",
-    desc: "调整品牌颜色和风格",
-  },
-  {
-    name: "apply_palette",
-    label: "应用色板 (apply_palette)",
-    desc: "将配色快速应用 to 画布",
-  },
-];
+const loadModels = async () => {
+  try {
+    const config = await getModelConfig();
+    modelsList.value = (config.mappings || []).map((m: any) => ({
+      id: m.id,
+      name: m.label || m.id,
+      purpose: m.purpose,
+      iconUrl: m.iconUrl,
+      type: "model",
+    }));
+  } catch (err) {
+    console.error("Failed to load models in AgentInput:", err);
+    // Fallback static list in case of network failure
+    modelsList.value = [
+      {
+        id: "gpt-image-2",
+        name: "智能图片V2",
+        purpose: "image",
+        type: "model",
+      },
+      {
+        id: "seedance2.0",
+        name: "智能图片V2 低质",
+        purpose: "video",
+        type: "model",
+      },
+    ];
+  }
+};
+
+onMounted(() => {
+  loadModels();
+});
+
+const canvasElements = computed(() => {
+  if (!props.canvasApp?.tree?.children) return [];
+  return props.canvasApp.tree.children.map((child: any) => {
+    let url = "";
+    let type = "shape";
+
+    const tag = child.tag || child.__tag;
+    if (tag === "Image") {
+      url = child.url || "";
+      type = "image";
+    } else if (tag === "VideoNode") {
+      url = child.thumbnailUrl || "";
+      type = "video";
+    } else if (tag === "ImageGen" && child.images?.length > 0) {
+      url = child.images[0] || "";
+      type = "image";
+    }
+
+    let name = child.name;
+    if (!name) {
+      if (tag === "Rect") name = "矩形元素";
+      else if (tag === "VideoNode") name = "视频元素";
+      else if (tag === "Text") name = "文本元素";
+      else if (tag === "Frame") name = "画板容器";
+      else if (tag === "Line") name = "线段元素";
+      else if (tag === "Star") name = "星形元素";
+      else if (tag === "Ellipse") name = "椭圆元素";
+      else if (tag === "Group") name = "编组容器";
+      else name = tag || "元素";
+    }
+
+    return {
+      id: child.innerId ?? child.id,
+      name,
+      tag,
+      url,
+      type,
+    };
+  });
+});
+
+const mentionOptions = computed(() => {
+  const elements = canvasElements.value.map((el: any) => ({
+    id: el.name,
+    name: el.name,
+    url: el.url,
+    tag: el.tag,
+    itemType: "element",
+  }));
+
+  const models = modelsList.value.map((m: any) => ({
+    id: m.name,
+    name: m.name,
+    iconUrl: m.iconUrl,
+    purpose: m.purpose,
+    itemType: "model",
+  }));
+
+  return [...elements, ...models];
+});
 
 const filteredMentions = computed(() => {
-  if (!mentionsQuery.value) return mentionOptions;
+  const all = mentionOptions.value;
+  if (!mentionsQuery.value) return all;
   const q = mentionsQuery.value.toLowerCase();
-  return mentionOptions.filter(
-    (item) =>
-      item.name.includes(q) || item.label.includes(q) || item.desc.includes(q),
-  );
+  return all.filter((item) => item.name.toLowerCase().includes(q));
 });
 
 const editor = useEditor({
@@ -149,14 +202,11 @@ const editor = useEditor({
       },
       suggestion: {
         items: ({ query }) => {
-          if (!query) return mentionOptions;
+          mentionsQuery.value = query;
           const q = query.toLowerCase();
-          return mentionOptions.filter(
-            (item) =>
-              item.name.includes(q) ||
-              item.label.includes(q) ||
-              item.desc.includes(q),
-          );
+          const all = mentionOptions.value;
+          if (!q) return all;
+          return all.filter((item) => item.name.toLowerCase().includes(q));
         },
         render: () => ({
           onStart: (props) => {
@@ -276,12 +326,7 @@ function clearInput() {
   emit("update:modelValue", "");
 }
 
-function insertEmoji(emoji: string) {
-  if (editor.value) {
-    editor.value.chain().focus().insertContent(emoji).run();
-  }
-  showEmojiPicker.value = false;
-}
+
 
 function triggerFileInput() {
   fileInputRef.value?.click();
@@ -376,22 +421,100 @@ function handleSubmit() {
         v-if="showMentions && filteredMentions.length > 0"
         class="mentions-popup"
       >
-        <div class="mentions-header">
-          <Sparkles :size="11" class="text-primary" />
-          <span>提及工具 / 命令</span>
-        </div>
         <div class="mentions-list">
-          <div
-            v-for="(item, idx) in filteredMentions"
-            :key="item.name"
-            class="mention-item"
-            :class="{ active: idx === selectedMentionIndex }"
-            @click="insertMention(item.name)"
-            @mouseenter="selectedMentionIndex = idx"
-          >
-            <span class="mention-name">@{{ item.name }}</span>
-            <span class="mention-desc">{{ item.desc }}</span>
-          </div>
+          <template v-for="(item, idx) in filteredMentions" :key="idx">
+            <!-- Section Header: 当前项目 -->
+            <div
+              v-if="idx === 0 && item.itemType === 'element'"
+              class="mentions-section-header"
+            >
+              当前项目
+            </div>
+
+            <!-- Section Divider -->
+            <div
+              v-if="
+                item.itemType === 'model' &&
+                idx > 0 &&
+                filteredMentions[idx - 1].itemType !== 'model'
+              "
+              class="section-divider"
+            ></div>
+
+            <!-- Section Header: 选择模型 -->
+            <div
+              v-if="
+                item.itemType === 'model' &&
+                (idx === 0 || filteredMentions[idx - 1].itemType !== 'model')
+              "
+              class="mentions-section-header"
+            >
+              选择模型
+            </div>
+
+            <!-- Mention Item -->
+            <div
+              class="mention-item"
+              :class="{ active: idx === selectedMentionIndex }"
+              @click="insertMention(item.id)"
+              @mouseenter="selectedMentionIndex = idx"
+            >
+              <!-- Thumbnail / Icon -->
+              <div class="mention-avatar-container">
+                <!-- For element with image/video thumbnail -->
+                <img
+                  v-if="item.itemType === 'element' && item.url"
+                  :src="item.url"
+                  class="mention-item-img"
+                />
+                <!-- For element shape fallback -->
+                <div
+                  v-else-if="item.itemType === 'element'"
+                  class="mention-item-shape-placeholder"
+                >
+                  <ImageIcon
+                    v-if="item.tag === 'Image' || item.tag === 'ImageGen'"
+                    :size="14"
+                  />
+                  <PlayIcon
+                    v-else-if="item.tag === 'VideoNode'"
+                    :size="12"
+                    fill="currentColor"
+                  />
+                  <TypeIcon v-else-if="item.tag === 'Text'" :size="14" />
+                  <CircleIcon v-else-if="item.tag === 'Ellipse'" :size="14" />
+                  <Square v-else :size="12" />
+                </div>
+                <!-- For model with iconUrl -->
+                <img
+                  v-else-if="item.itemType === 'model' && item.iconUrl"
+                  :src="item.iconUrl"
+                  class="mention-item-img"
+                />
+                <!-- For model fallback icon -->
+                <div
+                  v-else-if="item.itemType === 'model'"
+                  class="mention-item-model-icon"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="model-clover-icon"
+                  >
+                    <rect x="9" y="3" width="6" height="18" rx="3" />
+                    <rect x="3" y="9" width="18" height="6" rx="3" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Name -->
+              <span class="mention-item-name">{{ item.name }}</span>
+            </div>
+          </template>
         </div>
       </div>
     </Transition>
@@ -443,28 +566,6 @@ function handleSubmit() {
         >
           <BookOpen :size="14" />
         </button>
-
-        <!-- Emoji picker -->
-        <div class="emoji-picker-container">
-          <button
-            class="toolbar-btn"
-            :class="{ active: showEmojiPicker }"
-            title="表情"
-            @click="showEmojiPicker = !showEmojiPicker"
-          >
-            <Smile :size="14" />
-          </button>
-          <div v-if="showEmojiPicker" class="quick-emojis-bar">
-            <span
-              v-for="emoji in quickEmojis"
-              :key="emoji"
-              class="quick-emoji-item"
-              @click="insertEmoji(emoji)"
-            >
-              {{ emoji }}
-            </span>
-          </div>
-        </div>
 
         <!-- Agent selector indicator -->
         <div class="agent-dropdown-selector">
@@ -741,62 +842,110 @@ function handleSubmit() {
 /* Mentions Suggestion Styling */
 .mentions-popup {
   position: absolute;
-  bottom: calc(100% + 4px);
-  left: 0;
-  right: 0;
+  bottom: calc(100% + 6px);
+  left: 8px;
+  width: 280px;
   background: var(--p-surface-0, #fff);
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
   box-shadow:
-    0 -4px 18px rgba(0, 0, 0, 0.08),
-    0 4px 18px rgba(0, 0, 0, 0.08);
+    0 12px 32px rgba(0, 0, 0, 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.05);
   z-index: 100;
   overflow: hidden;
-  max-height: 200px;
+  max-height: 320px;
   display: flex;
   flex-direction: column;
-}
-
-.mentions-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--p-text-muted-color, #6b7280);
-  background: var(--p-surface-50, #f9fafb);
-  border-bottom: 1px solid var(--p-surface-100, #f3f4f6);
 }
 
 .mentions-list {
   overflow-y: auto;
   flex: 1;
+  padding: 8px 6px;
+}
+
+.mentions-section-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--p-text-muted-color, #94a3b8);
+  padding: 6px 12px 4px 12px;
+  user-select: none;
+  text-align: left;
+}
+
+.section-divider {
+  height: 1px;
+  background: var(--p-surface-100, #f1f5f9);
+  margin: 6px 12px;
+  width: calc(100% - 24px);
 }
 
 .mention-item {
   display: flex;
-  flex-direction: column;
-  padding: 8px 12px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  margin: 2px 6px;
   cursor: pointer;
-  transition: all 0.1s ease;
+  border-radius: 10px;
+  transition: all 0.15s ease;
   text-align: left;
 }
 
 .mention-item.active {
-  background: var(--p-primary-50, #f5f3ff);
+  background: var(--p-surface-100, #f1f5f9);
 }
 
-.mention-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--p-primary-color);
+.mention-avatar-container {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--p-surface-50, #f8fafc);
+  border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
-.mention-desc {
-  font-size: 10.5px;
-  color: var(--p-text-muted-color, #6b7280);
-  margin-top: 2px;
+.mention-item-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mention-item-shape-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background: #a3a3a3;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mention-item-model-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background: #000000;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.model-clover-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.mention-item-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--p-text-color, #0f172a);
 }
 
 /* Attachments preview list */

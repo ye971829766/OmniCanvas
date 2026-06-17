@@ -39,10 +39,37 @@ export interface ModelMapping {
   brandInitial?: string;
   brandColor?: string;
   iconUrl?: string;
+  sizes?: string[];
+  qualities?: string[];
+  aspectRatios?: string[];
+  maxReferenceImages?: number;
+  defaultSize?: string;
+  defaultQuality?: string;
+  qualityMode?: string;
+  imageConfigId?: string;
+}
+
+export interface ImageConfig {
+  id: string;
+  label: string;
+  sizes?: string[];
+  qualities?: string[];
+  aspectRatios?: string[];
+  maxReferenceImages?: number;
+  defaultSize?: string;
+  defaultQuality?: string;
+  qualityMode?: string;
+  notes?: string;
 }
 
 export interface ModelConfigState {
   mappings: ModelMapping[];
+  imageConfigs?: ImageConfig[];
+  dictionaries?: {
+    sizes: string[];
+    aspectRatios: string[];
+    qualities: string[];
+  };
 }
 
 export async function getChannels(): Promise<Channel[]> {

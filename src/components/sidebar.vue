@@ -69,7 +69,12 @@
 
         <!-- actions -->
         <div class="flex items-center gap-1 flex-col mt-2">
-          <Button variant="text" rounded class="w-full !pl-0 !pr-0 action-item">
+          <Button
+            variant="text"
+            rounded
+            class="w-full !pl-0 !pr-0 action-item"
+            @click="createNewWorkspace"
+          >
             <div
               class="w-full flex items-center"
               :class="{
@@ -131,8 +136,10 @@
             <div
               class="w-full flex justify-between p-1 items-center relative history-item rounded-lg transition-colors duration-150 cursor-pointer"
               :class="{
-                'bg-[var(--p-surface-100)]': activeWorkspaceId === item.id,
-                'hover:bg-[var(--p-surface-50)]': activeWorkspaceId !== item.id,
+                'bg-[var(--p-surface-100)]':
+                  String(activeWorkspaceId) === String(item.id),
+                'hover:bg-[var(--p-surface-50)]':
+                  String(activeWorkspaceId) !== String(item.id),
               }"
               v-for="item in filteredWorkspaces"
               :key="item.id"
@@ -142,7 +149,10 @@
                 <span
                   class="workspace-name-span whitespace-nowrap overflow-hidden text-ellipsis"
                   :data-id="item.id"
-                  v-tooltip="{ value: item.name, disabled: !isOverflowMap[item.id] }"
+                  v-tooltip="{
+                    value: item.name,
+                    disabled: !isOverflowMap[item.id],
+                  }"
                 >
                   {{ item.name }}
                 </span>
@@ -226,7 +236,7 @@
         <Button
           variant="text"
           class="!justify-start !py-1.5 !px-3 text-sm flex items-center gap-2 w-full hover:bg-[var(--p-surface-100)] rounded-md text-[var(--p-text-color)]"
-          @click="menuPopoverRef?.hide()"
+          @click="renameWorkspace"
         >
           <Pencil :size="14" class="text-[var(--p-text-muted-color)]" />
           <span>重命名</span>
@@ -242,11 +252,11 @@
         </Button>
       </div>
     </Popover>
-
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, computed, watch, nextTick, onMounted } from "vue";
 import {
   PanelLeftClose,
   PanelRightClose,
@@ -259,27 +269,53 @@ import {
 } from "lucide-vue-next";
 import { gsap } from "gsap";
 import vTooltip from "primevue/tooltip";
+import { useConfirm } from "primevue/useconfirm";
+import { useToast } from "primevue/usetoast";
 
+const props = defineProps<{
+  activeWorkspaceId: string | number | null;
+}>();
+
+const emit = defineEmits<{
+  (e: "update:activeWorkspaceId", id: string | number | null): void;
+}>();
+
+const BASE_URL = "http://localhost:3000";
+const confirm = useConfirm();
+const toast = useToast();
 const collapsed = ref(false);
 const containerRef = ref<HTMLElement | null>(null);
 const openShow = ref(false);
 const renderExpandedContent = ref(true);
 
 // Workspaces list
-const workspaces = ref([
-  {
-    id: 1,
-    name: "设计看板-项目A设计看板-项目A设计看板-项目A设计看板-项目A设计看板-项目A设计看板-项目A",
-  },
-  { id: 2, name: "移动端UI设计" },
-  { id: 3, name: "AI 绘画工作区" },
-  { id: 4, name: "竞品分析白板" },
-  { id: 5, name: "PlotTwist 头脑风暴" },
-]);
+const workspaces = ref<any[]>([]);
 
-const activeWorkspaceId = ref<number | null>(1);
+const loadWorkspaces = async () => {
+  try {
+    const res = await fetch(`${BASE_URL}/workspaces`);
+    if (res.ok) {
+      workspaces.value = await res.json();
+      if (workspaces.value.length > 0) {
+        const exists = workspaces.value.some(
+          (w) => String(w.id) === String(props.activeWorkspaceId),
+        );
+        if (!exists) {
+          emit("update:activeWorkspaceId", workspaces.value[0].id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load workspaces:", err);
+  }
+};
+
+onMounted(() => {
+  loadWorkspaces();
+});
+
 const selectWorkspace = (item: any) => {
-  activeWorkspaceId.value = item.id;
+  emit("update:activeWorkspaceId", item.id);
 };
 
 // Menu Popover state
@@ -301,17 +337,93 @@ const toggleMenu = (event: Event, item: any) => {
   menuPopoverRef.value?.toggle(event);
 };
 
-const confirmDelete = () => {
-  if (!selectedWorkspace.value) return;
-  workspaces.value = workspaces.value.filter(
-    (w) => w.id !== selectedWorkspace.value.id,
-  );
-  if (activeWorkspaceId.value === selectedWorkspace.value.id) {
-    activeWorkspaceId.value = workspaces.value.length
-      ? workspaces.value[0].id
-      : null;
+const createNewWorkspace = async () => {
+  const workspaceName = "未命名工作区_" + Date.now();
+  try {
+    const res = await fetch(`${BASE_URL}/workspaces`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: workspaceName }),
+    });
+    if (res.ok) {
+      const newWs = await res.json();
+      await loadWorkspaces();
+      emit("update:activeWorkspaceId", newWs.id);
+    }
+  } catch (err) {
+    console.error("Failed to create workspace:", err);
   }
+};
+
+const renameWorkspace = async () => {
+  if (!selectedWorkspace.value) return;
   menuPopoverRef.value?.hide();
+  const name = prompt("请输入新工作空间名称:", selectedWorkspace.value.name);
+  if (name === null) return;
+  const workspaceName = name.trim() || "未命名工作区";
+  try {
+    const res = await fetch(
+      `${BASE_URL}/workspaces/${selectedWorkspace.value.id}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: workspaceName }),
+      },
+    );
+    if (res.ok) {
+      await loadWorkspaces();
+    }
+  } catch (err) {
+    console.error("Failed to rename workspace:", err);
+  }
+};
+
+const confirmDelete = async () => {
+  if (!selectedWorkspace.value) return;
+  const idToDelete = selectedWorkspace.value.id;
+  menuPopoverRef.value?.hide();
+
+  confirm.require({
+    message: `确定要删除工作空间 "${selectedWorkspace.value.name}" 吗？`,
+    header: "Confirmation",
+    icon: "pi pi-exclamation-triangle",
+    rejectProps: {
+      label: "取消",
+      severity: "secondary",
+      outlined: true,
+    },
+    acceptProps: {
+      label: "确认",
+    },
+    accept: async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/workspaces/${idToDelete}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          await loadWorkspaces();
+          if (String(props.activeWorkspaceId) === String(idToDelete)) {
+            const nextId = workspaces.value.length
+              ? workspaces.value[0].id
+              : null;
+            emit("update:activeWorkspaceId", nextId);
+          }
+          toast.add({
+            severity: "success",
+            summary: "操作成功",
+            life: 3000,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to delete workspace:", err);
+      }
+    },
+    reject: () => {},
+  });
 };
 
 const handleEnter = () => {
@@ -351,14 +463,14 @@ watch(collapsed, (isCollapsed) => {
 });
 
 // Tooltip logic using PrimeVue v-tooltip for overflowing text
-const isOverflowMap = ref<Record<number, boolean>>({});
+const isOverflowMap = ref<Record<string, boolean>>({});
 
 const checkAllOverflows = () => {
   nextTick(() => {
     const elements = document.querySelectorAll(".workspace-name-span");
     elements.forEach((el) => {
-      const id = Number(el.getAttribute("data-id"));
-      if (!isNaN(id)) {
+      const id = el.getAttribute("data-id");
+      if (id) {
         isOverflowMap.value[id] = el.scrollWidth > el.clientWidth;
       }
     });

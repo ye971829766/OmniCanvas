@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RotateCcw, X } from "lucide-vue-next";
+import { RotateCcw, PanelRightClose } from "lucide-vue-next";
 import { Button } from "primevue";
 
 defineProps<{
@@ -36,7 +36,7 @@ const emit = defineEmits<{
         title="收起"
         @click="emit('collapse')"
       >
-        <X :size="18" />
+        <PanelRightClose :size="18" />
       </Button>
     </div>
   </div>

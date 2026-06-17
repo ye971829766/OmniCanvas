@@ -1,0 +1,68 @@
+[
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/3337c309-fd2d-4b0f-84cf-86bf8beb3260.webp",
+    "x": -511.9771690278563,
+    "y": -1281.8600440200014,
+    "width": 1024,
+    "height": 1536,
+    "editable": true
+  },
+  {
+    "tag": "ImageGen",
+    "width": 400,
+    "height": 300,
+    "x": 1640.5479899804068,
+    "y": 292.13437675247036,
+    "widthRange": {
+      "min": 160
+    },
+    "heightRange": {
+      "min": 160
+    },
+    "editable": true,
+    "data": {},
+    "prompt": "",
+    "model": "gpt-image-2",
+    "size": "1024x1024",
+    "quality": "standard",
+    "aspectRatio": "1:1",
+    "generationStatus": "idle",
+    "errorMessage": "",
+    "taskId": "",
+    "images": []
+  },
+  {
+    "tag": "ImageGen",
+    "width": 1168,
+    "height": 928,
+    "x": -4108.958396176902,
+    "y": -2358.4021184497874,
+    "widthRange": {
+      "min": 160
+    },
+    "heightRange": {
+      "min": 160
+    },
+    "editable": true,
+    "data": {},
+    "prompt": "",
+    "model": "gpt-image-2",
+    "size": "1024x1024",
+    "quality": "standard",
+    "aspectRatio": "1:1",
+    "generationStatus": "idle",
+    "errorMessage": "",
+    "taskId": "",
+    "images": []
+  },
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/46cefd23-2b3b-4d38-bf90-dece6f6ac247.webp",
+    "x": -2630.9972835419017,
+    "y": -1642.301388893597,
+    "width": 2048,
+    "height": 2048,
+    "editable": true
+  }
+]

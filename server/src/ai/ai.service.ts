@@ -1,7 +1,10 @@
 import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
 import { FilesService } from "../files/files.service";
 import { ChannelsService, type Channel } from "../channels/channels.service";
-import { ModelConfigService, type ModelMapping } from "../model-config/model-config.service";
+import {
+  ModelConfigService,
+  type ModelMapping,
+} from "../model-config/model-config.service";
 import type {
   GenerateImageOutputFormat,
   YunwuImageEndpoint,
@@ -14,7 +17,7 @@ import type {
   GenerateImageResponse,
   VideoModelOptionsResponse,
 } from "../types";
-
+import { GoogleGenAI } from "@google/genai";
 @Injectable()
 export class AiService {
   private YUNWU_BASE_URL = (
@@ -53,15 +56,19 @@ export class AiService {
     return typeof model === "string" && model.trim() ? model.trim() : fallback;
   }
 
-  async resolveModelMapping(purpose: YunwuApiPurpose, modelId: string): Promise<ModelMapping | null> {
-    const mappings = await this.modelConfigService.getEnabledMappingsByPurpose(purpose);
+  async resolveModelMapping(
+    purpose: YunwuApiPurpose,
+    modelId: string,
+  ): Promise<ModelMapping | null> {
+    const mappings =
+      await this.modelConfigService.getEnabledMappingsByPurpose(purpose);
     const normalized = modelId.trim().toLowerCase();
     return (
       mappings.find(
         (item) =>
           item.id.toLowerCase() === normalized ||
           item.label.toLowerCase() === normalized,
-    ) || null
+      ) || null
     );
   }
 
@@ -72,9 +79,9 @@ export class AiService {
     const mapping = await this.resolveModelMapping(purpose, modelId);
     if (mapping) {
       const channels = await this.channelsService.getAll();
-      const channel = channels.find(
-        (item) => item.id === mapping.channelId && item.status,
-      ) || null;
+      const channel =
+        channels.find((item) => item.id === mapping.channelId && item.status) ||
+        null;
       return {
         channel,
         upstreamModel: mapping.upstreamModel,
@@ -150,7 +157,11 @@ export class AiService {
     if (body instanceof FormData) {
       const formModel = body.get("model");
       if (typeof formModel === "string") model = formModel;
-    } else if (body && typeof body === "object" && typeof body.model === "string") {
+    } else if (
+      body &&
+      typeof body === "object" &&
+      typeof body.model === "string"
+    ) {
       model = body.model;
     }
 
@@ -161,7 +172,11 @@ export class AiService {
 
     const errors: string[] = [];
 
-    const attemptCall = async (baseUrl: string, apiKey: string, requestBody: any = body) => {
+    const attemptCall = async (
+      baseUrl: string,
+      apiKey: string,
+      requestBody: any = body,
+    ) => {
       const url = `${baseUrl.replace(/\/+$/, "")}${path}`;
       const init: any = {
         method: "POST",
@@ -191,8 +206,13 @@ export class AiService {
           msg.includes("self-signed") ||
           msg.includes("unable to verify");
         if (!isCertError) throw err;
-        console.warn(`[callYunwuApi] TLS verification failed for ${url}; retrying without verification`);
-        response = await fetch(url, { ...init, tls: { rejectUnauthorized: false } });
+        console.warn(
+          `[callYunwuApi] TLS verification failed for ${url}; retrying without verification`,
+        );
+        response = await fetch(url, {
+          ...init,
+          tls: { rejectUnauthorized: false },
+        });
       }
 
       const responseBody = await this.readJsonSafely(response);
@@ -229,10 +249,17 @@ export class AiService {
                   return cloned;
                 })()
               : body;
-        const result = await attemptCall(channel.baseUrl, channel.apiKey, payload);
+        const result = await attemptCall(
+          channel.baseUrl,
+          channel.apiKey,
+          payload,
+        );
         return result;
       } catch (err: any) {
-        console.warn(`[callYunwuApi] Channel ${channel.name} failed:`, err.message);
+        console.warn(
+          `[callYunwuApi] Channel ${channel.name} failed:`,
+          err.message,
+        );
         errors.push(`[Channel ${channel.name}]: ${err.message}`);
       }
     }
@@ -293,7 +320,9 @@ export class AiService {
       } as any);
       const responseBody = await this.readJsonSafely(response);
       if (!response.ok) {
-        throw new Error(this.parseProviderError(responseBody) || `HTTP ${response.status}`);
+        throw new Error(
+          this.parseProviderError(responseBody) || `HTTP ${response.status}`,
+        );
       }
       return responseBody;
     };
@@ -308,7 +337,10 @@ export class AiService {
         success = true;
         break;
       } catch (err: any) {
-        console.warn(`[getYunwuModels] Channel ${channel.name} failed to fetch models:`, err.message);
+        console.warn(
+          `[getYunwuModels] Channel ${channel.name} failed to fetch models:`,
+          err.message,
+        );
       }
     }
 
@@ -320,14 +352,18 @@ export class AiService {
           responseBody = await fetchModels(this.YUNWU_BASE_URL, apiKey);
           success = true;
         } catch (err: any) {
-          console.warn(`[getYunwuModels] Default env failed to fetch models:`, err.message);
+          console.warn(
+            `[getYunwuModels] Default env failed to fetch models:`,
+            err.message,
+          );
         }
       }
     }
 
     // Fallback to configured mappings if models fail to fetch
     if (!success || !responseBody) {
-      const mappings = await this.modelConfigService.getEnabledMappingsByPurpose(purpose);
+      const mappings =
+        await this.modelConfigService.getEnabledMappingsByPurpose(purpose);
       if (mappings.length > 0) {
         const models = mappings.map((m) => ({
           id: m.id,
@@ -353,7 +389,10 @@ export class AiService {
         };
       }
       throw new HttpException(
-        { error: "Failed to fetch models from all configured channels and default environment variables, and no local mappings configured." },
+        {
+          error:
+            "Failed to fetch models from all configured channels and default environment variables, and no local mappings configured.",
+        },
         HttpStatus.BAD_GATEWAY,
       );
     }
@@ -435,7 +474,8 @@ export class AiService {
         maxReferenceImages = 8;
       } else if (
         normalized.includes("gemini") ||
-        normalized.includes("nano-banana")
+        normalized.includes("nano-banana") ||
+        normalized.includes("nano-banna")
       ) {
         maxReferenceImages = 14;
       } else if (
@@ -455,8 +495,72 @@ export class AiService {
     };
   }
 
-  async getImageModelOptions(model: string): Promise<ImageModelOptionsResponse> {
+  async getImageModelOptions(
+    model: string,
+  ): Promise<ImageModelOptionsResponse> {
     const mapping = await this.resolveModelMapping("image", model);
+    const targetModel = mapping ? mapping.upstreamModel : model;
+    const result = await this.getImageModelOptionsInternal(targetModel, mapping);
+    result.model = model;
+    return result;
+  }
+
+  private async getImageModelOptionsInternal(
+    model: string,
+    mapping: ModelMapping | null,
+  ): Promise<ImageModelOptionsResponse> {
+    let configSource = mapping;
+
+    if (mapping && mapping.imageConfigId) {
+      const allConfig = await this.modelConfigService.getConfig();
+      const template = allConfig.imageConfigs?.find(
+        (c) => c.id === mapping.imageConfigId,
+      );
+      if (template) {
+        configSource = {
+          ...mapping,
+          sizes: template.sizes,
+          qualities: template.qualities,
+          aspectRatios: template.aspectRatios,
+          maxReferenceImages: template.maxReferenceImages,
+          defaultSize: template.defaultSize,
+          defaultQuality: template.defaultQuality,
+          qualityMode: template.qualityMode,
+          notes: template.notes || mapping.notes,
+        };
+      }
+    }
+
+    if (
+      configSource &&
+      (configSource.sizes !== undefined ||
+        configSource.qualities !== undefined ||
+        configSource.aspectRatios !== undefined ||
+        configSource.maxReferenceImages !== undefined ||
+        configSource.defaultSize !== undefined ||
+        configSource.defaultQuality !== undefined ||
+        configSource.qualityMode !== undefined)
+    ) {
+      return this.createImageModelOptions(model, {
+        sizes: configSource.sizes || [],
+        qualities: configSource.qualities || ["standard"],
+        aspectRatios: configSource.aspectRatios,
+        maxReferenceImages: configSource.maxReferenceImages,
+        defaults: {
+          size:
+            configSource.defaultSize ||
+            (configSource.sizes && configSource.sizes[0]) ||
+            "auto",
+          quality:
+            configSource.defaultQuality ||
+            (configSource.qualities && configSource.qualities[0]) ||
+            "standard",
+        },
+        qualityMode: (configSource.qualityMode as any) || "quality",
+        notes: configSource.notes ? [configSource.notes] : undefined,
+      });
+    }
+
     const targetModel = mapping ? mapping.upstreamModel : model;
     const normalized = targetModel.toLowerCase();
     const geminiAspectRatios = [
@@ -949,7 +1053,7 @@ export class AiService {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const outputFormat = this.getOutputFormat(body?.outputFormat);
     const model = this.getSelectedModel(body?.model, this.YUNWU_IMAGE_MODEL);
-
+    console.log(model, "请求--------------------");
     const options = await this.getImageModelOptions(model);
     const maxAllowed = options.maxReferenceImages ?? 1;
 
@@ -962,13 +1066,20 @@ export class AiService {
     try {
       let imageUrl = "";
 
+      const route = await this.resolveChannelAndModel("image", model);
+      const upstreamModel = route.upstreamModel;
+
       const useNativeGemini =
         (model.toLowerCase().includes("gemini") ||
-          model.toLowerCase().includes("nano-banana")) &&
+          model.toLowerCase().includes("nano-banana") ||
+          model.toLowerCase().includes("nano-banna") ||
+          upstreamModel.toLowerCase().includes("gemini") ||
+          upstreamModel.toLowerCase().includes("nano-banana") ||
+          upstreamModel.toLowerCase().includes("nano-banna") ||
+          upstreamModel.toLowerCase().includes("imagen")) &&
         process.env.GEMINI_API_FORMAT !== "openai";
 
       if (useNativeGemini) {
-        const route = await this.resolveChannelAndModel("image", model);
         const channel = route.channel;
         if (!channel) {
           throw new Error("未配置该模型的可用渠道");
@@ -976,7 +1087,8 @@ export class AiService {
         const apiKey = channel.apiKey;
         const baseUrl = channel.baseUrl;
         const nativeBaseUrl = baseUrl.replace(/\/v1\/?$/, "") + "/v1beta";
-        const url = `${nativeBaseUrl}/models/${route.upstreamModel}:generateContent?key=${apiKey}`;
+        const url = `${nativeBaseUrl}/models/${upstreamModel}:generateContent?key=${apiKey}`;
+        console.log(url);
 
         const contentsParts: any[] = [{ text: prompt }];
 
@@ -999,12 +1111,36 @@ export class AiService {
           });
         }
 
-        const quality =
-          typeof body?.quality === "string" ? body.quality.trim() : "1K";
-        const aspectRatio =
-          typeof body?.aspectRatio === "string"
-            ? body.aspectRatio.trim()
-            : "1:1";
+        // Resolve a valid imageSize (quality) for native Gemini
+        let quality = "1K";
+        let defaultSize = "1K";
+        if (upstreamModel.toLowerCase().includes("3.1") || upstreamModel.toLowerCase().includes("banana-2")) {
+          defaultSize = "2K";
+        }
+        quality = defaultSize;
+
+        const sizeCandidates = [body?.size, body?.quality];
+        for (const candidate of sizeCandidates) {
+          if (typeof candidate === "string" && candidate.trim()) {
+            const val = candidate.trim().toUpperCase();
+            if (val === "512" || val === "1K" || val === "2K" || val === "4K") {
+              quality = val;
+              break;
+            }
+          }
+        }
+
+        // Resolve a valid aspectRatio for native Gemini
+        let aspectRatio = "1:1";
+        if (typeof body?.aspectRatio === "string" && body.aspectRatio.trim()) {
+          const val = body.aspectRatio.trim();
+          const validRatios = new Set([
+            "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"
+          ]);
+          if (validRatios.has(val)) {
+            aspectRatio = val;
+          }
+        }
 
         const payload = {
           contents: [
@@ -1207,7 +1343,10 @@ export class AiService {
       if (err instanceof HttpException) {
         const resp: any = err.getResponse();
         if (resp && typeof resp === "object") {
-          if (Array.isArray(resp.providerErrors) && resp.providerErrors.length > 0) {
+          if (
+            Array.isArray(resp.providerErrors) &&
+            resp.providerErrors.length > 0
+          ) {
             errMsg = resp.providerErrors.join("; ");
           } else if (resp.error) {
             errMsg = resp.error;
@@ -1303,7 +1442,8 @@ export class AiService {
       if (isMockMode) {
         // Simulate video generation with a quick 2-second delay
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        const localResult = await this.filesService.generateMockVideo(originUrl);
+        const localResult =
+          await this.filesService.generateMockVideo(originUrl);
         this.tasks.set(taskId, {
           id: taskId,
           status: "success",
@@ -1330,7 +1470,9 @@ export class AiService {
 
         const resBody = await this.readJsonSafely(response);
         if (!response.ok) {
-          throw new Error(this.parseProviderError(resBody) || `HTTP ${response.status}`);
+          throw new Error(
+            this.parseProviderError(resBody) || `HTTP ${response.status}`,
+          );
         }
         return resBody;
       };
@@ -1340,19 +1482,27 @@ export class AiService {
       // Try channels in order
       for (const channel of channels) {
         try {
-          responseBody = await attemptVideoCall(channel.baseUrl, channel.apiKey);
+          responseBody = await attemptVideoCall(
+            channel.baseUrl,
+            channel.apiKey,
+          );
           chosenBaseUrl = channel.baseUrl;
           chosenApiKey = channel.apiKey;
           success = true;
           break;
         } catch (err: any) {
-          console.warn(`[VideoGenTask] Channel ${channel.name} failed to create task:`, err.message);
+          console.warn(
+            `[VideoGenTask] Channel ${channel.name} failed to create task:`,
+            err.message,
+          );
           errors.push(`[Channel ${channel.name}]: ${err.message}`);
         }
       }
 
       if (!success || !responseBody) {
-        throw new Error(`Video generation failed across all channels:\n${errors.join("\n")}`);
+        throw new Error(
+          `Video generation failed across all channels:\n${errors.join("\n")}`,
+        );
       }
 
       const yunwuTaskId = responseBody?.id;
@@ -1427,7 +1577,10 @@ export class AiService {
       if (err instanceof HttpException) {
         const resp: any = err.getResponse();
         if (resp && typeof resp === "object") {
-          if (Array.isArray(resp.providerErrors) && resp.providerErrors.length > 0) {
+          if (
+            Array.isArray(resp.providerErrors) &&
+            resp.providerErrors.length > 0
+          ) {
             errMsg = resp.providerErrors.join("; ");
           } else if (resp.error) {
             errMsg = resp.error;
@@ -1466,7 +1619,9 @@ export class AiService {
     };
   }
 
-  async getVideoModelOptions(model: string): Promise<VideoModelOptionsResponse> {
+  async getVideoModelOptions(
+    model: string,
+  ): Promise<VideoModelOptionsResponse> {
     const mapping = await this.resolveModelMapping("video", model);
     const targetModel = mapping ? mapping.upstreamModel : model;
     const normalized = targetModel.toLowerCase();
@@ -1526,7 +1681,11 @@ export class AiService {
       ];
       defaultSize = "16x9";
       defaultSeconds = "5";
-    } else if (normalized.includes("runway") || normalized.includes("gen3") || normalized.includes("gen-3")) {
+    } else if (
+      normalized.includes("runway") ||
+      normalized.includes("gen3") ||
+      normalized.includes("gen-3")
+    ) {
       sizes = [
         { label: "16:9 横屏", value: "16x9" },
         { label: "9:16 竖屏", value: "9x16" },
@@ -1537,13 +1696,12 @@ export class AiService {
       ];
       defaultSize = "16x9";
       defaultSeconds = "5";
-    } else if (normalized.includes("minimax") || normalized.includes("hailuo")) {
-      sizes = [
-        { label: "16:9 横屏", value: "16x9" },
-      ];
-      seconds = [
-        { label: "6 秒", value: "6" },
-      ];
+    } else if (
+      normalized.includes("minimax") ||
+      normalized.includes("hailuo")
+    ) {
+      sizes = [{ label: "16:9 横屏", value: "16x9" }];
+      seconds = [{ label: "6 秒", value: "6" }];
       defaultSize = "16x9";
       defaultSeconds = "6";
     } else if (normalized.includes("cogvideo")) {

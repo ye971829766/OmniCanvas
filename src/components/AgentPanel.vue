@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onUnmounted, type Ref } from "vue";
+import { ref, watch, computed, onUnmounted, onMounted, type Ref, toRef } from "vue";
 import { Sparkles } from "lucide-vue-next";
 import { useAgent } from "@/composables/useAgent";
 import { Button } from "primevue";
@@ -8,11 +8,16 @@ import { gsap } from "gsap";
 import AgentHeader from "./agent/AgentHeader.vue";
 import AgentMessages from "./agent/AgentMessages.vue";
 import AgentInput from "./agent/AgentInput.vue";
-import logoImg from "@/assets/logo.jpg";
 
 const props = defineProps<{
   canvasApp: Ref<any> | any;
   recordHistory?: () => void;
+  collapsed: boolean;
+  workspaceId: string | number | null;
+}>();
+
+const emit = defineEmits<{
+  (e: "update:collapsed", val: boolean): void;
 }>();
 
 const canvasAppRef = ref(props.canvasApp);
@@ -22,9 +27,12 @@ watch(
 );
 
 const { messages, running, send, stop, reset, nodeStates, zoomToNode } =
-  useAgent(canvasAppRef as any, props.recordHistory);
+  useAgent(canvasAppRef as any, props.recordHistory, toRef(props, "workspaceId"));
 
-const collapsed = ref(false);
+const collapsed = computed({
+  get: () => props.collapsed,
+  set: (val) => emit("update:collapsed", val),
+});
 const input = ref("");
 const scrollRef = ref<any>(null);
 const userScrolledUp = ref(false);
@@ -54,118 +62,37 @@ function handleReset() {
   }
 }
 
-// GSAP animations for FAB button
-function onFabBeforeEnter(el: Element) {
-  gsap.set(el, {
-    scale: 0.5,
-    opacity: 0,
-  });
-}
+const containerRef = ref<HTMLElement | null>(null);
 
-function onFabEnter(el: Element, done: () => void) {
-  gsap.to(el, {
-    scale: 1,
-    opacity: 1,
-    duration: 0.35,
-    ease: "back.out(2)",
-    onComplete: done,
-  });
-}
+onMounted(() => {
+  if (collapsed.value) {
+    gsap.set(containerRef.value, {
+      // width: 0,
+      x: 400,
+      borderLeftWidth: 0,
+    });
+  }
+});
 
-function onFabLeave(el: Element, done: () => void) {
-  gsap.to(el, {
-    scale: 0.5,
-    opacity: 0,
-    duration: 0.25,
-    ease: "power2.in",
-    onComplete: done,
-  });
-}
-
-// GSAP animations for Agent Panel (Hero Expanding Card Transition)
-function onPanelBeforeEnter(el: Element) {
-  gsap.set(el, {
-    x: 4,
-    y: -4,
-    scale: 0.11,
-    borderRadius: "100px",
-    opacity: 0,
-    transformOrigin: "bottom right",
-  });
-
-  const header = el.querySelector(".agent-header");
-  const content =
-    el.querySelector(".agent-messages") || el.querySelector(".agent-empty");
-  const inputWrap = el.querySelector(".agent-input-wrap");
-
-  if (header) gsap.set(header, { opacity: 0 });
-  if (content) gsap.set(content, { opacity: 0 });
-  if (inputWrap) gsap.set(inputWrap, { opacity: 0 });
-}
-
-function onPanelEnter(el: Element, done: () => void) {
-  const tl = gsap.timeline({ onComplete: done });
-
-  // Expand the card from FAB size/shape to full Panel layout
-  tl.to(el, {
-    x: 0,
-    y: 0,
-    scale: 1,
-    borderRadius: "18px",
-    opacity: 1,
-    duration: 0.45,
-    ease: "power3.out",
-  });
-
-  const header = el.querySelector(".agent-header");
-  const content =
-    el.querySelector(".agent-messages") || el.querySelector(".agent-empty");
-  const inputWrap = el.querySelector(".agent-input-wrap");
-
-  // Fade in the elements
-  tl.to(
-    [header, content, inputWrap].filter(Boolean),
-    {
-      opacity: 1,
-      duration: 0.25,
-      stagger: 0.05,
-      ease: "power2.out",
-    },
-    "-=0.25",
-  );
-}
-
-function onPanelLeave(el: Element, done: () => void) {
-  gsap.set(el, { transformOrigin: "bottom right" });
-  const tl = gsap.timeline({ onComplete: done });
-
-  const header = el.querySelector(".agent-header");
-  const content =
-    el.querySelector(".agent-messages") || el.querySelector(".agent-empty");
-  const inputWrap = el.querySelector(".agent-input-wrap");
-
-  // Fade out internal contents quickly
-  tl.to([header, content, inputWrap].filter(Boolean), {
-    opacity: 0,
-    duration: 0.15,
-    ease: "power2.in",
-  });
-
-  // Collapse the panel back into the FAB
-  tl.to(
-    el,
-    {
-      x: 4,
-      y: -4,
-      scale: 0.11,
-      borderRadius: "100px",
-      opacity: 0,
+watch(collapsed, (isCollapsed) => {
+  if (isCollapsed) {
+    gsap.to(containerRef.value, {
+      // width: 0,
+      x: 400,
+      borderLeftWidth: 0,
       duration: 0.35,
-      ease: "power3.inOut",
-    },
-    "-=0.1",
-  );
-}
+      ease: "power2.inOut",
+    });
+  } else {
+    gsap.to(containerRef.value, {
+      // width: 400,
+      x: 0,
+      borderLeftWidth: 1,
+      duration: 0.25,
+      ease: "power2.inOut",
+    });
+  }
+});
 
 // Active timer and active status calculations
 let timerInterval: any = null;
@@ -275,31 +202,8 @@ function useSuggestion(s: string) {
 </script>
 
 <template>
-  <!-- Collapsed: floating launcher button -->
-  <Transition
-    :css="false"
-    @before-enter="onFabBeforeEnter"
-    @enter="onFabEnter"
-    @leave="onFabLeave"
-  >
-    <button
-      v-if="collapsed"
-      class="agent-fab"
-      title="打开 AI 助手"
-      @click="collapsed = false"
-    >
-      <img :src="logoImg" alt="PlotTwist" class="agent-fab-img" />
-    </button>
-  </Transition>
-
-  <!-- Expanded: chat panel -->
-  <Transition
-    :css="false"
-    @before-enter="onPanelBeforeEnter"
-    @enter="onPanelEnter"
-    @leave="onPanelLeave"
-  >
-    <div v-if="!collapsed" class="agent-panel">
+  <div ref="containerRef" class="agent-panel shrink-0" style="width: 400px">
+    <div class="flex flex-col h-full justify-start">
       <!-- Header -->
       <AgentHeader
         :messages-count="messages.length"
@@ -371,66 +275,27 @@ function useSuggestion(s: string) {
         <AgentInput
           v-model="input"
           :running="running"
+          :canvas-app="canvasAppRef"
           @submit="submit"
           @stop="stop"
         />
       </div>
     </div>
-  </Transition>
+  </div>
 </template>
 
 <style scoped>
-.agent-fab {
-  position: absolute;
-  right: 20px;
-  bottom: 20px;
-  z-index: 60;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  background: var(--p-surface-0, #fff);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.agent-fab-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform 0.25s ease;
-}
-
-.agent-fab:hover {
-  transform: translateY(-2px) scale(1.08);
-}
-
-.agent-fab:hover .agent-fab-img {
-  transform: rotate(8deg);
-}
-
 .agent-panel {
   position: absolute;
-  right: 16px;
-  top: 16px;
-  bottom: 16px;
-  z-index: 60;
-  width: 420px;
+  right: 0;
+  top: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--p-surface-0, #fff);
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-  border-radius: 18px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+  border-left: 1px solid var(--p-surface-200, #e5e7eb);
   overflow: hidden;
-  transform-origin: bottom right;
+  z-index: 99;
 }
 
 .agent-panel-bottom {

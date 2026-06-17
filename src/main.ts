@@ -6,6 +6,10 @@ import "primeicons/primeicons.css";
 import App from "./App.vue";
 import PrimeVue from "primevue/config";
 import { NoirPreset } from "@/themes/app-theme";
+import router from "@/router";
+import { ConfirmationService } from "primevue";
+import ToastService from "primevue/toastservice";
+
 const app = createApp(App);
 app.use(PrimeVue, {
   theme: {
@@ -173,4 +177,7 @@ app.use(PrimeVue, {
     },
   },
 });
+app.use(router);
+app.use(ConfirmationService);
+app.use(ToastService);
 app.mount("#app");

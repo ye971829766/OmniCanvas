@@ -1,5 +1,19 @@
 import { type Ref } from "vue";
-import { App, Rect, Ellipse, Polygon, Star, Line, Text, Group, Frame, Pen, Image, Box, Path } from "leafer-ui";
+import {
+  App,
+  Rect,
+  Ellipse,
+  Polygon,
+  Star,
+  Line,
+  Text,
+  Group,
+  Frame,
+  Pen,
+  Image,
+  Box,
+  Path,
+} from "leafer-ui";
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 import { VideoNode } from "@/components/canvas/nodes/VideoNode";
@@ -28,11 +42,16 @@ interface HistoryState {
   selectedIndices: number[];
 }
 
-export function useCanvasHistory(canvasAppRef: Ref<App | null>) {
+export function useCanvasHistory(
+  canvasAppRef: Ref<App | null>,
+  activeWorkspaceIdRef?: Ref<string | number | null>,
+) {
   const history: HistoryState[] = [];
   let currentIndex = -1;
   let isRestoring = false;
   let debounceTimeout: any = null;
+  let saveTimeout: any = null;
+  const API_BASE_URL = "http://localhost:3000";
 
   const cleanUpVideoNodes = (app: App) => {
     if (!app?.tree?.children) return;
@@ -95,14 +114,14 @@ export function useCanvasHistory(canvasAppRef: Ref<App | null>) {
       const childrenData = data.children;
       const dataCopy = { ...data };
       delete dataCopy.children;
-      
+
       const Constructor = tagClassMap[data.tag];
       if (Constructor) {
         child = new Constructor(dataCopy);
       } else {
         child = new Group(dataCopy);
       }
-      
+
       if (child && Array.isArray(childrenData)) {
         childrenData.forEach((childData: any) => {
           const childNode = deserializeNode(childData);
@@ -115,21 +134,59 @@ export function useCanvasHistory(canvasAppRef: Ref<App | null>) {
     return child;
   };
 
-  const saveCanvasState = () => {
+  const saveCanvasState = async (workspaceId?: string | number | null) => {
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      saveTimeout = null;
+    }
+
     const app = canvasAppRef.value;
     if (!app?.tree) return;
-    const childrenData = app.tree.children.map((child: any) => serializeNode(child));
-    localStorage.setItem("viboard_canvas_state", JSON.stringify(childrenData));
+    const targetId = workspaceId || activeWorkspaceIdRef?.value;
+    if (!targetId) return;
+    try {
+      const childrenData = app.tree.children
+        .filter(
+          (child: any) =>
+            child.tag !== "SimulateElement" &&
+            child.__tag !== "SimulateElement",
+        )
+        .map((child: any) => serializeNode(child));
+      await fetch(`${API_BASE_URL}/workspaces/${targetId}/canvas`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(childrenData),
+      });
+    } catch (e) {
+      console.error("Failed to save canvas state to server:", e);
+    }
   };
 
-  const loadCanvasState = () => {
+  const saveCanvasStateDebounced = (delay = 1000) => {
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+    }
+    saveTimeout = setTimeout(() => {
+      saveCanvasState();
+    }, delay);
+  };
+
+  const loadCanvasState = async (workspaceId?: string | number | null) => {
     const app = canvasAppRef.value;
     if (!app?.tree) return;
-    const saved = localStorage.getItem("viboard_canvas_state");
-    if (saved) {
-      try {
-        const dataList = JSON.parse(saved);
+    const targetId = workspaceId || activeWorkspaceIdRef?.value;
+    if (!targetId) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/workspaces/${targetId}/canvas`);
+      if (res.ok) {
+        const dataList = await res.json();
         if (Array.isArray(dataList)) {
+          if (app.editor) {
+            app.editor.cancel();
+          }
+          cleanUpVideoNodes(app);
           app.tree.clear();
           dataList.forEach((data: any) => {
             const child = deserializeNode(data);
@@ -137,22 +194,37 @@ export function useCanvasHistory(canvasAppRef: Ref<App | null>) {
               app.tree.add(child);
             }
           });
+
+          // Reset history baseline
+          history.length = 0;
+          const selectedIndices: number[] = [];
+          const snapshot = app.tree.children
+            .filter(
+              (child: any) =>
+                child.tag !== "SimulateElement" &&
+                child.__tag !== "SimulateElement",
+            )
+            .map((child: any) => child.clone());
+          history.push({ snapshot, selectedIndices });
+          currentIndex = 0;
           return;
         }
-      } catch (e) {
-        console.error("Failed to restore canvas state:", e);
       }
+    } catch (e) {
+      console.error("Failed to restore canvas state:", e);
     }
 
-    // Fallback default node if no saved state
-    const imageGen = new ImageGen({
-      x: 300,
-      y: 200,
-      width: 400,
-      height: 300,
-      editable: true,
-    });
-    app.tree.add(imageGen);
+    // Fallback default node if no saved state on server or fetch error
+    if (app.tree.children.length === 0) {
+      const imageGen = new ImageGen({
+        x: 300,
+        y: 200,
+        width: 400,
+        height: 300,
+        editable: true,
+      });
+      app.tree.add(imageGen);
+    }
   };
 
   const recordHistory = () => {
@@ -183,11 +255,16 @@ export function useCanvasHistory(canvasAppRef: Ref<App | null>) {
     }
 
     // Clone all current children to save the snapshot
-    const snapshot = app.tree.children.filter((child: any) => child.tag !== "SimulateElement" && child.__tag !== "SimulateElement").map((child: any) => child.clone());
+    const snapshot = app.tree.children
+      .filter(
+        (child: any) =>
+          child.tag !== "SimulateElement" && child.__tag !== "SimulateElement",
+      )
+      .map((child: any) => child.clone());
     history.push({ snapshot, selectedIndices });
     currentIndex = history.length - 1;
 
-    saveCanvasState();
+    saveCanvasStateDebounced();
   };
 
   const recordHistoryDebounced = (delay: number | any = 100) => {
@@ -241,7 +318,7 @@ export function useCanvasHistory(canvasAppRef: Ref<App | null>) {
         }
       }
 
-      saveCanvasState();
+      saveCanvasStateDebounced();
     } finally {
       isRestoring = false;
     }
@@ -287,7 +364,7 @@ export function useCanvasHistory(canvasAppRef: Ref<App | null>) {
         }
       }
 
-      saveCanvasState();
+      saveCanvasStateDebounced();
     } finally {
       isRestoring = false;
     }

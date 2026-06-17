@@ -13,10 +13,37 @@ export interface ModelMapping {
   brandInitial?: string;
   brandColor?: string;
   iconUrl?: string;
+  sizes?: string[];
+  qualities?: string[];
+  aspectRatios?: string[];
+  maxReferenceImages?: number;
+  defaultSize?: string;
+  defaultQuality?: string;
+  qualityMode?: string;
+  imageConfigId?: string;
+}
+
+export interface ImageConfig {
+  id: string;
+  label: string;
+  sizes?: string[];
+  qualities?: string[];
+  aspectRatios?: string[];
+  maxReferenceImages?: number;
+  defaultSize?: string;
+  defaultQuality?: string;
+  qualityMode?: string;
+  notes?: string;
 }
 
 export interface ModelConfigState {
   mappings: ModelMapping[];
+  imageConfigs?: ImageConfig[];
+  dictionaries?: {
+    sizes: string[];
+    aspectRatios: string[];
+    qualities: string[];
+  };
 }
 
 @Injectable()
@@ -25,7 +52,15 @@ export class ModelConfigService {
   private FILE_PATH = join(this.DATA_DIR, "model-config.json");
 
   private getDefaultState(): ModelConfigState {
-    return { mappings: [] };
+    return {
+      mappings: [],
+      imageConfigs: [],
+      dictionaries: {
+        sizes: ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
+        aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+        qualities: ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
+      }
+    };
   }
 
   private normalizeString(value: unknown): string {
@@ -46,7 +81,7 @@ export class ModelConfigService {
 
     if (!channelId || !upstreamModel) return null;
 
-    return {
+    const mapping: ModelMapping = {
       id,
       label,
       purpose: this.normalizePurpose(raw?.purpose),
@@ -57,7 +92,68 @@ export class ModelConfigService {
       brandInitial: this.normalizeString(raw?.brandInitial) || undefined,
       brandColor: this.normalizeString(raw?.brandColor) || undefined,
       iconUrl: this.normalizeString(raw?.iconUrl) || undefined,
+      imageConfigId: this.normalizeString(raw?.imageConfigId) || undefined,
     };
+
+    if (mapping.purpose === "image") {
+      if (Array.isArray(raw?.sizes)) {
+        mapping.sizes = raw.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean);
+      }
+      if (Array.isArray(raw?.qualities)) {
+        mapping.qualities = raw.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean);
+      }
+      if (Array.isArray(raw?.aspectRatios)) {
+        mapping.aspectRatios = raw.aspectRatios.map((s: any) => this.normalizeString(s)).filter(Boolean);
+      }
+      if (typeof raw?.maxReferenceImages === "number") {
+        mapping.maxReferenceImages = raw.maxReferenceImages;
+      }
+      if (raw?.defaultSize) {
+        mapping.defaultSize = this.normalizeString(raw.defaultSize) || undefined;
+      }
+      if (raw?.defaultQuality) {
+        mapping.defaultQuality = this.normalizeString(raw.defaultQuality) || undefined;
+      }
+      if (raw?.qualityMode) {
+        mapping.qualityMode = this.normalizeString(raw.qualityMode) || undefined;
+      }
+    }
+
+    return mapping;
+  }
+
+  private normalizeImageConfig(raw: any, index: number): ImageConfig | null {
+    const id = this.normalizeString(raw?.id) || `config-${index + 1}`;
+    const label = this.normalizeString(raw?.label) || id;
+    const config: ImageConfig = {
+      id,
+      label,
+    };
+    if (Array.isArray(raw?.sizes)) {
+      config.sizes = raw.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean);
+    }
+    if (Array.isArray(raw?.qualities)) {
+      config.qualities = raw.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean);
+    }
+    if (Array.isArray(raw?.aspectRatios)) {
+      config.aspectRatios = raw.aspectRatios.map((s: any) => this.normalizeString(s)).filter(Boolean);
+    }
+    if (typeof raw?.maxReferenceImages === "number") {
+      config.maxReferenceImages = raw.maxReferenceImages;
+    }
+    if (raw?.defaultSize) {
+      config.defaultSize = this.normalizeString(raw.defaultSize) || undefined;
+    }
+    if (raw?.defaultQuality) {
+      config.defaultQuality = this.normalizeString(raw.defaultQuality) || undefined;
+    }
+    if (raw?.qualityMode) {
+      config.qualityMode = this.normalizeString(raw.qualityMode) || undefined;
+    }
+    if (raw?.notes) {
+      config.notes = this.normalizeString(raw.notes) || undefined;
+    }
+    return config;
   }
 
   private async ensureFileExists(): Promise<void> {
@@ -77,7 +173,28 @@ export class ModelConfigService {
             .map((item: any, index: number) => this.normalizeMapping(item, index))
             .filter(Boolean)
         : [];
-      return { mappings: mappings as ModelMapping[] };
+      const imageConfigs = Array.isArray(parsed.imageConfigs)
+        ? parsed.imageConfigs
+            .map((item: any, index: number) => this.normalizeImageConfig(item, index))
+            .filter(Boolean)
+        : [];
+      const rawDict = parsed.dictionaries;
+      const dictionaries = {
+        sizes: Array.isArray(rawDict?.sizes)
+          ? rawDict.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
+          : ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
+        aspectRatios: Array.isArray(rawDict?.aspectRatios)
+          ? rawDict.aspectRatios.map((s: any) => this.normalizeString(s)).filter(Boolean)
+          : ["1:1", "16:9", "9:16", "4:3", "3:4"],
+        qualities: Array.isArray(rawDict?.qualities)
+          ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
+          : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
+      };
+      return {
+        mappings: mappings as ModelMapping[],
+        imageConfigs: imageConfigs as ImageConfig[],
+        dictionaries,
+      };
     } catch (err) {
       console.error("Failed to read model-config.json:", err);
       return this.getDefaultState();
@@ -85,12 +202,33 @@ export class ModelConfigService {
   }
 
   async updateConfig(nextState: any): Promise<ModelConfigState> {
-    const sanitized = Array.isArray(nextState?.mappings)
+    const sanitizedMappings = Array.isArray(nextState?.mappings)
       ? nextState.mappings
           .map((item: any, index: number) => this.normalizeMapping(item, index))
           .filter(Boolean)
       : [];
-    const state = { mappings: sanitized as ModelMapping[] };
+    const sanitizedConfigs = Array.isArray(nextState?.imageConfigs)
+      ? nextState.imageConfigs
+          .map((item: any, index: number) => this.normalizeImageConfig(item, index))
+          .filter(Boolean)
+      : [];
+    const rawDict = nextState?.dictionaries;
+    const sanitizedDictionaries = {
+      sizes: Array.isArray(rawDict?.sizes)
+        ? rawDict.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
+        : ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
+      aspectRatios: Array.isArray(rawDict?.aspectRatios)
+        ? rawDict.aspectRatios.map((s: any) => this.normalizeString(s)).filter(Boolean)
+        : ["1:1", "16:9", "9:16", "4:3", "3:4"],
+      qualities: Array.isArray(rawDict?.qualities)
+        ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
+        : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
+    };
+    const state = {
+      mappings: sanitizedMappings as ModelMapping[],
+      imageConfigs: sanitizedConfigs as ImageConfig[],
+      dictionaries: sanitizedDictionaries,
+    };
     await this.ensureFileExists();
     await Bun.write(this.FILE_PATH, JSON.stringify(state, null, 2));
     return state;

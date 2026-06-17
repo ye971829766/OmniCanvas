@@ -40,10 +40,12 @@ export interface ModelMapping {
   brandInitial?: string;
   brandColor?: string;
   iconUrl?: string;
+  imageConfigId?: string;
 }
 
 export interface ModelConfigState {
   mappings: ModelMapping[];
+  imageConfigs?: any[];
 }
 
 export interface ImageModelOptionsResponse {

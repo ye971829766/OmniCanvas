@@ -80,6 +80,11 @@ export class AgentController {
     return { ok: true };
   }
 
+  @Get(':sessionId/history')
+  getHistory(@Param('sessionId') sessionId: string) {
+    return this.memory.get(sessionId) || [];
+  }
+
   @Post(':sessionId/screenshot')
   uploadScreenshot(
     @Param('sessionId') sessionId: string,

@@ -109,7 +109,9 @@ const zoomIn = () => {
   const app = props.canvasApp;
   if (!app?.tree) return;
   try {
-    (app.tree as any).zoom("in", undefined, undefined, 0.2);
+    const currentScale = app.tree.scaleX || 1;
+    const targetScale = currentScale * 1.15;
+    (app.tree as any).zoom(targetScale, undefined, undefined, 0.2);
   } catch (err) {
     console.warn("Failed to zoom in:", err);
   }
@@ -121,7 +123,9 @@ const zoomOut = () => {
   const app = props.canvasApp;
   if (!app?.tree) return;
   try {
-    (app.tree as any).zoom("out", undefined, undefined, 0.2);
+    const currentScale = app.tree.scaleX || 1;
+    const targetScale = currentScale / 1.15;
+    (app.tree as any).zoom(targetScale, undefined, undefined, 0.2);
   } catch (err) {
     console.warn("Failed to zoom out:", err);
   }
@@ -173,10 +177,6 @@ onUnmounted(() => {
 
 <style scoped>
 .zoom-controller-wrapper {
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  z-index: 40;
   user-select: none;
   pointer-events: auto;
 }

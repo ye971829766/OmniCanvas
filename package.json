@@ -39,7 +39,8 @@
     "primeicons": "^7.0.0",
     "primevue": "^4.5.5",
     "unocss": "^66.7.0",
-    "vue": "^3.4.27"
+    "vue": "^3.4.27",
+    "vue-router": "4"
   },
   "devDependencies": {
     "@primevue/auto-import-resolver": "^4.5.5",
