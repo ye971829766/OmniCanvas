@@ -41,28 +41,6 @@
   ],
   "imageConfigs": [
     {
-      "id": "gpt",
-      "label": "gpt",
-      "sizes": [
-        "auto",
-        "1024x1024",
-        "1536x1024",
-        "2048x2048"
-      ],
-      "qualities": [
-        "auto",
-        "standard",
-        "medium",
-        "low",
-        "hd"
-      ],
-      "aspectRatios": [],
-      "maxReferenceImages": 10,
-      "defaultSize": "auto",
-      "defaultQuality": "auto",
-      "qualityMode": "quality"
-    },
-    {
       "id": "gemini",
       "label": "gemini",
       "sizes": [
@@ -82,7 +60,30 @@
       ],
       "maxReferenceImages": 14,
       "defaultSize": "auto",
-      "qualityMode": "image_size"
+      "qualityMode": "image_size",
+      "maxGenerationCount": 1
+    },
+    {
+      "id": "gpt",
+      "label": "gpt",
+      "sizes": [
+        "auto",
+        "1024x1024",
+        "1536x1024",
+        "2048x2048"
+      ],
+      "qualities": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+      ],
+      "aspectRatios": [],
+      "maxReferenceImages": 10,
+      "defaultSize": "auto",
+      "defaultQuality": "auto",
+      "qualityMode": "quality",
+      "maxGenerationCount": 10
     }
   ],
   "dictionaries": {

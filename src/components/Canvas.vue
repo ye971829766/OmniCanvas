@@ -31,7 +31,7 @@
           : '-translate-y-full pb-3',
       ]"
       :style="toolbarStyle"
-      @change="() => recordHistoryDebounced()"
+      @change="(payload: any) => { if (!payload?.skipHistory) recordHistoryDebounced(); }"
       @action="handleToolbarAction"
     />
 
@@ -73,9 +73,9 @@
         :style="{
           transition:
             'transform ' +
-            (agentPanelCollapsed ? '0.35s' : '0.25s') +
+            (agentPanelCollapsed ? '0.15s' : '0.15s') +
             ' cubic-bezier(0.45, 0, 0.55, 1), opacity ' +
-            (agentPanelCollapsed ? '0.35s' : '0.25s') +
+            (agentPanelCollapsed ? '0.15s' : '0.15s') +
             ' ease',
           transform: agentPanelCollapsed
             ? 'translateX(0)'
@@ -121,6 +121,7 @@ import LayerPanel from "@/components/canvas/LayerPanel.vue";
 import ZoomController from "@/components/canvas/ZoomController.vue";
 import {
   getRandomCoordinates,
+  getNonOverlappingCoordinates,
   isImageFile,
   isVideoFile,
 } from "@/utils/utils.ts";
@@ -238,10 +239,23 @@ const onUploadFile = async (file: File) => {
             const naturalWidth = img.naturalWidth;
             const naturalHeight = img.naturalHeight;
 
-            // 在画布较大范围内随机位置放置元素（避免堆在一起）
+            // 获取画布上所有元素的边界框
+            const existingBounds = Array.from(canvasApp.value!.tree.children || [])
+              .filter((child: any) => child.x !== undefined && child.y !== undefined)
+              .map((child: any) => ({
+                x: child.x,
+                y: child.y,
+                width: child.width || naturalWidth,
+                height: child.height || naturalHeight,
+              }));
 
-            const { x, y } = getRandomCoordinates({
-              range: 2000,
+            // 在画布较大范围内随机位置放置元素（避免堆在一起且不遮挡其他元素）
+            const { x, y } = getNonOverlappingCoordinates({
+              range: 5000,
+              existingBounds,
+              newWidth: naturalWidth,
+              newHeight: naturalHeight,
+              margin: 50,
             });
 
             const image = new Image({
@@ -289,9 +303,23 @@ const onUploadFile = async (file: File) => {
             const naturalWidth = video.videoWidth;
             const naturalHeight = video.videoHeight;
 
-            // 在画布较大范围内随机位置放置元素（避免堆在一起）
-            const { x, y } = getRandomCoordinates({
+            // 获取画布上所有元素的边界框
+            const existingBounds = Array.from(canvasApp.value!.tree.children || [])
+              .filter((child: any) => child.x !== undefined && child.y !== undefined)
+              .map((child: any) => ({
+                x: child.x,
+                y: child.y,
+                width: child.width || naturalWidth,
+                height: child.height || naturalHeight,
+              }));
+
+            // 在画布较大范围内随机位置放置元素（避免堆在一起且不遮挡其他元素）
+            const { x, y } = getNonOverlappingCoordinates({
               range: 2000,
+              existingBounds,
+              newWidth: naturalWidth,
+              newHeight: naturalHeight,
+              margin: 50,
             });
 
             VideoNode.create({

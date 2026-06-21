@@ -43,6 +43,8 @@ export type ToolbarItem =
 export type ToolbarChangePayload = {
   key: string;
   value: unknown;
+  /** When true, Canvas.vue should NOT record this change into undo/redo history */
+  skipHistory?: boolean;
 };
 
 export type ToolbarActionPayload = {

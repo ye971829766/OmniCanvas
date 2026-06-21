@@ -72,6 +72,8 @@
           v-model:quality="selectedQuality"
           v-model:aspectRatio="selectedAspectRatio"
           v-model:options="imageOptions"
+          v-model:count="n"
+          
           type="image"
           :showImageOptions="true"
           :showRefresh="false"
@@ -133,6 +135,7 @@ const selectedModel = ref("gpt-image-2");
 const selectedSize = ref("1024x1024");
 const selectedQuality = ref("standard");
 const selectedAspectRatio = ref("1:1");
+const n = ref(1);
 const imageOptions = ref<ImageModelOptionsResponse | null>(null);
 const referenceImages = ref<File[]>([]);
 const refImagesList = ref<{ id: string; file: File; url: string }[]>([]);
@@ -239,6 +242,7 @@ watch(
     selectedQuality.value = targetAny.quality || "standard";
     selectedAspectRatio.value = targetAny.aspectRatio || "1:1";
     errorMessage.value = targetAny.errorMessage || "";
+    n.value = targetAny.n || 1;
     isGenerating.value = targetAny.generationStatus === "generating";
 
     if (Array.isArray(targetAny.images) && targetAny.images.length > 0) {
@@ -286,6 +290,7 @@ watch(
         size: selectedSize.value,
         quality: selectedQuality.value,
         aspectRatio: selectedAspectRatio.value,
+        n: n.value,
       });
       emit("change", { key: "model", value: selectedModel.value });
     }
@@ -318,9 +323,6 @@ const handleGenerate = async () => {
   errorMessage.value = "";
 
   const targetAny = props.target as any;
-  if (targetAny.app && typeof (targetAny.app as any).recordHistory === "function") {
-    (targetAny.app as any).recordHistory();
-  }
 
   targetAny.set({
     generationStatus: "generating",
@@ -335,12 +337,13 @@ const handleGenerate = async () => {
       size: selectedSize.value,
       quality: selectedQuality.value,
       aspectRatio: selectedAspectRatio.value,
-      outputFormat: "webp",
+      n: n.value,
     };
 
     if (referenceImages.value.length > 0) {
       payload.images = referenceImages.value;
     }
+    console.log("[ImageGenTool] payload:", payload);
 
     const res = await generateImage(payload);
 

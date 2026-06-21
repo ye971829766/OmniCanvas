@@ -276,9 +276,6 @@ const handleGenerate = async () => {
   errorMessage.value = "";
 
   const targetAny = props.target as any;
-  if (targetAny.app && typeof (targetAny.app as any).recordHistory === "function") {
-    (targetAny.app as any).recordHistory();
-  }
 
   targetAny.set({
     generationStatus: "generating",

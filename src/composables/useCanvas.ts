@@ -144,7 +144,7 @@ import "@leafer-in/flow";
 import "@leafer-in/view";
 import "@leafer-in/animate";
 import { Snap } from "leafer-x-snap";
-import { getRandomCoordinates } from "@/utils/utils";
+import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/utils";
 
 /**
  * Core composable that manages the Leafer Canvas instance,
@@ -679,7 +679,7 @@ export function useCanvas(
               generationStatus: "error",
               errorMessage: errMsg,
             });
-            recordHistoryDebounced();
+            // Error is a generation status change, not an element-level change — skip history
           }
         } catch (err: any) {
           console.error(`Polling failed for task ${taskId}:`, err);
@@ -690,7 +690,7 @@ export function useCanvas(
               generationStatus: "error",
               errorMessage: "任务不存在或服务器已重启，请重新生成",
             });
-            recordHistoryDebounced();
+            // Error is a generation status change, not an element-level change — skip history
           }
         }
       }, 2000);
@@ -785,7 +785,7 @@ export function useCanvas(
               generationStatus: "error",
               errorMessage: errMsg,
             });
-            recordHistoryDebounced();
+            // Error is a generation status change, not an element-level change — skip history
           }
         } catch (err: any) {
           console.error(`Polling failed for video task ${taskId}:`, err);
@@ -796,7 +796,7 @@ export function useCanvas(
               generationStatus: "error",
               errorMessage: "任务不存在或服务器已重启，请重新生成",
             });
-            recordHistoryDebounced();
+            // Error is a generation status change, not an element-level change — skip history
           }
         }
       }, 2000);
@@ -972,8 +972,24 @@ export function useCanvas(
     const app = canvasApp.value;
     if (!app?.tree) return;
 
-    // 在画布较大范围内随机位置放置元素（避免堆在一起）
-    const { x, y } = getRandomCoordinates({ range: 2000 });
+    // 获取画布上所有元素的边界框
+    const existingBounds = Array.from(app.tree.children || [])
+      .filter((child: any) => child.x !== undefined && child.y !== undefined)
+      .map((child: any) => ({
+        x: child.x,
+        y: child.y,
+        width: child.width || 400,
+        height: child.height || 300,
+      }));
+
+    // 在画布较大范围内随机位置放置元素（避免堆在一起且不遮挡其他元素）
+    const { x, y } = getNonOverlappingCoordinates({
+      range: 2000,
+      existingBounds,
+      newWidth: 400,
+      newHeight: 300,
+      margin: 50,
+    });
 
     const imageGen = new ImageGen({
       x: x,
@@ -999,7 +1015,23 @@ export function useCanvas(
     const app = canvasApp.value;
     if (!app?.tree) return;
 
-    const { x, y } = getRandomCoordinates({ range: 2000 });
+    // 获取画布上所有元素的边界框
+    const existingBounds = Array.from(app.tree.children || [])
+      .filter((child: any) => child.x !== undefined && child.y !== undefined)
+      .map((child: any) => ({
+        x: child.x,
+        y: child.y,
+        width: child.width || 480,
+        height: child.height || 270,
+      }));
+
+    const { x, y } = getNonOverlappingCoordinates({
+      range: 2000,
+      existingBounds,
+      newWidth: 480,
+      newHeight: 270,
+      margin: 50,
+    });
 
     const videoGen = new VideoGen({
       x: x,

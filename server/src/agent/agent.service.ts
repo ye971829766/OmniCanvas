@@ -50,11 +50,11 @@ export class AgentService {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /** Run one user turn; returns an EventSink the controller pipes to SSE. */
-  run(sessionId: string, userInput: string, origin: string, images?: string[]): EventSink {
+  run(sessionId: string, userInput: string, origin: string, images?: string[], canvasState?: any[]): EventSink {
     const sink = new EventSink();
     const doRun = async () => {
       await this.withSessionLock(sessionId, () =>
-        this.dispatch(sessionId, userInput, origin, sink, images),
+        this.dispatch(sessionId, userInput, origin, sink, images, canvasState),
       );
     };
     doRun().catch((e) => {
@@ -78,6 +78,7 @@ export class AgentService {
     origin: string,
     sink: EventSink,
     images?: string[],
+    canvasState?: any[],
   ): Promise<void> {
     const usage: TurnUsage = {
       promptTokens: 0,
@@ -88,7 +89,7 @@ export class AgentService {
     };
 
     try {
-      await this.reactLoop(sessionId, userInput, origin, sink, usage, images);
+      await this.reactLoop(sessionId, userInput, origin, sink, usage, images, canvasState);
     } finally {
       const elapsedMs = Date.now() - usage.startedAt;
       this.logger.log(
@@ -120,6 +121,7 @@ export class AgentService {
     sink: EventSink,
     usage: TurnUsage,
     images?: string[],
+    canvasState?: any[],
   ): Promise<void> {
     const { client, model } = await this.buildClient();
 
@@ -166,6 +168,7 @@ export class AgentService {
       newRefId: (prefix = "n") =>
         `${prefix}_${Math.random().toString(36).slice(2, 10)}`,
       memory: this.memory,
+      canvasState: canvasState ?? [],
     };
 
     for (let step = 0; step < this.MAX_STEPS; step++) {

@@ -121,7 +121,6 @@ export const generateVideoTool: AgentTool = {
       {
         prompt: input.prompt,
         size: input.size,
-        aspectRatio: input.aspectRatio,
         seconds: input.seconds,
       },
       ctx.origin,

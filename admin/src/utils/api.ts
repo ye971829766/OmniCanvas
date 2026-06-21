@@ -60,6 +60,7 @@ export interface ImageConfig {
   defaultQuality?: string;
   qualityMode?: string;
   notes?: string;
+  maxGenerationCount?: number;
 }
 
 export interface ModelConfigState {

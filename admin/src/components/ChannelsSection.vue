@@ -119,15 +119,18 @@
         show-overflow-tooltip
       >
         <template #default="{ row }">
-          <div style="display: flex; flex-wrap: wrap; gap: 4px">
+          <div style="display: flex; flex-wrap: wrap; gap: 4px; max-height: 80px; overflow-y: auto; padding-right: 4px">
             <el-tag
-              v-for="model in row.models"
+              v-for="model in row.models.slice(0, 10)"
               :key="model"
               size="small"
               type="info"
               effect="plain"
             >
               {{ model === "*" ? "全部 (*)" : model }}
+            </el-tag>
+            <el-tag v-if="row.models.length > 10" size="small" type="info" effect="plain">
+              +{{ row.models.length - 10 }}
             </el-tag>
           </div>
         </template>

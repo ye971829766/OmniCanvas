@@ -1,6 +1,6 @@
 import axios from "axios";
+import { API_BASE_URL } from "@/config";
 
-const API_BASE_URL = "http://localhost:3000";
 
 export interface UploadVideoResponse {
   videoUrl: string;
@@ -77,6 +77,7 @@ export interface ImageModelOptionsResponse {
   source?: string;
   sourceUrls?: string[];
   maxReferenceImages?: number;
+  maxGenerationCount?: number;
 }
 
 export interface VideoModelOptionsResponse {
@@ -124,6 +125,7 @@ export interface GenerateImageBaseRequest {
    * Defaults to "png" on the server.
    */
   outputFormat?: GenerateImageOutputFormat;
+  n?: number;
 }
 
 export interface GenerateTextToImageRequest extends GenerateImageBaseRequest {
@@ -228,6 +230,10 @@ export async function generateImage(
     quality: request.quality,
     outputFormat: request.outputFormat,
   };
+
+  if (typeof request.n === "number") {
+    payload.n = request.n;
+  }
 
   if ("images" in request && request.images?.length) {
     const toBase64 = (file: File): Promise<string> =>

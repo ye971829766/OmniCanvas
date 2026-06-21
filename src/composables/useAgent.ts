@@ -2,7 +2,7 @@ import { ref, shallowRef, watch, type Ref, reactive } from "vue";
 import { Text, Rect } from "leafer-ui";
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
-import { getRandomCoordinates } from "@/utils/utils";
+import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/utils";
 
 /**
  * useAgent — drives the Lovart-style chat panel.
@@ -13,7 +13,7 @@ import { getRandomCoordinates } from "@/utils/utils";
  * useCanvas, so the agent's generations behave exactly like manual ones.
  */
 
-const AGENT_BASE_URL = "http://localhost:3000";
+import { API_BASE_URL as AGENT_BASE_URL } from "@/config";
 
 export interface ChatMessage {
   id: string;
@@ -248,7 +248,29 @@ export function useAgent(
     if (typeof node.x === "number" && typeof node.y === "number") {
       return { x: node.x, y: node.y };
     }
-    return getRandomCoordinates({ range: 1600 });
+
+    // 获取画布上所有元素的边界框
+    const app = canvasApp.value;
+    if (!app?.tree) {
+      return getRandomCoordinates({ range: 1600 });
+    }
+
+    const existingBounds = Array.from(app.tree.children || [])
+      .filter((child: any) => child.x !== undefined && child.y !== undefined)
+      .map((child: any) => ({
+        x: child.x,
+        y: child.y,
+        width: child.width || 400,
+        height: child.height || 300,
+      }));
+
+    return getNonOverlappingCoordinates({
+      range: 1600,
+      existingBounds,
+      newWidth: 400,
+      newHeight: 300,
+      margin: 50,
+    });
   }
 
   /** Map one CanvasOp onto the leafer canvas. */
@@ -436,6 +458,59 @@ export function useAgent(
     }
   }
 
+  /** 序列化当前画布状态，供 Agent 感知画布全貌 */
+  function serializeCanvasForAgent(): any[] {
+    const app = canvasApp.value;
+    if (!app?.tree?.children) return [];
+    return Array.from(app.tree.children)
+      .filter((child: any) =>
+        child.tag !== "SimulateElement" && child.__tag !== "SimulateElement",
+      )
+      .map((child: any) => {
+        const tag = child.__tag || child.tag;
+        const base: any = {
+          tag,
+          x: child.x,
+          y: child.y,
+          width: child.width,
+          height: child.height,
+        };
+        // 保留 refId 供 Agent 引用
+        if (child.refId) base.refId = child.refId;
+        // 按类型附加关键属性
+        if (tag === "Text") {
+          base.text = child.text;
+          base.fontSize = child.fontSize;
+          base.fontFamily = child.fontFamily;
+          base.fill = child.fill;
+        } else if (tag === "Image") {
+          base.url = child.url;
+        } else if (tag === "ImageGen") {
+          base.prompt = child.prompt;
+          base.generationStatus = child.generationStatus;
+        } else if (tag === "VideoGen") {
+          base.prompt = child.prompt;
+          base.generationStatus = child.generationStatus;
+        } else if (tag === "VideoNode") {
+          base.videoUrl = child.videoUrl;
+          base.thumbnailUrl = child.thumbnailUrl;
+        } else if (tag === "Rect") {
+          base.fill = child.fill;
+          base.cornerRadius = child.cornerRadius;
+          base.stroke = child.stroke;
+        } else if (tag === "Ellipse" || tag === "Polygon" || tag === "Star") {
+          base.fill = child.fill;
+        } else if (tag === "Frame") {
+          base.fill = child.fill;
+        }
+        if (child.opacity !== undefined && child.opacity !== 1) {
+          base.opacity = child.opacity;
+        }
+        if (child.rotation) base.rotation = child.rotation;
+        return base;
+      });
+  }
+
   /** Send a message and stream the agent's response. */
   async function send(input: string, attachments?: string[]) {
     const text = input.trim();
@@ -466,7 +541,11 @@ export function useAgent(
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, images: attachments }),
+          body: JSON.stringify({
+            message: text,
+            images: attachments,
+            canvasState: serializeCanvasForAgent(),
+          }),
           signal: abort.signal,
         },
       );
@@ -500,7 +579,6 @@ export function useAgent(
             assistant.streaming = false;
             return;
           }
-          console.log("ev", ev);
           handleEvent(ev, assistant);
         }
       }

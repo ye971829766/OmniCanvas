@@ -280,7 +280,7 @@ const emit = defineEmits<{
   (e: "update:activeWorkspaceId", id: string | number | null): void;
 }>();
 
-const BASE_URL = "http://localhost:3000";
+import { API_BASE_URL as BASE_URL } from "@/config";
 const confirm = useConfirm();
 const toast = useToast();
 const collapsed = ref(false);

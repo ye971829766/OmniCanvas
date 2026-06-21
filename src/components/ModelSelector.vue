@@ -40,7 +40,7 @@
           }}</span>
         </template>
         <template #option="{ option }">
-          <div class="model-selector__option">
+          <div class="model-selector__option flex justify-center items-center gap-1">
             <img
               v-if="option.iconUrl"
               class="model-selector__logo-img"
@@ -55,7 +55,7 @@
               >{{ option.brandInitial }}</span
             >
             <span class="model-selector__option-text"
-              ><span class="model-selector__option-name">{{
+              ><span class="model-selector__option-name text-center">{{
                 option.label
               }}</span></span
             >
@@ -82,7 +82,11 @@
         placeholder="尺寸"
         :disabled="disabled || optionsLoading"
         class="model-selector__subselect"
-      />
+      >
+    <template #header>
+        <div class="font-medium p-3">尺寸</div>
+    </template>
+    </Select>
       <Select
         v-if="qualityOptions.length"
         v-model="selectedQuality"
@@ -92,7 +96,11 @@
         :placeholder="qualityPlaceholder"
         :disabled="disabled || optionsLoading"
         class="model-selector__subselect"
-      />
+      >
+      <template #header>
+        <div class="font-medium p-3">质量</div>
+      </template>
+    </Select>
       <Select
         v-if="aspectRatioOptions.length"
         v-model="selectedAspectRatio"
@@ -102,7 +110,25 @@
         placeholder="比例"
         :disabled="disabled || optionsLoading"
         class="model-selector__subselect"
-      />
+      >
+      <template #header>
+        <div class="font-medium p-3">比例</div>
+      </template>
+    </Select>
+      <Select
+        v-if="showCountSelector"
+        v-model="selectedCount"
+        :options="countOptions"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="数量"
+        :disabled="disabled || optionsLoading"
+        class="model-selector__subselect"
+      >
+      <template #header>
+        <div class="font-medium p-3">数量</div>
+      </template>
+    </Select>
     </div>
   </div>
 </template>
@@ -158,6 +184,7 @@ const selectedModel = defineModel<string>({ default: "" });
 const selectedSize = defineModel<string>("size", { default: "" });
 const selectedQuality = defineModel<string>("quality", { default: "" });
 const selectedAspectRatio = defineModel<string>("aspectRatio", { default: "" });
+const selectedCount = defineModel<number>("count", { default: 1 });
 const imageOptions = defineModel<ImageModelOptionsResponse | null>("options", {
   default: null,
 });
@@ -201,6 +228,14 @@ const aspectRatioOptions = computed<SelectorOption[]>(() =>
     label: ratio,
     value: ratio,
   })),
+);
+const maxGenCount = computed(() => imageOptions.value?.maxGenerationCount ?? 1);
+const showCountSelector = computed(() => maxGenCount.value > 1);
+const countOptions = computed(() =>
+  Array.from({ length: maxGenCount.value }, (_, i) => {
+    const n = i + 1;
+    return { label: String(n), value: n };
+  }),
 );
 const qualityPlaceholder = computed(() =>
   imageOptions.value?.qualityMode === "image_size"
@@ -265,6 +300,13 @@ async function loadImageOptions(model: string) {
       !options.aspectRatios?.includes(selectedAspectRatio.value)
     )
       selectedAspectRatio.value = "";
+    if (showCountSelector.value) {
+      if (!selectedCount.value || selectedCount.value > maxGenCount.value) {
+        selectedCount.value = 1;
+      }
+    } else {
+      selectedCount.value = 1;
+    }
   } catch (error) {
     if (requestId !== optionsRequestId) return;
     const message = getErrorMessage(error, "模型选项加载失败");
@@ -284,6 +326,7 @@ watch(
     selectedSize.value = "";
     selectedQuality.value = "";
     selectedAspectRatio.value = "";
+    selectedCount.value = 1;
     imageOptions.value = null;
     emit("options-loaded", null);
     void loadModels();

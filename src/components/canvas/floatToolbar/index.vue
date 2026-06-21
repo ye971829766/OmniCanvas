@@ -69,7 +69,15 @@ const getItemKey = (item: ToolbarItemConfig, index: number) => {
   return `${item.type}-${index}`;
 };
 
-const applyToolbarChange = ({ key, value }: ToolbarChangePayload) => {
+// Keys that represent generation lifecycle state — not element-level changes,
+// so they must NOT pollute the undo/redo history stack.
+const GENERATION_STATE_KEYS = new Set([
+  "generationStatus",
+  "taskId",
+  "errorMessage",
+]);
+
+const applyToolbarChange = ({ key, value, skipHistory }: ToolbarChangePayload) => {
   const target = props.target as ToolbarTarget | undefined;
   
   if (!target) return;
@@ -81,7 +89,7 @@ const applyToolbarChange = ({ key, value }: ToolbarChangePayload) => {
   }
 
   refreshLocalToolbar();
-  emit("change", { key, value });
+  emit("change", { key, value, skipHistory: skipHistory || GENERATION_STATE_KEYS.has(key) });
 };
 
 const runToolbarAction = ({ action, target: payloadTarget }: ToolbarActionPayload) => {

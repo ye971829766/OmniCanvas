@@ -34,7 +34,7 @@
         <el-card class="dashboard-stat-card" shadow="hover">
           <div style="display: flex; justify-content: space-between; align-items: center">
             <div>
-              <span style="font-size: 12px; color: #a1a1aa; font-weight: 500">配置模板 (公共积木)</span>
+              <span style="font-size: 12px; color: #a1a1aa; font-weight: 500">配置模板</span>
               <h2 style="margin: 8px 0 0 0; font-size: 28px; font-weight: 700; color: #fff">
                 {{ imageConfigs.length }}
               </h2>

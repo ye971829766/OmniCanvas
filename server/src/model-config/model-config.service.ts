@@ -34,6 +34,7 @@ export interface ImageConfig {
   defaultQuality?: string;
   qualityMode?: string;
   notes?: string;
+  maxGenerationCount?: number;
 }
 
 export interface ModelConfigState {
@@ -152,6 +153,11 @@ export class ModelConfigService {
     }
     if (raw?.notes) {
       config.notes = this.normalizeString(raw.notes) || undefined;
+    }
+    if (typeof raw?.maxGenerationCount === "number") {
+      config.maxGenerationCount = raw.maxGenerationCount;
+    } else {
+      config.maxGenerationCount = 1;
     }
     return config;
   }

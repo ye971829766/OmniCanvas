@@ -1,7 +1,7 @@
 <template>
   <div>
     <!-- Floating Layer Panel Toggle Button -->
-    <div class="absolute left-20px bottom-4 z-40">
+    <div class="absolute left-20px bottom-3 z-40">
       <Button
         rounded
         text

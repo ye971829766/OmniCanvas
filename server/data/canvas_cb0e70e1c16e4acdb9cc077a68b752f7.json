@@ -1,0 +1,107 @@
+[
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp",
+    "x": 973.4714439614653,
+    "y": 697.1359509975526,
+    "width": 1536,
+    "height": 1024,
+    "editable": true
+  },
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp",
+    "x": -67.17006093334425,
+    "y": 749.0337927473201,
+    "width": 1536,
+    "height": 1024,
+    "editable": true
+  },
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp",
+    "x": 101.86502175743044,
+    "y": 307.05743718300437,
+    "width": 1536,
+    "height": 1024,
+    "editable": true
+  },
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp",
+    "x": 258.3972280038457,
+    "y": 580.1445069445883,
+    "width": 1536,
+    "height": 1024,
+    "editable": true
+  },
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp",
+    "x": 700.8299390666557,
+    "y": 2316.7516688734418,
+    "width": 1536,
+    "height": 1024,
+    "editable": true
+  },
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp",
+    "x": 1356.4220459465823,
+    "y": 1849.504277364295,
+    "width": 1536,
+    "height": 1024,
+    "editable": true
+  },
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp",
+    "x": -290.3034770117592,
+    "y": 658.2278890399804,
+    "width": 1536,
+    "height": 1024,
+    "editable": true
+  },
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp",
+    "x": 1845.8147562696863,
+    "y": 402.7717109887169,
+    "width": 1536,
+    "height": 1024,
+    "editable": true
+  },
+  {
+    "tag": "Image",
+    "url": "http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp",
+    "x": 1409.7425949128417,
+    "y": 1757.382090869118,
+    "width": 1536,
+    "height": 1024,
+    "editable": true
+  },
+  {
+    "tag": "ImageGen",
+    "width": 400,
+    "height": 300,
+    "x": 869.8650217574301,
+    "y": 1304.1445069445883,
+    "widthRange": {
+      "min": 160
+    },
+    "heightRange": {
+      "min": 160
+    },
+    "editable": true,
+    "data": {},
+    "prompt": "大撒大撒",
+    "model": "gpt-image-2",
+    "size": "1024x1024",
+    "quality": "auto",
+    "aspectRatio": "",
+    "generationStatus": "generating",
+    "errorMessage": "",
+    "taskId": "ec84c4e9-32d2-43c2-941e-f115337ec07d",
+    "images": []
+  }
+]

@@ -170,31 +170,51 @@ export const removeNodeTool: AgentTool = {
 
 /**
  * query_canvas — lets the agent "see" what's currently on the canvas.
- * This solves the "blind agent" problem: after adding nodes, the LLM can
- * query for current state before making modifications.
+ * Merges the real canvas state from the frontend (ctx.canvasState) with
+ * nodes added by the agent in the current session (ctx.__nodes).
  */
 export const queryCanvasTool: AgentTool = {
   name: 'query_canvas',
   description:
-    'Get a summary of all nodes currently on the canvas in this session. ' +
+    'Get a summary of all nodes currently on the canvas, including those added by the user manually. ' +
     'Use this to check what exists before modifying, repositioning, or removing nodes. ' +
-    'Returns a list of nodes with their refId, type, position, and key properties.',
+    'Returns a list of nodes with their tag, position, size, and key properties.',
   parameters: {
     type: 'object',
     properties: {},
   },
   async execute(_input: any, ctx: ToolContext): Promise<ToolResult> {
-    const nodes = getNodes(ctx);
+    const agentNodes = getNodes(ctx);
     const frame = (ctx as any).__frame ?? null;
-    const summary = [...nodes.entries()].map(([refId, props]) => ({
-      refId,
-      ...props,
+
+    // Start with the real canvas state sent from the frontend
+    const frontendNodes = (ctx.canvasState ?? []).map((node: any) => ({
+      ...node,
+      source: 'canvas', // existing on canvas
     }));
+
+    // Find agent-added nodes (this session) that are NOT yet in the frontend state
+    // (they might have been added during this turn, after the snapshot was taken)
+    const frontendRefIds = new Set(frontendNodes.map((n: any) => n.refId).filter(Boolean));
+
+    const sessionOnlyNodes: any[] = [];
+    for (const [refId, props] of agentNodes.entries()) {
+      if (!frontendRefIds.has(refId)) {
+        sessionOnlyNodes.push({
+          refId,
+          ...props,
+          source: 'agent_session', // added by agent this session, not yet in frontend snapshot
+        });
+      }
+    }
+
+    const allNodes = [...frontendNodes, ...sessionOnlyNodes];
+
     return {
       output: {
         frame,
-        nodeCount: summary.length,
-        nodes: summary,
+        nodeCount: allNodes.length,
+        nodes: allNodes,
       },
     };
   },

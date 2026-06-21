@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { AiService } from './ai.service';
+import type { GenerateImageJsonRequest, GenerateVideoJsonRequest } from '../types';
 
 @Controller()
 export class AiController {
@@ -56,7 +57,7 @@ export class AiController {
 
   @Post("generate-image")
   async generateImage(
-    @Body() body: any,
+    @Body() body: GenerateImageJsonRequest,
     @Headers() headers: Record<string, string>,
   ) {
     return this.aiService.generateImageFromJson(body, this.getOrigin(headers));
@@ -64,7 +65,7 @@ export class AiController {
 
   @Post("generate-video")
   async generateVideo(
-    @Body() body: any,
+    @Body() body: GenerateVideoJsonRequest,
     @Headers() headers: Record<string, string>,
   ) {
     return this.aiService.generateVideoFromJson(body, this.getOrigin(headers));

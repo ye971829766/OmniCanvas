@@ -156,6 +156,7 @@ export class ImageGen extends Box {
       width: this.width,
       height: this.height,
       hittable: true,
+      overflow:'hide'
     });
 
     const w = this.width ?? 400;
@@ -165,8 +166,9 @@ export class ImageGen extends Box {
     const bg = new Rect({
       width: w,
       height: h,
-      fill: "#e0f2fe", // sky-100 / soft blue
+      fill: "#e2e8f0", // sky-100 / soft blue
       cornerRadius: 12,
+      
     });
     group.add(bg);
 
@@ -196,21 +198,21 @@ export class ImageGen extends Box {
       y: 20,
       width: 24,
       height: 24,
-      fill: "#bae6fd", // sky-200 / light blue
+      fill: "#ffffff", // sky-200 / light blue
     });
     iconGroup.add(iconSun);
 
     // 2. Mountain 1 (Large)
     const mountain1 = new Polygon({
       points: [15, 85, 65, 35, 100, 85],
-      fill: "#bae6fd",
+      fill: "#ffffff",
     });
     iconGroup.add(mountain1);
 
     // 3. Mountain 2 (Small)
     const mountain2 = new Polygon({
       points: [60, 85, 95, 55, 125, 85],
-      fill: "#bae6fd",
+      fill: "#ffffff",
     });
     iconGroup.add(mountain2);
 
@@ -221,14 +223,35 @@ export class ImageGen extends Box {
       const loadingText = new Text({
         x: w / 2,
         y: h / 2 + 45,
-        text: "正在生成 AI 图像...",
+        text: this.prompt,
         fontSize: 14,
         fontWeight: "bold",
-        fill: "#0ea5e9", // sky-500
+        fill: "#00000050", // sky-500
         textAlign: "center",
-        verticalAlign: "middle",
+        verticalAlign: 'middle',
       });
+
+      const loadingRect = new Rect({
+        x:-w,
+        width: w,
+        height: h,
+        // fill:'red',
+        fill: {
+        type: 'linear', // 水平线性渐变（从左到右）
+        from: { type: 'percent', x: 0, y: 0.5 }, // 起点：左侧中间
+        to: { type: 'percent', x: 1, y: 0.5 },   // 终点：右侧中间
+        stops: ['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']
+      },
+      });
+      group.add(loadingRect);
       group.add(loadingText);
+      group.remove(iconGroup);
+      loadingRect.animate({
+        x:w
+      }, {
+        duration: 1.2,
+        loop:true
+      });
     }
     // Error state
     else if (this.generationStatus === "error") {

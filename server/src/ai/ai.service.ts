@@ -16,8 +16,11 @@ import type {
   ImageModelOptionsResponse,
   GenerateImageResponse,
   VideoModelOptionsResponse,
+  GenerateImageJsonRequest,
+  GenerateVideoJsonRequest,
 } from "../types";
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 @Injectable()
 export class AiService {
   private YUNWU_BASE_URL = (
@@ -530,7 +533,8 @@ export class AiService {
           defaultQuality: template.defaultQuality,
           qualityMode: template.qualityMode,
           notes: template.notes || mapping.notes,
-        };
+          maxGenerationCount: template.maxGenerationCount,
+        } as any;
       }
     }
 
@@ -549,6 +553,7 @@ export class AiService {
         qualities: configSource.qualities || ["standard"],
         aspectRatios: configSource.aspectRatios,
         maxReferenceImages: configSource.maxReferenceImages,
+        maxGenerationCount: (configSource as any).maxGenerationCount,
         defaults: {
           size:
             configSource.defaultSize ||
@@ -1050,12 +1055,13 @@ export class AiService {
 
   async runGenerationTaskInBackground(
     taskId: string,
-    body: any,
+    body: GenerateImageJsonRequest,
     originUrl: string,
   ) {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const outputFormat = this.getOutputFormat(body?.outputFormat);
     const model = this.getSelectedModel(body?.model, this.YUNWU_IMAGE_MODEL);
+    console.log("[runGenerationTaskInBackground] body:", JSON.stringify(body));
     console.log(model, "请求--------------------");
     const options = await this.getImageModelOptions(model);
     const maxAllowed = options.maxReferenceImages ?? 1;
@@ -1216,6 +1222,7 @@ export class AiService {
         imageUrl = `${originUrl}/files/${filename}`;
       } else {
         // If base64 reference images are provided for image-to-image / edits
+           const channel = route.channel;
         if (Array.isArray(body?.images) && body.images.length > 0) {
           // Checked against model options at function entry
 
@@ -1315,6 +1322,8 @@ export class AiService {
             "edits",
             upstreamForm,
           );
+        
+       
           const filename = await this.filesService.saveGeneratedImage(
             providerBody,
             outputFormat,
@@ -1322,43 +1331,43 @@ export class AiService {
           imageUrl = `${originUrl}/files/${filename}`;
         } else {
           // Otherwise, standard Text-to-Image (Generations)
-          const payload: Record<string, unknown> = {
-            model,
+          if (!channel) {
+            throw new Error("未配置该模型的可用渠道");
+          }
+
+          const openAi = new OpenAI({
+            apiKey: channel.apiKey,
+            baseURL: channel.baseUrl,
+          });
+
+          const generateParams: Record<string, any> = {
+            model: upstreamModel,
             prompt: this.buildPrompt(
               prompt,
               typeof body?.style === "string" ? body.style : undefined,
             ),
             size: typeof body?.size === "string" ? body.size : "1024x1024",
-            output_format: outputFormat,
+            n: body?.n || 1,
           };
 
           if (typeof body?.quality === "string" && body.quality.trim()) {
-            payload.quality = body.quality.trim();
-            payload.image_size = body.quality.trim();
-            payload.imageSize = body.quality.trim();
+            generateParams.quality = body.quality.trim();
           }
 
-          if (
-            typeof body?.aspectRatio === "string" &&
-            body.aspectRatio.trim()
-          ) {
-            payload.aspectRatio = body.aspectRatio.trim();
-            payload.aspect_ratio = body.aspectRatio.trim();
-          }
+          // const sdkResponse = await openAi.images.generate(generateParams as any);
+          // // 将 SDK 响应转为普通对象，确保 saveGeneratedImage 可以正确解析
+          // console.log("sdkResponse", JSON.stringify(sdkResponse))
+          // const providerBody = JSON.parse(JSON.stringify(sdkResponse));
 
-          const providerBody = await this.callYunwuImageApi(
-            "generations",
-            payload,
-            {
-              "content-type": "application/json",
-            },
-          );
+          // const filename = await this.filesService.saveGeneratedImage(
+          //   providerBody,
+          //   outputFormat,
+          // );
+          // imageUrl = `${originUrl}/files/${filename}`;
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          imageUrl = `http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp`;
 
-          const filename = await this.filesService.saveGeneratedImage(
-            providerBody,
-            outputFormat,
-          );
-          imageUrl = `${originUrl}/files/${filename}`;
+          
         }
       }
 
@@ -1395,7 +1404,7 @@ export class AiService {
   }
 
   async generateImageFromJson(
-    body: any,
+    body: GenerateImageJsonRequest,
     originUrl: string,
   ): Promise<GenerateImageResponse> {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
@@ -1423,7 +1432,7 @@ export class AiService {
 
   async runVideoGenerationTaskInBackground(
     taskId: string,
-    body: any,
+    body: GenerateVideoJsonRequest,
     originUrl: string,
   ) {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
@@ -1628,7 +1637,7 @@ export class AiService {
     }
   }
 
-  async generateVideoFromJson(body: any, originUrl: string): Promise<any> {
+  async generateVideoFromJson(body: GenerateVideoJsonRequest, originUrl: string): Promise<any> {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt) {
       throw new HttpException(

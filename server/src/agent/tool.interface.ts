@@ -15,6 +15,8 @@ export interface ToolContext {
   newRefId: (prefix?: string) => string;
   /** session memory access */
   memory: AgentMemory;
+  /** real-time canvas state sent from the frontend (all nodes currently on the canvas) */
+  canvasState: any[];
 }
 
 export interface ToolResult {

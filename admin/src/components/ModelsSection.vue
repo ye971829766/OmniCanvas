@@ -129,7 +129,7 @@
       </el-tab-pane>
 
       <!-- Tab 2: Config Templates -->
-      <el-tab-pane label="图像配置模板 (积木)" name="templates">
+      <el-tab-pane label="图像配置模板" name="templates">
         <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 12px">
           <el-table v-loading="mappingsLoading" :data="imageConfigs" style="width: 100%" border>
             <el-table-column label="模板 ID (配置 ID)" prop="id" min-width="150" sortable>
@@ -158,6 +158,11 @@
               </template>
             </el-table-column>
             <el-table-column label="质量模式" prop="qualityMode" width="120" align="center" />
+            <el-table-column label="最大生成数量" prop="maxGenerationCount" width="130" align="center">
+              <template #default="{ row }">
+                <span>{{ row.maxGenerationCount ?? 1 }}</span>
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="160" align="center" fixed="right">
               <template #default="{ row }">
                 <div style="display: flex; justify-content: center; gap: 8px">
@@ -399,7 +404,7 @@
 
         <!-- Image Generation Advanced Custom Config (Only when purpose is 'image') -->
         <div v-if="mappingForm.purpose === 'image'" style="border-top: 1px dashed #27272a; margin-top: 16px; padding-top: 16px">
-          <h4 style="margin: 0 0 12px 0; color: #fff; font-size: 13px; font-weight: 600">图像生成高级配置 (搭积木模式)</h4>
+          <h4 style="margin: 0 0 12px 0; color: #fff; font-size: 13px; font-weight: 600">图像生成高级配置</h4>
           
           <el-form-item label="配置方式">
             <el-radio-group v-model="mappingFormConfigType" size="small">
@@ -761,6 +766,19 @@
             </el-col>
           </el-row>
           <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="最大生成数量">
+                <el-input-number
+                  v-model="templateForm.maxGenerationCount"
+                  :min="1"
+                  :max="100"
+                  style="width: 100%"
+                  placeholder="单次请求最大生成数量"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="16">
             <el-col :span="24">
               <el-form-item label="可选宽高比列表 (Aspect Ratios)">
                 <el-select
@@ -945,6 +963,7 @@ const emptyTemplateForm = () => ({
   defaultQuality: "",
   qualityMode: "quality",
   notes: "",
+  maxGenerationCount: 1 as number | undefined,
 });
 
 const mappingForm = ref(emptyMappingForm());
@@ -1036,6 +1055,7 @@ function openTemplateModal(item?: ImageConfig) {
         defaultQuality: item.defaultQuality || "",
         qualityMode: item.qualityMode || "quality",
         notes: item.notes || "",
+        maxGenerationCount: item.maxGenerationCount ?? 1,
       }
     : emptyTemplateForm();
   templateModalOpen.value = true;
@@ -1219,6 +1239,7 @@ async function saveTemplate() {
     defaultQuality: templateForm.value.defaultQuality?.trim() || undefined,
     qualityMode: templateForm.value.qualityMode?.trim() || "quality",
     notes: templateForm.value.notes?.trim() || undefined,
+    maxGenerationCount: templateForm.value.maxGenerationCount,
   };
 
   try {

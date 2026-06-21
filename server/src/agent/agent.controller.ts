@@ -46,7 +46,7 @@ export class AgentController {
   @Post(':sessionId/chat')
   async chat(
     @Param('sessionId') sessionId: string,
-    @Body() body: { message: string; images?: string[] },
+    @Body() body: { message: string; images?: string[]; canvasState?: any[] },
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
@@ -55,6 +55,7 @@ export class AgentController {
       body?.message ?? '',
       this.getOrigin(req),
       body?.images,
+      body?.canvasState,
     );
     await this.pipe(res, sink.stream());
   }
