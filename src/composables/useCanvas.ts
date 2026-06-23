@@ -144,7 +144,7 @@ import "@leafer-in/flow";
 import "@leafer-in/view";
 import "@leafer-in/animate";
 import { Snap } from "leafer-x-snap";
-import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/utils";
+import { getNonOverlappingCoordinates } from "@/utils/utils";
 
 /**
  * Core composable that manages the Leafer Canvas instance,
@@ -816,43 +816,57 @@ export function useCanvas(
       });
     };
 
-    const initFrameListeners = (node: any) => {
-      if (node.tag === "Frame" || node.__tag === "Frame") {
+    const attachContainerChildAddListener = (container: any) => {
+      if (!container || (container as any)._hasChildAddListener) return;
+      (container as any)._hasChildAddListener = true;
+
+      container.on("child.add", (e: any) => {
+        const child = e.child;
+        if (child) {
+          initNodeListeners(child);
+        }
+      });
+    };
+
+    const initNodeListeners = (node: any) => {
+      if (!node) return;
+
+      if (node.tag === "Frame" || node.__tag === "Frame" || node.tag === "Group" || node.__tag === "Group") {
         attachFrameListeners(node);
+        attachContainerChildAddListener(node);
       }
+
+      if (node.tag === "ImageGen" || node.__tag === "ImageGen") {
+        attachTaskStartListener(node);
+        if (node.generationStatus === "generating" && node.taskId) {
+          resumeNodePolling(node);
+        }
+      }
+
+      if (node.tag === "VideoGen" || node.__tag === "VideoGen") {
+        attachVideoTaskStartListener(node);
+        if (node.generationStatus === "generating" && node.taskId) {
+          resumeVideoNodePolling(node);
+        }
+      }
+
       if (node.children) {
-        node.children.forEach(initFrameListeners);
+        node.children.forEach(initNodeListeners);
       }
     };
 
     // Scan for any nodes to initialize frame listeners and ImageGen/VideoGen listeners
-    app.tree.children.forEach((child: any) => {
-      initFrameListeners(child);
-      if (child.tag === "ImageGen" || child.__tag === "ImageGen") {
-        attachTaskStartListener(child);
-        if (child.generationStatus === "generating" && child.taskId) {
-          resumeNodePolling(child);
-        }
-      }
-      if (child.tag === "VideoGen" || child.__tag === "VideoGen") {
-        attachVideoTaskStartListener(child);
-        if (child.generationStatus === "generating" && child.taskId) {
-          resumeVideoNodePolling(child);
-        }
-      }
-    });
+    if (app.tree.children) {
+      app.tree.children.forEach((child: any) => {
+        initNodeListeners(child);
+      });
+    }
 
     // Listen to child.add event to attach listeners to dynamically added nodes
     app.tree.on("child.add", (e: any) => {
       const child = e.child;
       if (child) {
-        initFrameListeners(child);
-        if (child.tag === "ImageGen" || child.__tag === "ImageGen") {
-          attachTaskStartListener(child);
-        }
-        if (child.tag === "VideoGen" || child.__tag === "VideoGen") {
-          attachVideoTaskStartListener(child);
-        }
+        initNodeListeners(child);
       }
     });
 
@@ -896,21 +910,11 @@ export function useCanvas(
             await loadCanvasState(newId);
 
             // Resume frame and task start/polling listeners for the newly loaded nodes
-            app.tree.children.forEach((child: any) => {
-              initFrameListeners(child);
-              if (child.tag === "ImageGen" || child.__tag === "ImageGen") {
-                attachTaskStartListener(child);
-                if (child.generationStatus === "generating" && child.taskId) {
-                  resumeNodePolling(child);
-                }
-              }
-              if (child.tag === "VideoGen" || child.__tag === "VideoGen") {
-                attachVideoTaskStartListener(child);
-                if (child.generationStatus === "generating" && child.taskId) {
-                  resumeVideoNodePolling(child);
-                }
-              }
-            });
+            if (app.tree.children) {
+              app.tree.children.forEach((child: any) => {
+                initNodeListeners(child);
+              });
+            }
 
             // Auto-zoom to fit elements
             setTimeout(() => {

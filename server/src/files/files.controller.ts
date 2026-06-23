@@ -25,7 +25,11 @@ export class FilesController {
   }
 
   @Post('upload-video')
-  @UseInterceptors(FileFieldsInterceptor([{ name: 'video', maxCount: 1 }]))
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'video', maxCount: 1 }
+  ], {
+    limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800') }
+  }))
   async uploadVideo(
     @UploadedFiles() files: { video?: Express.Multer.File[] },
     @Headers() headers: Record<string, string>,
@@ -39,7 +43,9 @@ export class FilesController {
     FileFieldsInterceptor([
       { name: "image", maxCount: 1 },
       { name: "file", maxCount: 1 },
-    ]),
+    ], {
+      limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800') }
+    }),
   )
   async upload(
     @UploadedFiles()

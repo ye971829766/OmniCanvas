@@ -21,10 +21,7 @@ const emit = defineEmits<{
 <template>
   <div class="option-preview-card" @click="emit('zoom', refId)">
     <!-- Loading status -->
-    <div
-      v-if="!state || state.status === 'generating'"
-      class="preview-loading"
-    >
+    <div v-if="!state || state.status === 'generating'" class="preview-loading">
       <Loader2 class="animate-spin text-primary mr-2" :size="14" />
       <span>正在生成探索方案...</span>
     </div>
@@ -42,7 +39,6 @@ const emit = defineEmits<{
     >
       <img :src="state.url" class="preview-img" />
       <div class="preview-overlay">
-        <span class="preview-tag">图片方案</span>
         <span class="preview-tip">点击定位画布</span>
       </div>
     </div>
@@ -57,7 +53,6 @@ const emit = defineEmits<{
         <span class="play-icon">▶</span>
       </div>
       <div class="preview-overlay">
-        <span class="preview-tag video-tag">视频方案</span>
         <span class="preview-tip">点击定位画布</span>
       </div>
     </div>
@@ -118,12 +113,8 @@ const emit = defineEmits<{
 .preview-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transition: transform 0.3s ease;
-}
-
-.option-preview-card:hover .preview-img {
-  transform: scale(1.05);
 }
 
 .preview-overlay {

@@ -120,7 +120,6 @@ import {
 import LayerPanel from "@/components/canvas/LayerPanel.vue";
 import ZoomController from "@/components/canvas/ZoomController.vue";
 import {
-  getRandomCoordinates,
   getNonOverlappingCoordinates,
   isImageFile,
   isVideoFile,

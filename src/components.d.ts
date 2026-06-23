@@ -50,6 +50,7 @@ declare module 'vue' {
     ThicknessSlider: typeof import('./components/ThicknessSlider.vue')['default']
     Toast: typeof import('primevue/toast')['default']
     ToolAccordion: typeof import('./components/agent/ToolAccordion.vue')['default']
+    ToolActivity: typeof import('./components/agent/ToolActivity.vue')['default']
     ToolbarItem: typeof import('./components/canvas/floatToolbar/ToolbarItem.vue')['default']
     ToolbarShell: typeof import('./components/canvas/floatToolbar/ToolbarShell.vue')['default']
     ToolRowBasic: typeof import('./components/agent/ToolRowBasic.vue')['default']

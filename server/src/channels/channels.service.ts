@@ -1,5 +1,7 @@
 import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
+import type { OnModuleInit } from "@nestjs/common";
 import { join } from "path";
+import { DatabaseService } from "../database/database.service";
 
 export interface Channel {
   id: string;
@@ -15,78 +17,179 @@ export interface Channel {
 }
 
 @Injectable()
-export class ChannelsService {
+export class ChannelsService implements OnModuleInit {
   private DATA_DIR = join(process.cwd(), "data");
-  private FILE_PATH = join(this.DATA_DIR, "channels.json");
 
-  private async ensureFileExists(): Promise<void> {
-    const file = Bun.file(this.FILE_PATH);
-    const exists = await file.exists();
-    if (!exists) {
-      // Create data directory if it doesn't exist
-      const dirFile = Bun.file(this.DATA_DIR);
-      // Bun.write will create parent directories automatically
-      await Bun.write(this.FILE_PATH, JSON.stringify([], null, 2));
+  constructor(private readonly dbService: DatabaseService) {}
+
+  private get db() {
+    return this.dbService.db;
+  }
+
+  async onModuleInit() {
+    // Check and run legacy JSON data migration
+    await this.migrateLegacyData();
+  }
+
+  private async migrateLegacyData(): Promise<void> {
+    const { existsSync, renameSync } = require("fs");
+    const channelsJsonPath = join(this.DATA_DIR, "channels.json");
+
+    if (existsSync(channelsJsonPath)) {
+      try {
+        const { readFile } = require("fs/promises");
+        const content = await readFile(channelsJsonPath, "utf-8");
+        const list = JSON.parse(content || "[]");
+
+        if (Array.isArray(list)) {
+          const insertStmt = this.db.prepare(`
+            INSERT OR IGNORE INTO channels (id, name, baseUrl, apiKey, type, models, weight, status, notes, createdAt)
+            VALUES ($id, $name, $baseUrl, $apiKey, $type, $models, $weight, $status, $notes, $createdAt)
+          `);
+
+          const transaction = this.db.transaction((channelsList: Channel[]) => {
+            for (const ch of channelsList) {
+              insertStmt.run({
+                $id: ch.id,
+                $name: ch.name,
+                $baseUrl: ch.baseUrl,
+                $apiKey: ch.apiKey,
+                $type: ch.type,
+                $models: JSON.stringify(ch.models),
+                $weight: ch.weight,
+                $status: ch.status ? 1 : 0,
+                $notes: ch.notes || null,
+                $createdAt: ch.createdAt
+              });
+            }
+          });
+
+          transaction(list);
+          console.log(`Successfully migrated ${list.length} channels from channels.json to SQLite database.`);
+        }
+
+        // Rename legacy file to .bak extension
+        renameSync(channelsJsonPath, `${channelsJsonPath}.bak`);
+      } catch (err) {
+        console.error("Error migrating legacy channels JSON data:", err);
+      }
     }
   }
 
   async getAll(): Promise<Channel[]> {
-    await this.ensureFileExists();
     try {
-      const content = await Bun.file(this.FILE_PATH).text();
-      return JSON.parse(content || "[]");
+      const query = this.db.query("SELECT * FROM channels");
+      const rows = query.all() as any[];
+      return rows.map((r) => ({
+        ...r,
+        models: JSON.parse(r.models),
+        status: r.status === 1,
+        notes: r.notes || undefined
+      }));
     } catch (err) {
-      console.error("Failed to read channels.json:", err);
+      console.error("Failed to query channels from database:", err);
       return [];
     }
   }
 
-  private async save(channels: Channel[]): Promise<void> {
-    await this.ensureFileExists();
-    await Bun.write(this.FILE_PATH, JSON.stringify(channels, null, 2));
-  }
-
   async create(data: Omit<Channel, "id" | "createdAt">): Promise<Channel> {
-    const channels = await this.getAll();
-    const newChannel: Channel = {
-      ...data,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-    };
-    channels.push(newChannel);
-    await this.save(channels);
-    return newChannel;
+    try {
+      const id = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      const stmt = this.db.prepare(`
+        INSERT INTO channels (id, name, baseUrl, apiKey, type, models, weight, status, notes, createdAt)
+        VALUES ($id, $name, $baseUrl, $apiKey, $type, $models, $weight, $status, $notes, $createdAt)
+      `);
+      stmt.run({
+        $id: id,
+        $name: data.name,
+        $baseUrl: data.baseUrl,
+        $apiKey: data.apiKey,
+        $type: data.type,
+        $models: JSON.stringify(data.models),
+        $weight: data.weight,
+        $status: data.status ? 1 : 0,
+        $notes: data.notes || null,
+        $createdAt: createdAt
+      });
+
+      return {
+        ...data,
+        id,
+        createdAt
+      };
+    } catch (err) {
+      console.error("Failed to create channel in database:", err);
+      throw new HttpException("Failed to create channel", HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   async update(id: string, updates: Partial<Channel>): Promise<Channel> {
-    const channels = await this.getAll();
-    const index = channels.findIndex((c) => c.id === id);
-    if (index === -1) {
-      throw new HttpException("Channel not found", HttpStatus.NOT_FOUND);
+    try {
+      const query = this.db.query("SELECT * FROM channels WHERE id = $id");
+      const channel = query.get({ $id: id }) as any;
+      if (!channel) {
+        throw new HttpException("Channel not found", HttpStatus.NOT_FOUND);
+      }
+
+      const safeUpdates = { ...updates };
+      if (!safeUpdates.apiKey) {
+        delete safeUpdates.apiKey;
+      }
+
+      const updatedModels = safeUpdates.models !== undefined 
+        ? JSON.stringify(safeUpdates.models) 
+        : channel.models;
+
+      const updatedStatus = safeUpdates.status !== undefined
+        ? (safeUpdates.status ? 1 : 0)
+        : channel.status;
+
+      const stmt = this.db.prepare(`
+        UPDATE channels 
+        SET name = $name, baseUrl = $baseUrl, apiKey = $apiKey, type = $type, 
+            models = $models, weight = $weight, status = $status, notes = $notes
+        WHERE id = $id
+      `);
+
+      stmt.run({
+        $id: id,
+        $name: safeUpdates.name !== undefined ? safeUpdates.name : channel.name,
+        $baseUrl: safeUpdates.baseUrl !== undefined ? safeUpdates.baseUrl : channel.baseUrl,
+        $apiKey: safeUpdates.apiKey !== undefined ? safeUpdates.apiKey : channel.apiKey,
+        $type: safeUpdates.type !== undefined ? safeUpdates.type : channel.type,
+        $models: updatedModels,
+        $weight: safeUpdates.weight !== undefined ? safeUpdates.weight : channel.weight,
+        $status: updatedStatus,
+        $notes: safeUpdates.notes !== undefined ? (safeUpdates.notes || null) : channel.notes
+      });
+
+      const updatedRow = this.db.query("SELECT * FROM channels WHERE id = $id").get({ $id: id }) as any;
+      return {
+        ...updatedRow,
+        models: JSON.parse(updatedRow.models),
+        status: updatedRow.status === 1,
+        notes: updatedRow.notes || undefined
+      };
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      console.error(`Failed to update channel ${id} in database:`, err);
+      throw new HttpException("Failed to update channel", HttpStatus.INTERNAL_SERVER_ERROR);
     }
-    // If apiKey is not provided or empty, preserve the existing key
-    const safeUpdates = { ...updates };
-    if (!safeUpdates.apiKey) {
-      delete safeUpdates.apiKey;
-    }
-    const updatedChannel = {
-      ...channels[index]!,
-      ...safeUpdates,
-      id, // ensure ID cannot be changed
-      createdAt: channels[index]!.createdAt, // ensure createdAt cannot be changed
-    };
-    channels[index] = updatedChannel;
-    await this.save(channels);
-    return updatedChannel;
   }
 
   async delete(id: string): Promise<void> {
-    const channels = await this.getAll();
-    const filtered = channels.filter((c) => c.id !== id);
-    if (filtered.length === channels.length) {
-      throw new HttpException("Channel not found", HttpStatus.NOT_FOUND);
+    try {
+      const stmt = this.db.prepare("DELETE FROM channels WHERE id = $id");
+      const info = stmt.run({ $id: id });
+      if (info.changes === 0) {
+        throw new HttpException("Channel not found", HttpStatus.NOT_FOUND);
+      }
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      console.error(`Failed to delete channel ${id} from database:`, err);
+      throw new HttpException("Failed to delete channel", HttpStatus.INTERNAL_SERVER_ERROR);
     }
-    await this.save(filtered);
   }
 
   async testConnection(id: string): Promise<{ success: boolean; latency: number; error?: string }> {
@@ -100,7 +203,6 @@ export class ChannelsService {
     try {
       const normalizedBaseUrl = channel.baseUrl.replace(/\/+$/, "");
       
-      // Ping /models to check if key is valid and endpoint is responsive
       const response = await fetch(`${normalizedBaseUrl}/models`, {
         method: "GET",
         headers: {
@@ -187,7 +289,6 @@ export class ChannelsService {
     }
   }
 
-
   async getActiveChannelsForModel(
     purpose: "image" | "chat" | "video",
     modelId: string,
@@ -197,17 +298,15 @@ export class ChannelsService {
       .filter((c) => {
         if (!c.status) return false;
         
-        // Match channel type
         const typeMatch = c.type === "all" || c.type === purpose;
         if (!typeMatch) return false;
 
-        // Match model list wildcard or exact match
         const modelMatch =
           c.models.includes("*") ||
           c.models.some((m) => m.toLowerCase() === modelId.toLowerCase());
         
         return modelMatch;
       })
-      .sort((a, b) => b.weight - a.weight); // sort highest weight first
+      .sort((a, b) => b.weight - a.weight);
   }
 }

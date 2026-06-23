@@ -3,9 +3,10 @@ import { AiModule } from '../ai/ai.module';
 import { AgentController } from './agent.controller';
 import { AgentService } from './agent.service';
 import { AgentMemory } from './agent.memory';
+import { ModelConfigModule } from '../model-config/model-config.module';
 
 @Module({
-  imports: [AiModule], // reuse AiService (chat / generate-image / generate-video / tasks)
+  imports: [AiModule, ModelConfigModule], // reuse AiService (chat / generate-image / generate-video / tasks)
   controllers: [AgentController],
   providers: [AgentService, AgentMemory],
 })

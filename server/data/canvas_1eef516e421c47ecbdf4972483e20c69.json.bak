@@ -1,0 +1,81 @@
+[
+  {
+    "tag": "Frame",
+    "fill": "#FAF9F6",
+    "width": 1080,
+    "height": 1080,
+    "x": 0,
+    "y": 0,
+    "editable": true,
+    "stroke": "",
+    "strokeWidth": 0,
+    "children": [
+      {
+        "tag": "Text",
+        "fill": "#3C3C3C",
+        "text": "暖洋洋的小橘猫",
+        "fontSize": 38,
+        "fontWeight": "bold",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 540,
+        "y": 920,
+        "editable": true,
+        "__historyId": "hid_22_81pt",
+        "refId": "txt_mjx2dfne"
+      },
+      {
+        "tag": "Text",
+        "fill": "#8E8E93",
+        "text": "A warm and fluffy little friend",
+        "fontSize": 22,
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 540,
+        "y": 980,
+        "editable": true,
+        "__historyId": "hid_30_ocmz",
+        "refId": "txt_g5eqcs9p"
+      },
+      {
+        "tag": "ImageGen",
+        "width": 800,
+        "height": 800,
+        "x": 140.00000000000017,
+        "y": 120.5063291139241,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "skewX": 0,
+        "skewY": 0,
+        "widthRange": {
+          "min": 160
+        },
+        "heightRange": {
+          "min": 160
+        },
+        "editable": true,
+        "data": {},
+        "__historyId": "hid_17_8vu4",
+        "refId": "img_edescwme",
+        "prompt": "A close-up photograph of an adorable, fluffy baby orange tabby cat with big, curious round eyes, sitting on a soft blanket in warm morning light, photorealistic, high detail, cozy atmosphere",
+        "model": "gpt-image-2",
+        "size": "1024x1024",
+        "quality": "auto",
+        "aspectRatio": "1:1",
+        "generationStatus": "error",
+        "errorMessage": "任务不存在或服务器已重启，请重新生成",
+        "taskId": "70cc9862-edf8-47cb-b328-23862792e837",
+        "images": []
+      }
+    ],
+    "__historyId": "hid_16_fvou",
+    "refId": "agent_frame"
+  }
+]

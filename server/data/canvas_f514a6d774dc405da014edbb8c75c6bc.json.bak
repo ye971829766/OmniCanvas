@@ -1,0 +1,141 @@
+[
+  {
+    "tag": "Frame",
+    "fill": "#E8F5E9",
+    "width": 1240,
+    "height": 1754,
+    "x": 0,
+    "y": 0,
+    "editable": true,
+    "stroke": "",
+    "strokeWidth": 0,
+    "children": [
+      {
+        "tag": "Text",
+        "width": 1240,
+        "fill": "#1B5E20",
+        "text": "猫狗乐园",
+        "fontSize": 96,
+        "fontWeight": "bold",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 0,
+        "y": 120,
+        "editable": true,
+        "__historyId": "hid_11_tco3",
+        "refId": "txt_rnrmmear"
+      },
+      {
+        "tag": "Text",
+        "width": 1240,
+        "fill": "#2E7D32",
+        "text": "PETS PARADISE",
+        "fontSize": 32,
+        "fontWeight": "bold",
+        "letterSpacing": 8,
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 0,
+        "y": 240,
+        "editable": true,
+        "__historyId": "hid_12_qxt8",
+        "refId": "txt_9tvvniz0"
+      },
+      {
+        "tag": "Rect",
+        "x": 60,
+        "y": 1220,
+        "width": 1120,
+        "height": 440,
+        "editable": true,
+        "fill": "#FFFFFF",
+        "cornerRadius": 32,
+        "__historyId": "hid_16_ombc",
+        "refId": "rect_802hjg14"
+      },
+      {
+        "tag": "Rect",
+        "x": 470,
+        "y": 1510,
+        "width": 300,
+        "height": 80,
+        "editable": true,
+        "fill": "#2E7D32",
+        "cornerRadius": 40,
+        "__historyId": "hid_17_q2ai",
+        "refId": "rect_omwsx98v"
+      },
+      {
+        "tag": "Text",
+        "fill": "#1B5E20",
+        "text": "亲近自然，尽情撒欢",
+        "fontSize": 40,
+        "fontWeight": "bold",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "x": 120,
+        "y": 1280,
+        "editable": true,
+        "__historyId": "hid_18_m2mb",
+        "refId": "txt_8p8vvbyw"
+      },
+      {
+        "tag": "Text",
+        "width": 1000,
+        "fill": "#555555",
+        "text": "在绿意盎然的阳光草坪上，让您的毛孩子自由奔跑、探索自然、结识新朋友。我们提供专业贴心的看护与多元互动活动，开启它们专属的快乐时光。",
+        "fontSize": 24,
+        "lineHeight": 40,
+        "x": 120,
+        "y": 1360,
+        "editable": true,
+        "__historyId": "hid_19_tl2i",
+        "refId": "txt_gmbcdybc"
+      },
+      {
+        "tag": "Text",
+        "width": 300,
+        "fill": "#FFFFFF",
+        "text": "立即预约体验",
+        "fontSize": 26,
+        "fontWeight": "bold",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 470,
+        "y": 1532,
+        "editable": true,
+        "__historyId": "hid_20_56wp",
+        "refId": "txt_9zdqi6sl"
+      },
+      {
+        "tag": "Image",
+        "url": "http://localhost:3000/files/c2e7ea64-e835-4e0d-a569-de292f253b40.png",
+        "x": -14,
+        "y": 0,
+        "width": 1254,
+        "height": 1254,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "skewX": 0,
+        "skewY": 0,
+        "editable": true,
+        "__historyId": "hid_21_eta4",
+        "refId": "img_jmak636q"
+      }
+    ],
+    "__historyId": "hid_1_kio7",
+    "refId": "agent_frame"
+  }
+]

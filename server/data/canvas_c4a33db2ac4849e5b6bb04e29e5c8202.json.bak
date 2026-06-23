@@ -1,0 +1,66 @@
+[
+  {
+    "tag": "Frame",
+    "fill": "#eef7eb",
+    "width": 1080,
+    "height": 1620,
+    "x": 0,
+    "y": 0,
+    "editable": true,
+    "children": [
+      {
+        "tag": "Text",
+        "width": 800,
+        "fill": "#1a3c1e",
+        "text": "猫狗乐园",
+        "fontFamily": "sans-serif",
+        "fontSize": 88,
+        "fontWeight": "bold",
+        "letterSpacing": 4,
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 140,
+        "y": 90,
+        "editable": true,
+        "__historyId": "hid_36_2h7t",
+        "refId": "txt_45h4ch9p"
+      },
+      {
+        "tag": "Rect",
+        "x": 410,
+        "y": 1450,
+        "width": 260,
+        "height": 64,
+        "editable": true,
+        "fill": "#3d6a45",
+        "cornerRadius": 25,
+        "__historyId": "hid_38_kbju",
+        "refId": "rect_em3jft3l"
+      },
+      {
+        "tag": "Text",
+        "width": 260,
+        "fill": "#ffffff",
+        "text": "加入我们 →",
+        "fontFamily": "sans-serif",
+        "fontSize": 24,
+        "fontWeight": "bold",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 410,
+        "y": 1468,
+        "editable": true,
+        "__historyId": "hid_39_lgaq",
+        "refId": "txt_lwlgxgud"
+      }
+    ],
+    "__historyId": "hid_23_xtaa",
+    "refId": "agent_frame"
+  }
+]

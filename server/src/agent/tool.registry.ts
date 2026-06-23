@@ -7,10 +7,15 @@ import {
   removeNodeTool,
   setFrameTool,
   updateNodeTool,
+  focusNodeTool,
+  exportNodeImageTool,
+  addFrameTool,
 } from './tools/canvas.tools';
 import { autoLayoutTool, alignNodesTool, distributeNodesTool } from './tools/layout.tools';
 import { setBrandTool, applyPaletteTool } from './tools/style.tools';
 import { collectInspirationTool } from './tools/inspiration.tools';
+import { reviewAndAdjustTool } from './tools/review.tools';
+import { analyzeDesignTool } from './tools/vision-analysis.tools';
 
 /** All design tools the agent can call. */
 export const ALL_TOOLS: AgentTool[] = [
@@ -28,6 +33,11 @@ export const ALL_TOOLS: AgentTool[] = [
   setBrandTool,
   applyPaletteTool,
   collectInspirationTool,
+  focusNodeTool,
+  exportNodeImageTool,
+  addFrameTool,
+  reviewAndAdjustTool,
+  analyzeDesignTool,
 ];
 
 export const TOOL_MAP = new Map(ALL_TOOLS.map((t) => [t.name, t]));

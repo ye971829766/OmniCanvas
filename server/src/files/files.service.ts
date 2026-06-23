@@ -7,11 +7,12 @@ import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 
 @Injectable()
 export class FilesService implements OnModuleInit {
-  private MAX_IMAGE_SIZE = 50 * 1024 * 1024;
+  private MAX_IMAGE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '52428800');
   private ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+  private UPLOAD_DIR = process.env.UPLOAD_DIR || './files';
 
   async onModuleInit() {
-    await mkdir("./files", { recursive: true });
+    await mkdir(this.UPLOAD_DIR, { recursive: true });
     console.log("FFmpeg executable path (FilesService):", ffmpegInstaller.path);
   }
 

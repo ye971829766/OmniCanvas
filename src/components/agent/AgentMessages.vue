@@ -1,26 +1,27 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref } from 'vue';
 import {
   IncremarkContent,
   AutoScrollContainer,
   type UseIncremarkOptions,
-} from "@incremark/vue";
-import ToolRowBasic from "./ToolRowBasic.vue";
-import ToolAccordion from "./ToolAccordion.vue";
-import OptionPreviewCard from "./OptionPreviewCard.vue";
-import { Image } from "primevue";
-import plotTwistAvatar from "@/assets/plot_twist_avatar.jpg";
-import logoImg from "@/assets/logo.jpg";
+} from '@incremark/vue';
+import ToolActivity from './ToolActivity.vue';
+import OptionPreviewCard from './OptionPreviewCard.vue';
+import { Image } from 'primevue';
+import plotTwistAvatar from '@/assets/plot_twist_avatar.jpg';
+import logoImg from '@/assets/logo.jpg';
 
 interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   text: string;
   streaming?: boolean;
   tools: Array<{
     id: string;
     name: string;
     done: boolean;
+    input?: any;
+    output?: any;
   }>;
   images?: string[];
 }
@@ -32,9 +33,9 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "useSuggestion", s: string): void;
-  (e: "zoomToNode", refId: string): void;
-  (e: "scroll"): void;
+  (e: 'useSuggestion', s: string): void;
+  (e: 'zoomToNode', refId: string): void;
+  (e: 'scroll'): void;
 }>();
 
 const scrollRef = ref<any>(null);
@@ -59,38 +60,18 @@ const getIncremarkOptions = (streaming: boolean): UseIncremarkOptions => ({
     enabled: streaming,
     charsPerTick: [1, 3],
     tickInterval: 30,
-    effect: "fade-in",
+    effect: 'fade-in',
   },
 });
 
-const TOOL_LABELS: Record<string, string> = {
-  set_frame: "设置画板",
-  generate_image: "生成图片",
-  generate_video: "生成视频",
-  add_text: "添加文字",
-  add_rect: "添加图形",
-  update_node: "调整元素",
-  remove_node: "删除元素",
-  query_canvas: "查看画布",
-  collect_inspiration: "🔍 收集图片灵感",
-  auto_layout: "📐 自动布局",
-  align_nodes: "对齐元素",
-  distribute_nodes: "分布元素",
-  set_brand: "🏷️ 设置品牌",
-  apply_palette: "🎨 应用色板",
-};
-
-function toolLabel(name: string) {
-  return TOOL_LABELS[name] ?? name;
-}
-
 interface ParsedMessagePart {
-  type: "text" | "grid" | "image_ref";
+  type: 'text' | 'grid' | 'image_ref';
   content: string | string[];
   refId?: string;
 }
 
 function parseMessageText(text: string): ParsedMessagePart[] {
+  text = stripInternalToolErrors(text);
   const regex = /\[inspiration_grid:([^\]]+)\]|\[@image:#([^\]]+)\]/g;
   const parts: ParsedMessagePart[] = [];
   let lastIndex = 0;
@@ -99,27 +80,35 @@ function parseMessageText(text: string): ParsedMessagePart[] {
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
       parts.push({
-        type: "text",
+        type: 'text',
         content: text.substring(lastIndex, match.index),
       });
     }
     if (match[1]) {
-      const urls = match[1].split(",").map((u) => u.trim());
-      parts.push({ type: "grid", content: urls });
+      const urls = match[1].split(',').map((u) => u.trim());
+      parts.push({ type: 'grid', content: urls });
     } else if (match[2]) {
       const refId = match[2].trim();
-      parts.push({ type: "image_ref", content: `[@image:#${refId}]`, refId });
+      parts.push({ type: 'image_ref', content: `[@image:#${refId}]`, refId });
     }
     lastIndex = regex.lastIndex;
   }
 
   if (lastIndex < text.length) {
-    parts.push({ type: "text", content: text.substring(lastIndex) });
+    parts.push({ type: 'text', content: text.substring(lastIndex) });
   }
 
-  console.log(parts);
+  return parts.length > 0 ? parts : [{ type: 'text', content: text }];
+}
 
-  return parts.length > 0 ? parts : [{ type: "text", content: text }];
+function stripInternalToolErrors(text: string) {
+  return text
+    .replace(
+      /\n{0,2}\s*⚠️\s+[a-z_]+:\s+(?:Parameter\s+"[^"]+"\s+must be[^\n]*|Missing required parameter[^\n]*|Tool\s+[a-z_]+\s+timed out[^\n]*)/g,
+      '',
+    )
+    .replace(/\n{3,}/g, '\n\n')
+    .trimStart();
 }
 
 function parseUserText(text: string) {
@@ -131,17 +120,17 @@ function parseUserText(text: string) {
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
       parts.push({
-        type: "text",
+        type: 'text',
         content: text.substring(lastIndex, match.index),
       });
     }
-    parts.push({ type: "mention", content: match[1] });
+    parts.push({ type: 'mention', content: match[1] });
     lastIndex = regex.lastIndex;
   }
   if (lastIndex < text.length) {
-    parts.push({ type: "text", content: text.substring(lastIndex) });
+    parts.push({ type: 'text', content: text.substring(lastIndex) });
   }
-  return parts.length > 0 ? parts : [{ type: "text", content: text }];
+  return parts.length > 0 ? parts : [{ type: 'text', content: text }];
 }
 </script>
 
@@ -204,7 +193,11 @@ function parseUserText(text: string) {
       <!-- assistant -->
       <div v-else class="flex flex-col gap-2">
         <div class="flex items-start gap-2">
-          <img class="agent-avatar shrink-0 mt-1" :src="plotTwistAvatar" alt="PlotTwist" />
+          <img
+            class="agent-avatar shrink-0 mt-1"
+            :src="plotTwistAvatar"
+            alt="PlotTwist"
+          />
           <div class="flex-1 min-w-0">
             <div v-if="m.text" class="agent-bubble-ai">
               <template
@@ -245,18 +238,23 @@ function parseUserText(text: string) {
               <span /><span /><span />
             </div>
 
-            <!-- tool chips -->
-            <div v-if="m.tools.length" class="flex flex-col gap-2 mt-2">
-              <template v-for="t in m.tools" :key="t.id">
-                <ToolAccordion
-                  v-if="t.name === 'collect_inspiration'"
-                  :tool="t"
-                  :messageText="m.text"
-                />
-                <ToolRowBasic
-                  v-else
-                  :label="toolLabel(t.name)"
-                  :done="t.done"
+            <ToolActivity
+              v-if="m.tools.length"
+              :tools="m.tools"
+              :streaming="m.streaming"
+              :message-text="m.text"
+              :node-states="nodeStates"
+              @zoom="emit('zoomToNode', $event)"
+            />
+
+            <!-- Auto-show generated media cards that are not inline in the message text -->
+            <div v-if="m.tools && m.tools.length" class="flex flex-col gap-2 mt-1">
+              <template v-for="tool in m.tools" :key="tool.id">
+                <OptionPreviewCard
+                  v-if="(tool.name === 'generate_image' || tool.name === 'generate_video') && tool.output?.refId && nodeStates[tool.output.refId] && !(m.text || '').includes(`[@image:#${tool.output.refId}]`)"
+                  :refId="tool.output.refId"
+                  :state="nodeStates[tool.output.refId]"
+                  @zoom="emit('zoomToNode', $event)"
                 />
               </template>
             </div>
@@ -341,19 +339,44 @@ function parseUserText(text: string) {
 }
 
 .agent-bubble-ai {
-  padding: 4px 0px;
+  max-width: 100%;
+  padding: 2px 0 0;
   background: transparent;
-  color: var(--p-text-color, #111);
-  font-size: 13.1px;
-  line-height: 1.6;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.62;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .markdown-body {
   font-size: 13px;
-  line-height: 1.6;
-  color: var(--p-text-color, #111);
+  line-height: 1.62;
+  color: #0f172a;
+}
+
+.markdown-body :deep(p) {
+  margin: 0 0 8px;
+}
+
+.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  margin: 6px 0 8px;
+  padding-left: 18px;
+}
+
+.markdown-body :deep(li) {
+  margin: 2px 0;
+  padding-left: 2px;
+}
+
+.markdown-body :deep(strong) {
+  color: #0f172a;
+  font-weight: 680;
 }
 
 .agent-avatar {

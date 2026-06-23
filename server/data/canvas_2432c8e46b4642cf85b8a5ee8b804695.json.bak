@@ -1,0 +1,146 @@
+[
+  {
+    "tag": "Frame",
+    "fill": "#FAEDCD",
+    "width": 1240,
+    "height": 1754,
+    "x": 0,
+    "y": 0,
+    "editable": true,
+    "children": [
+      {
+        "tag": "Image",
+        "url": "http://localhost:3000/files/f4f9214a-8fab-4923-92e8-0188e5ee1bab.png",
+        "x": 120,
+        "y": 350,
+        "width": 1254,
+        "height": 1254,
+        "editable": true,
+        "__historyId": "hid_18_8i2c",
+        "refId": "img_ls0yfmq9"
+      },
+      {
+        "tag": "Text",
+        "width": 1080,
+        "fill": "#4A2E1B",
+        "text": "咖啡香伴 · 温暖启幕",
+        "fontFamily": "serif",
+        "fontSize": 72,
+        "fontWeight": "bold",
+        "letterSpacing": 4,
+        "lineHeight": 90,
+        "textAlign": "center",
+        "x": 80,
+        "y": 140,
+        "editable": true,
+        "__historyId": "hid_11_o6ml",
+        "refId": "txt_u2mkq576"
+      },
+      {
+        "tag": "Text",
+        "width": 1080,
+        "fill": "#A77E58",
+        "text": "GRAND OPENING",
+        "fontFamily": "serif",
+        "fontSize": 32,
+        "fontWeight": "normal",
+        "letterSpacing": 2,
+        "lineHeight": 44,
+        "textAlign": "center",
+        "x": 80,
+        "y": 250,
+        "editable": true,
+        "__historyId": "hid_12_hdfd",
+        "refId": "txt_skcqimrn"
+      },
+      {
+        "tag": "Text",
+        "width": 1080,
+        "fill": "#4A2E1B",
+        "text": "新店开业 · 限时礼遇",
+        "fontFamily": "serif",
+        "fontSize": 36,
+        "fontWeight": "bold",
+        "letterSpacing": 2,
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 80,
+        "y": 1160,
+        "editable": true,
+        "__historyId": "hid_13_v2xk",
+        "refId": "txt_edxepufu"
+      },
+      {
+        "tag": "Text",
+        "width": 1000,
+        "fill": "#5C3D2E",
+        "text": "活动期间，全场饮品买一送一\n每日限量赠送手作挂耳咖啡一份\n期待与你在咖啡香气中相遇",
+        "fontFamily": "serif",
+        "fontSize": 24,
+        "fontWeight": "normal",
+        "lineHeight": 40,
+        "textAlign": "center",
+        "x": 120,
+        "y": 1240,
+        "editable": true,
+        "__historyId": "hid_14_bi51",
+        "refId": "txt_979563zd"
+      },
+      {
+        "tag": "Rect",
+        "x": 540,
+        "y": 1420,
+        "width": 160,
+        "height": 50,
+        "editable": true,
+        "fill": "#D4A373",
+        "cornerRadius": 25,
+        "__historyId": "hid_15_npww",
+        "refId": "rect_uiwrlny3"
+      },
+      {
+        "tag": "Text",
+        "width": 160,
+        "fill": "#FFFFFF",
+        "text": "探索美味",
+        "fontFamily": "serif",
+        "fontSize": 20,
+        "fontWeight": "bold",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 540,
+        "y": 1432,
+        "editable": true,
+        "__historyId": "hid_16_7o2u",
+        "refId": "txt_13z4h6ev"
+      },
+      {
+        "tag": "Text",
+        "width": 1080,
+        "fill": "#A77E58",
+        "text": "地址：日光里创意街区A栋101室  |  电话：010-88888888",
+        "fontFamily": "serif",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 80,
+        "y": 1560,
+        "editable": true,
+        "__historyId": "hid_17_q3yr",
+        "refId": "txt_1o5qbqb6"
+      }
+    ],
+    "__historyId": "hid_1_0ee2",
+    "refId": "agent_frame"
+  }
+]

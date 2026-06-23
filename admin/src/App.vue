@@ -66,6 +66,13 @@
           <span>模型目录</span>
         </el-menu-item>
         <el-menu-item
+          index="agent"
+          style="border-radius: 8px; margin-bottom: 4px; height: 48px"
+        >
+          <el-icon><Cpu /></el-icon>
+          <span>Agent配置</span>
+        </el-menu-item>
+        <el-menu-item
           index="diagnostics"
           style="border-radius: 8px; height: 48px"
         >
@@ -100,7 +107,9 @@
                   ? "上游渠道管理"
                   : activeTab === "models"
                     ? "模型目录"
-                    : "路由与接口测试"
+                    : activeTab === "agent"
+                      ? "Agent配置"
+                      : "路由与接口测试"
             }}
           </h1>
           <p style="margin: 4px 0 0 0; font-size: 12px; color: #a1a1aa">
@@ -111,7 +120,9 @@
                   ? "维护可用的上游渠道、密钥和路由优先级"
                   : activeTab === "models"
                     ? "维护前端显示名、上游渠道、上游模型名及图标的映射表"
-                    : "测试模型映射关系并实时诊断接口延迟与底座返回负载"
+                    : activeTab === "agent"
+                      ? "配置Agent画布操作的系统提示词（SYSTEM_PROMPT）与调用的核心对话/工具调用模型"
+                      : "测试模型映射关系并实时诊断接口延迟与底座返回负载"
             }}
           </p>
         </div>
@@ -191,6 +202,12 @@
           @refresh-mappings="loadMappings"
         />
 
+        <AgentSection
+          v-else-if="activeTab === 'agent'"
+          :mappings="mappings"
+          @refresh-mappings="loadMappings"
+        />
+
         <DiagnosticsSection
           v-else-if="activeTab === 'diagnostics'"
           :channels="channels"
@@ -217,8 +234,9 @@ import DashboardSection from "./components/DashboardSection.vue";
 import ChannelsSection from "./components/ChannelsSection.vue";
 import ModelsSection from "./components/ModelsSection.vue";
 import DiagnosticsSection from "./components/DiagnosticsSection.vue";
+import AgentSection from "./components/AgentSection.vue";
 
-const activeTab = ref<"dashboard" | "channels" | "models" | "diagnostics">("dashboard");
+const activeTab = ref<"dashboard" | "channels" | "models" | "agent" | "diagnostics">("dashboard");
 const modelsSubTab = ref<"mappings" | "templates">("mappings");
 
 const channels = ref<Channel[]>([]);

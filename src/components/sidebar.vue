@@ -256,7 +256,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import {
   PanelLeftClose,
   PanelRightClose,
@@ -266,21 +266,26 @@ import {
   Pencil,
   Trash2,
   Settings,
-} from "lucide-vue-next";
-import { gsap } from "gsap";
-import vTooltip from "primevue/tooltip";
-import { useConfirm } from "primevue/useconfirm";
-import { useToast } from "primevue/usetoast";
+} from 'lucide-vue-next';
+import { gsap } from 'gsap';
+import vTooltip from 'primevue/tooltip';
+import { useConfirm } from 'primevue/useconfirm';
+import { useToast } from 'primevue/usetoast';
 
 const props = defineProps<{
   activeWorkspaceId: string | number | null;
 }>();
 
 const emit = defineEmits<{
-  (e: "update:activeWorkspaceId", id: string | number | null): void;
+  (e: 'update:activeWorkspaceId', id: string | number | null): void;
 }>();
 
-import { API_BASE_URL as BASE_URL } from "@/config";
+import {
+  getWorkspaces,
+  createWorkspace,
+  updateWorkspace,
+  deleteWorkspace,
+} from '@/utils/api';
 const confirm = useConfirm();
 const toast = useToast();
 const collapsed = ref(false);
@@ -293,20 +298,17 @@ const workspaces = ref<any[]>([]);
 
 const loadWorkspaces = async () => {
   try {
-    const res = await fetch(`${BASE_URL}/workspaces`);
-    if (res.ok) {
-      workspaces.value = await res.json();
-      if (workspaces.value.length > 0) {
-        const exists = workspaces.value.some(
-          (w) => String(w.id) === String(props.activeWorkspaceId),
-        );
-        if (!exists) {
-          emit("update:activeWorkspaceId", workspaces.value[0].id);
-        }
+    workspaces.value = await getWorkspaces();
+    if (workspaces.value.length > 0) {
+      const exists = workspaces.value.some(
+        (w) => String(w.id) === String(props.activeWorkspaceId),
+      );
+      if (!exists) {
+        emit('update:activeWorkspaceId', workspaces.value[0].id);
       }
     }
   } catch (err) {
-    console.error("Failed to load workspaces:", err);
+    console.error('Failed to load workspaces:', err);
   }
 };
 
@@ -315,7 +317,7 @@ onMounted(() => {
 });
 
 const selectWorkspace = (item: any) => {
-  emit("update:activeWorkspaceId", item.id);
+  emit('update:activeWorkspaceId', item.id);
 };
 
 // Menu Popover state
@@ -323,7 +325,7 @@ const menuPopoverRef = ref();
 const selectedWorkspace = ref<any>(null);
 
 // Search state
-const searchQuery = ref("");
+const searchQuery = ref('');
 
 const filteredWorkspaces = computed(() => {
   if (!searchQuery.value) return workspaces.value;
@@ -338,47 +340,31 @@ const toggleMenu = (event: Event, item: any) => {
 };
 
 const createNewWorkspace = async () => {
-  const workspaceName = "未命名工作区_" + Date.now();
+  const workspaceName = '未命名工作区_' + Date.now();
   try {
-    const res = await fetch(`${BASE_URL}/workspaces`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name: workspaceName }),
-    });
-    if (res.ok) {
-      const newWs = await res.json();
-      await loadWorkspaces();
-      emit("update:activeWorkspaceId", newWs.id);
-    }
+    const newWs = await createWorkspace(workspaceName);
+    await loadWorkspaces();
+    emit('update:activeWorkspaceId', newWs.id);
   } catch (err) {
-    console.error("Failed to create workspace:", err);
+    toast.add({
+      severity: 'error',
+      summary: '创建失败',
+    });
+    console.error('Failed to create workspace:', err);
   }
 };
 
 const renameWorkspace = async () => {
   if (!selectedWorkspace.value) return;
   menuPopoverRef.value?.hide();
-  const name = prompt("请输入新工作空间名称:", selectedWorkspace.value.name);
+  const name = prompt('请输入新工作空间名称:', selectedWorkspace.value.name);
   if (name === null) return;
-  const workspaceName = name.trim() || "未命名工作区";
+  const workspaceName = name.trim() || '未命名工作区';
   try {
-    const res = await fetch(
-      `${BASE_URL}/workspaces/${selectedWorkspace.value.id}`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: workspaceName }),
-      },
-    );
-    if (res.ok) {
-      await loadWorkspaces();
-    }
+    await updateWorkspace(selectedWorkspace.value.id, workspaceName);
+    await loadWorkspaces();
   } catch (err) {
-    console.error("Failed to rename workspace:", err);
+    console.error('Failed to rename workspace:', err);
   }
 };
 
@@ -389,37 +375,32 @@ const confirmDelete = async () => {
 
   confirm.require({
     message: `确定要删除工作空间 "${selectedWorkspace.value.name}" 吗？`,
-    header: "Confirmation",
-    icon: "pi pi-exclamation-triangle",
+    header: 'Confirmation',
+    icon: 'pi pi-exclamation-triangle',
     rejectProps: {
-      label: "取消",
-      severity: "secondary",
+      label: '取消',
+      severity: 'secondary',
       outlined: true,
     },
     acceptProps: {
-      label: "确认",
+      label: '确认',
     },
     accept: async () => {
       try {
-        const res = await fetch(`${BASE_URL}/workspaces/${idToDelete}`, {
-          method: "DELETE",
-        });
-        if (res.ok) {
-          await loadWorkspaces();
-          if (String(props.activeWorkspaceId) === String(idToDelete)) {
-            const nextId = workspaces.value.length
-              ? workspaces.value[0].id
-              : null;
-            emit("update:activeWorkspaceId", nextId);
-          }
-          toast.add({
-            severity: "success",
-            summary: "操作成功",
-            life: 3000,
-          });
+        await deleteWorkspace(idToDelete);
+        await loadWorkspaces();
+        if (String(props.activeWorkspaceId) === String(idToDelete)) {
+          const nextId = workspaces.value.length
+            ? workspaces.value[0].id
+            : null;
+          emit('update:activeWorkspaceId', nextId);
         }
+        toast.add({
+          severity: 'success',
+          summary: '操作成功',
+        });
       } catch (err) {
-        console.error("Failed to delete workspace:", err);
+        console.error('Failed to delete workspace:', err);
       }
     },
     reject: () => {},
@@ -445,7 +426,7 @@ watch(collapsed, (isCollapsed) => {
       paddingLeft: 10,
       paddingRight: 10,
       duration: 0.35,
-      ease: "power2.inOut",
+      ease: 'power2.inOut',
     });
   } else {
     gsap.to(containerRef.value, {
@@ -453,7 +434,7 @@ watch(collapsed, (isCollapsed) => {
       paddingLeft: 10,
       paddingRight: 10,
       duration: 0.25,
-      ease: "power2.inOut",
+      ease: 'power2.inOut',
       onComplete: () => {
         renderExpandedContent.value = true;
         checkAllOverflows();
@@ -467,9 +448,9 @@ const isOverflowMap = ref<Record<string, boolean>>({});
 
 const checkAllOverflows = () => {
   nextTick(() => {
-    const elements = document.querySelectorAll(".workspace-name-span");
+    const elements = document.querySelectorAll('.workspace-name-span');
     elements.forEach((el) => {
-      const id = el.getAttribute("data-id");
+      const id = el.getAttribute('data-id');
       if (id) {
         isOverflowMap.value[id] = el.scrollWidth > el.clientWidth;
       }

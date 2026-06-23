@@ -1,0 +1,146 @@
+[
+  {
+    "tag": "Frame",
+    "fill": "#080B10",
+    "width": 1920,
+    "height": 1080,
+    "x": 0,
+    "y": 0,
+    "editable": true,
+    "stroke": "",
+    "strokeWidth": 0,
+    "children": [
+      {
+        "tag": "Text",
+        "fill": "#00FFCC",
+        "text": "NEXT-GEN QUANTUM CORE",
+        "fontSize": 20,
+        "fontWeight": "bold",
+        "letterSpacing": 4,
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "x": 160,
+        "y": 260,
+        "editable": true,
+        "__historyId": "hid_18_we3i",
+        "refId": "txt_3cphgw2y"
+      },
+      {
+        "tag": "Text",
+        "fill": "#FFFFFF",
+        "text": "重塑未来速度\n全新量子智能核心",
+        "fontSize": 76,
+        "fontWeight": "bold",
+        "lineHeight": 96,
+        "x": 160,
+        "y": 310,
+        "editable": true,
+        "__historyId": "hid_19_nm9s",
+        "refId": "txt_in0hq0sj"
+      },
+      {
+        "tag": "Text",
+        "width": 700,
+        "fill": "#8A94A6",
+        "text": "突破性的量子计算架构，配合AI自适应引擎，专为未来极致计算场景而生。极速响应，智启未来。",
+        "fontSize": 24,
+        "lineHeight": 40,
+        "x": 160,
+        "y": 550,
+        "editable": true,
+        "__historyId": "hid_20_q43o",
+        "refId": "txt_amksamiv"
+      },
+      {
+        "tag": "Rect",
+        "x": 160,
+        "y": 700,
+        "width": 240,
+        "height": 64,
+        "editable": true,
+        "fill": {
+          "type": "linear",
+          "from": {
+            "type": "percent",
+            "x": 0,
+            "y": 0
+          },
+          "to": {
+            "type": "percent",
+            "x": 1,
+            "y": 1
+          },
+          "stops": [
+            "#00F0FF",
+            "#00FFCC"
+          ]
+        },
+        "cornerRadius": 8,
+        "__historyId": "hid_22_kivx",
+        "refId": "rect_k47mcnwt"
+      },
+      {
+        "tag": "Text",
+        "width": 240,
+        "fill": "#080B10",
+        "text": "立即探索",
+        "fontSize": 22,
+        "fontWeight": "bold",
+        "lineHeight": 64,
+        "textAlign": "center",
+        "x": 160,
+        "y": 700,
+        "editable": true,
+        "__historyId": "hid_23_erl0",
+        "refId": "txt_5x0q1cfg"
+      },
+      {
+        "tag": "Text",
+        "fill": "#606A7C",
+        "text": "● AI 神经网络加速    ● 128位超导量子比特    ● 延迟降低 99.8%",
+        "fontSize": 18,
+        "letterSpacing": 2,
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "x": 160,
+        "y": 840,
+        "editable": true,
+        "__historyId": "hid_24_56c7",
+        "refId": "txt_wvdcqtid"
+      },
+      {
+        "tag": "Image",
+        "url": "http://localhost:3000/files/187ff9a0-1b00-46f9-916c-751fb8033567.png",
+        "x": 2228.3970527350934,
+        "y": 55.999999999999915,
+        "width": 1254,
+        "height": 1254,
+        "editable": true,
+        "__historyId": "hid_31_6rfc",
+        "refId": "img_5nhs82i3"
+      },
+      {
+        "tag": "Image",
+        "url": "http://localhost:3000/files/53ab9109-d6f2-46fb-9cf9-3cbce7c602e7.png",
+        "x": 782.2135156180775,
+        "y": -55.36551883425659,
+        "width": 1254,
+        "height": 1254,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "skewX": 0,
+        "skewY": 0,
+        "editable": true,
+        "__historyId": "hid_25_6itj",
+        "refId": "img_qg693lws"
+      }
+    ],
+    "__historyId": "hid_12_5o0e",
+    "refId": "agent_frame"
+  }
+]

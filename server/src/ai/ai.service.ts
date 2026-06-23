@@ -989,7 +989,7 @@ export class AiService {
       (value.role === "system" ||
         value.role === "user" ||
         value.role === "assistant") &&
-      typeof value.content === "string"
+      (typeof value.content === "string" || Array.isArray(value.content))
     );
   }
 
@@ -1015,6 +1015,11 @@ export class AiService {
     }
     if (typeof body?.maxTokens === "number") {
       payload.max_tokens = body.maxTokens;
+    }
+    if (body?.response_format !== undefined) {
+      payload.response_format = body.response_format;
+    } else if (body?.responseFormat !== undefined) {
+      payload.response_format = body.responseFormat;
     }
 
     const providerResponseBody = await this.callYunwuApi(
@@ -1060,9 +1065,12 @@ export class AiService {
   ) {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const outputFormat = this.getOutputFormat(body?.outputFormat);
-    const model = this.getSelectedModel(body?.model, this.YUNWU_IMAGE_MODEL);
-    console.log("[runGenerationTaskInBackground] body:", JSON.stringify(body));
-    console.log(model, "请求--------------------");
+    let model = this.getSelectedModel(body?.model, "");
+    if (!model) {
+      const mappings = await this.modelConfigService.getEnabledMappingsByPurpose("image");
+      const activeMapping = mappings.find(m => m.enabled);
+      model = activeMapping ? activeMapping.id : this.YUNWU_IMAGE_MODEL;
+    }
     const options = await this.getImageModelOptions(model);
     const maxAllowed = options.maxReferenceImages ?? 1;
 
@@ -1354,20 +1362,14 @@ export class AiService {
             generateParams.quality = body.quality.trim();
           }
 
-          // const sdkResponse = await openAi.images.generate(generateParams as any);
-          // // 将 SDK 响应转为普通对象，确保 saveGeneratedImage 可以正确解析
-          // console.log("sdkResponse", JSON.stringify(sdkResponse))
-          // const providerBody = JSON.parse(JSON.stringify(sdkResponse));
+          const sdkResponse = await openAi.images.generate(generateParams as any);
+          const providerBody = JSON.parse(JSON.stringify(sdkResponse));
 
-          // const filename = await this.filesService.saveGeneratedImage(
-          //   providerBody,
-          //   outputFormat,
-          // );
-          // imageUrl = `${originUrl}/files/${filename}`;
-          await new Promise((resolve) => setTimeout(resolve, 5000));
-          imageUrl = `http://localhost:3000/files/9df196a0-f749-40a4-932b-4042a08f51b2.webp`;
-
-          
+          const filename = await this.filesService.saveGeneratedImage(
+            providerBody,
+            outputFormat,
+          );
+          imageUrl = `${originUrl}/files/${filename}`;
         }
       }
 
@@ -1769,5 +1771,46 @@ export class AiService {
         seconds: defaultSeconds,
       },
     };
+  }
+
+  async uploadImageToHost(base64: string): Promise<string> {
+    if (!base64 || typeof base64 !== 'string') return base64;
+    if (base64.startsWith('http://') || base64.startsWith('https://') || base64.startsWith('[')) {
+      return base64;
+    }
+    const url = "http://101.200.138.2:8092/api/upload/private";
+    const apiKey = "sk-a9f76e82c4df42f58afbefd53d3b4f8e";
+    
+    let formattedBase64 = base64;
+    if (!base64.startsWith('data:')) {
+      formattedBase64 = `data:image/png;base64,${base64}`;
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey
+        },
+        body: JSON.stringify({
+          base64: formattedBase64,
+          filename: `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.png`
+        })
+      });
+      
+      const resData = await response.json() as any;
+      if (response.ok && resData && resData.success && resData.data && resData.data.url) {
+        return resData.data.url;
+      }
+      throw new Error(resData?.message || `HTTP ${response.status}`);
+    } catch (err: any) {
+      console.warn("[uploadImageToHost] failed, falling back to base64:", err.message);
+      return base64;
+    }
+  }
+
+  async getAgentConfig() {
+    return this.modelConfigService.getConfig();
   }
 }

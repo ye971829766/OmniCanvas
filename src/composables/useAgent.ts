@@ -1,8 +1,9 @@
 import { ref, shallowRef, watch, type Ref, reactive } from "vue";
-import { Text, Rect } from "leafer-ui";
+import { Text, Rect, Frame } from "leafer-ui";
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/utils";
+import { getAgentHistory, deleteAgentSession, stopAgent } from "@/utils/api";
 
 /**
  * useAgent — drives the Lovart-style chat panel.
@@ -13,7 +14,8 @@ import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/util
  * useCanvas, so the agent's generations behave exactly like manual ones.
  */
 
-import { API_BASE_URL as AGENT_BASE_URL } from "@/config";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+const AGENT_BASE_URL = `${API_BASE_URL}`;
 
 export interface ChatMessage {
   id: string;
@@ -21,14 +23,15 @@ export interface ChatMessage {
   /** streamed reasoning / final text */
   text: string;
   /** tool calls shown as chips under the bubble */
-  tools: { id: string; name: string; done: boolean }[];
+  tools: { id: string; name: string; done: boolean; input?: any; output?: any }[];
   streaming: boolean;
   images?: string[];
 }
 
 type CanvasNodeSpec = {
   refId: string;
-  type: "image_gen" | "video_gen" | "text" | "rect";
+  type: "image_gen" | "video_gen" | "text" | "rect" | "frame";
+  parentId?: string;
   x?: number;
   y?: number;
   width?: number;
@@ -36,14 +39,22 @@ type CanvasNodeSpec = {
   prompt?: string;
   model?: string;
   size?: string;
+  quality?: string;
+  seconds?: string;
   aspectRatio?: string;
   text?: string;
   fontSize?: number;
   fontFamily?: string;
   fill?: string;
+  fontWeight?: string;
+  textAlign?: string;
+  lineHeight?: number;
+  letterSpacing?: number;
+  opacity?: number;
   cornerRadius?: number;
   stroke?: string;
   strokeWidth?: number;
+  gradient?: { from: string; to: string; direction: number };
 };
 
 type CanvasOp =
@@ -56,7 +67,9 @@ type CanvasOp =
       refId: string;
       kind: "image" | "video";
       taskId: string;
-    };
+    }
+  | { op: "focus_node"; refId: string }
+  | { op: "export_node"; refId: string; requestId: string };
 
 export interface NodeState {
   refId: string;
@@ -65,6 +78,25 @@ export interface NodeState {
   url?: string;
   thumbnailUrl?: string;
   error?: string;
+}
+
+function isInternalToolError(message: unknown) {
+  const text = String(message ?? "");
+  return (
+    /^[a-z_]+:\s+Parameter\s+"[^"]+"/.test(text) ||
+    /^[a-z_]+:\s+Missing required parameter/.test(text) ||
+    /^[a-z_]+:\s+Tool\s+[a-z_]+\s+timed out/.test(text)
+  );
+}
+
+function stripInternalToolErrors(text: string) {
+  return text
+    .replace(
+      /\n{0,2}\s*⚠️\s+[a-z_]+:\s+(?:Parameter\s+"[^"]+"\s+must be[^\n]*|Missing required parameter[^\n]*|Tool\s+[a-z_]+\s+timed out[^\n]*)/g,
+      "",
+    )
+    .replace(/\n{3,}/g, "\n\n")
+    .trimStart();
 }
 
 function parseHistoryMessage(
@@ -102,18 +134,30 @@ function parseHistoryMessage(
   }
 
   if (msg.role === "assistant") {
-    const text = msg.content || "";
-    const tools: { id: string; name: string; done: boolean }[] = [];
+    const text = stripInternalToolErrors(msg.content || "");
+    const tools: { id: string; name: string; done: boolean; input?: any; output?: any }[] = [];
     if (Array.isArray(msg.tool_calls)) {
       for (const tc of msg.tool_calls) {
         const toolCallId = tc.id;
-        const isDone = allMessages.some(
+        const toolResult = allMessages.find(
           (m) => m.role === "tool" && m.tool_call_id === toolCallId
         );
+        let input: any;
+        let output: any;
+        try {
+          input = tc.function?.arguments ? JSON.parse(tc.function.arguments) : undefined;
+        } catch {}
+        try {
+          output = typeof toolResult?.content === "string" ? JSON.parse(toolResult.content) : undefined;
+        } catch {
+          output = toolResult?.content;
+        }
         tools.push({
           id: toolCallId,
           name: tc.function?.name || "",
-          done: isDone,
+          done: !!toolResult,
+          input,
+          output,
         });
       }
     }
@@ -136,73 +180,118 @@ export function useAgent(
 ) {
   const messages = ref<ChatMessage[]>([]);
   const running = ref(false);
-  const sessionId = shallowRef("");
+  // Use a fixed sessionId stored in localStorage, independent of workspaceId
+  const getOrCreateSessionId = () => {
+    const stored = localStorage.getItem('agent_session_id');
+    if (stored) return stored;
+    const newId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem('agent_session_id', newId);
+    return newId;
+  };
+  const sessionId = shallowRef(getOrCreateSessionId());
 
   // refId -> leafer node, so update_node / generation_started can find nodes
   const nodeMap = new Map<string, any>();
   const nodeStates = ref<Record<string, NodeState>>({});
   let abort: AbortController | null = null;
+  let localRefSeq = 1;
+
+  const ensureNodeRefId = (node: any) => {
+    if (!node) return "";
+    if (!node.refId) {
+      const tag = String(node.__tag || node.tag || "node").toLowerCase();
+      node.refId = `${tag}_${Date.now().toString(36)}_${localRefSeq++}`;
+    }
+    return node.refId;
+  };
+
+  const trackNode = (node: any) => {
+    const refId = ensureNodeRefId(node);
+    if (!refId) return;
+    nodeMap.set(refId, node);
+    const tag = node.tag || node.__tag;
+    if (tag === "Image") {
+      nodeStates.value[refId] = {
+        refId,
+        type: "image",
+        status: "done",
+        url: node.url,
+      };
+    } else if (tag === "VideoNode") {
+      nodeStates.value[refId] = {
+        refId,
+        type: "video",
+        status: "done",
+        url: node.videoUrl,
+        thumbnailUrl: node.thumbnailUrl,
+      };
+    } else if (tag === "ImageGen") {
+      nodeStates.value[refId] = {
+        refId,
+        type: "image",
+        status: node.generationStatus === "error" ? "error" : "generating",
+        error: node.errorMessage,
+      };
+    } else if (tag === "VideoGen") {
+      nodeStates.value[refId] = {
+        refId,
+        type: "video",
+        status: node.generationStatus === "error" ? "error" : "generating",
+        error: node.errorMessage,
+      };
+    }
+  };
 
   const scanTreeAndPopulateNodeMap = (node: any) => {
-    if (node && node.refId) {
-      nodeMap.set(node.refId, node);
-      const tag = node.tag || node.__tag;
-      if (tag === "Image") {
-        nodeStates.value[node.refId] = {
-          refId: node.refId,
-          type: "image",
-          status: "done",
-          url: node.url,
-        };
-      } else if (tag === "VideoNode") {
-        nodeStates.value[node.refId] = {
-          refId: node.refId,
-          type: "video",
-          status: "done",
-          url: node.videoUrl,
-          thumbnailUrl: node.thumbnailUrl,
-        };
-      }
-    }
+    trackNode(node);
     if (node.children) {
       node.children.forEach(scanTreeAndPopulateNodeMap);
     }
   };
 
-  // Watch active workspace ID to reload history and sessionId
-  watch(
-    () => activeWorkspaceIdRef?.value,
-    async (newId) => {
-      if (newId) {
-        sessionId.value = String(newId);
-        messages.value = [];
-        nodeMap.clear();
-        nodeStates.value = {};
-
-        // Sync nodeMap with current tree
-        const app = canvasApp.value;
-        if (app?.tree?.children) {
-          app.tree.children.forEach(scanTreeAndPopulateNodeMap);
-        }
-
-        try {
-          const res = await fetch(`${AGENT_BASE_URL}/agent/${sessionId.value}/history`);
-          if (res.ok) {
-            const rawHistory = await res.json();
-            if (Array.isArray(rawHistory)) {
-              const parsed: ChatMessage[] = [];
-              rawHistory.forEach((msg, idx) => {
-                const parsedMsg = parseHistoryMessage(msg, idx, rawHistory);
-                if (parsedMsg) {
-                  parsed.push(parsedMsg);
+  // Load history once on mount
+  const loadHistory = async () => {
+    try {
+      const rawHistory = await getAgentHistory(sessionId.value);
+      if (Array.isArray(rawHistory)) {
+        const parsed: ChatMessage[] = [];
+        rawHistory.forEach((msg, idx) => {
+          const parsedMsg = parseHistoryMessage(msg, idx, rawHistory);
+          if (parsedMsg) {
+            if (parsedMsg.role === "assistant" && parsed.length > 0 && parsed[parsed.length - 1].role === "assistant") {
+              const last = parsed[parsed.length - 1];
+              if (parsedMsg.text) {
+                if (last.text) {
+                  last.text += "\n\n" + parsedMsg.text;
+                } else {
+                  last.text = parsedMsg.text;
                 }
-              });
-              messages.value = parsed;
+              }
+              if (parsedMsg.tools && parsedMsg.tools.length > 0) {
+                last.tools.push(...parsedMsg.tools);
+              }
+            } else {
+              parsed.push(parsedMsg);
             }
           }
-        } catch (err) {
-          console.error("Failed to load agent chat history:", err);
-        }
+        });
+        messages.value = parsed;
+      }
+    } catch (err) {
+      console.error("Failed to load agent chat history:", err);
+    }
+  };
+  loadHistory();
+
+  // Sync nodeMap when workspace changes
+  watch(
+    () => activeWorkspaceIdRef?.value,
+    () => {
+      const app = canvasApp.value;
+      if (app?.tree?.children) {
+        nodeMap.clear();
+        nodeStates.value = {};
+        app.tree.children.forEach(scanTreeAndPopulateNodeMap);
       }
     },
     { immediate: true },
@@ -215,26 +304,7 @@ export function useAgent(
       if (app?.tree) {
         app.tree.on("child.add", (e: any) => {
           const child = e.child;
-          if (child && child.refId) {
-            nodeMap.set(child.refId, child);
-            const tag = child.tag || child.__tag;
-            if (tag === "Image") {
-              nodeStates.value[child.refId] = {
-                refId: child.refId,
-                type: "image",
-                status: "done",
-                url: child.url,
-              };
-            } else if (tag === "VideoNode") {
-              nodeStates.value[child.refId] = {
-                refId: child.refId,
-                type: "video",
-                status: "done",
-                url: child.videoUrl,
-                thumbnailUrl: child.thumbnailUrl,
-              };
-            }
-          }
+          trackNode(child);
         });
       }
     },
@@ -273,6 +343,38 @@ export function useAgent(
     });
   }
 
+  function normalizeFill(value: any) {
+    if (value && typeof value === "object" && "from" in value && "to" in value) {
+      return {
+        type: "linear",
+        from: { type: "percent", x: 0, y: 0 },
+        to: { type: "percent", x: 1, y: 1 },
+        stops: [value.from, value.to],
+      };
+    }
+    return value;
+  }
+
+  function buildNodePatch(rawPatch: Record<string, any>) {
+    const patch: Record<string, any> = { ...rawPatch };
+    delete patch.refId;
+    delete patch.type;
+    const gradient = patch.gradient;
+    delete patch.gradient;
+    if (gradient) {
+      patch.fill = normalizeFill(gradient);
+    } else if (patch.fill !== undefined) {
+      patch.fill = normalizeFill(patch.fill);
+    }
+    return patch;
+  }
+
+  function findAgentFrame() {
+    const app = canvasApp.value;
+    if (!app?.tree?.children) return null;
+    return Array.from(app.tree.children).find((child: any) => child.refId === "agent_frame");
+  }
+
   /** Map one CanvasOp onto the leafer canvas. */
   function applyCanvasOp(op: CanvasOp) {
     const app = canvasApp.value;
@@ -280,8 +382,25 @@ export function useAgent(
 
     switch (op.op) {
       case "set_frame": {
-        // we don't force an artboard; just remember intent for placement.
-        // (Your canvas is infinite; a Frame node could be added here if desired.)
+        const existing = findAgentFrame() as any;
+        const frameData = {
+          x: existing?.x ?? 0,
+          y: existing?.y ?? 0,
+          width: op.width,
+          height: op.height,
+          fill: op.background ?? existing?.fill ?? "#ffffff",
+          editable: true,
+        };
+        if (existing) {
+          existing.set(frameData);
+          trackNode(existing);
+        } else {
+          const frame = new Frame(frameData);
+          (frame as any).refId = "agent_frame";
+          app.tree.addAt(frame, 0);
+          trackNode(frame);
+        }
+        recordHistory?.();
         break;
       }
 
@@ -297,10 +416,13 @@ export function useAgent(
             width: n.width ?? 400,
             height: n.height ?? 400,
             prompt: n.prompt ?? "",
+            model: n.model,
             size: n.size,
+            quality: n.quality,
             aspectRatio: n.aspectRatio,
             generationStatus: "generating", // placeholder shows spinner immediately
             editable: true,
+            images: (n as any).images || [],
           });
           nodeStates.value[n.refId] = {
             refId: n.refId,
@@ -324,9 +446,12 @@ export function useAgent(
             width: n.width ?? 480,
             height: n.height ?? 270,
             prompt: n.prompt ?? "",
+            model: n.model,
+            seconds: n.seconds,
             size: n.size,
             generationStatus: "generating",
             editable: true,
+            inputReference: (n as any).inputReference || "",
           });
           nodeStates.value[n.refId] = {
             refId: n.refId,
@@ -351,7 +476,12 @@ export function useAgent(
             text: n.text ?? "",
             fontSize: n.fontSize ?? 32,
             fontFamily: n.fontFamily,
-            fill: n.fill ?? "#111111",
+            fill: normalizeFill(n.fill ?? "#111111"),
+            fontWeight: n.fontWeight,
+            textAlign: n.textAlign,
+            lineHeight: n.lineHeight,
+            letterSpacing: n.letterSpacing,
+            opacity: n.opacity,
             editable: true,
           });
           nodeStates.value[n.refId] = {
@@ -365,7 +495,8 @@ export function useAgent(
             y,
             width: n.width ?? 200,
             height: n.height ?? 200,
-            fill: n.fill ?? "#cccccc",
+            fill: n.gradient ? normalizeFill(n.gradient) : normalizeFill(n.fill ?? "#cccccc"),
+            opacity: n.opacity,
             cornerRadius: n.cornerRadius,
             stroke: n.stroke,
             strokeWidth: n.strokeWidth,
@@ -376,12 +507,53 @@ export function useAgent(
             type: "rect",
             status: "done",
           };
+        } else if (n.type === "frame") {
+          leaferNode = new Frame({
+            x,
+            y,
+            width: n.width ?? 800,
+            height: n.height ?? 600,
+            fill: n.fill ?? "#ffffff",
+            flow: (n as any).flow,
+            flowAlign: (n as any).flowAlign,
+            flowWrap: (n as any).flowWrap,
+            gap: (n as any).gap,
+            padding: (n as any).padding,
+            editable: true,
+          });
+          nodeStates.value[n.refId] = {
+            refId: n.refId,
+            type: "frame",
+            status: "done",
+          };
         }
 
         if (leaferNode) {
           (leaferNode as any).refId = n.refId;
-          nodeMap.set(n.refId, leaferNode);
-          app.tree.add(leaferNode);
+          trackNode(leaferNode);
+
+          let parent: any = null;
+          if (n.parentId) {
+            parent = nodeMap.get(n.parentId);
+            // 如果 agent 明确指定了 parentId 但没找到，回退到 agent_frame
+            if (!parent) {
+              parent = findAgentFrame();
+            }
+          }
+          // 如果 agent 没有传 parentId，表示想放在根画布，不要自动查找 frame
+
+          if (parent) {
+            parent.add(leaferNode);
+          } else {
+            app.tree.add(leaferNode);
+          }
+
+          if (n.type === "image_gen" || n.type === "video_gen" || n.type === "frame") {
+            setTimeout(() => {
+              zoomToNode(n.refId);
+            }, 100);
+          }
+
           recordHistory?.();
         }
         break;
@@ -395,6 +567,14 @@ export function useAgent(
         if (node) {
           node.set({ taskId: op.taskId, generationStatus: "generating" });
           node.emit("task-start", { bubbles: true });
+
+          // 监听生成完成事件，自动触发布局检查
+          node.once("generation-complete", () => {
+            setTimeout(() => {
+              // 自动发送一条"检查并调整布局"的消息
+              send("检查布局并调整", []);
+            }, 1000); // 延迟1秒确保状态已更新
+          });
         }
         if (nodeStates.value[op.refId]) {
           nodeStates.value[op.refId].status = "generating";
@@ -411,8 +591,9 @@ export function useAgent(
       case "update_node": {
         const node = nodeMap.get(op.refId);
         if (node) {
-          const { refId, type, ...patch } = op.patch as any;
+          const patch = buildNodePatch((op.patch ?? {}) as any);
           node.set(patch);
+          trackNode(node);
           recordHistory?.();
         }
         break;
@@ -428,6 +609,42 @@ export function useAgent(
         }
         break;
       }
+
+      case "focus_node": {
+        zoomToNode(op.refId);
+        break;
+      }
+
+      case "export_node": {
+        const node = nodeMap.get(op.refId);
+        if (node) {
+          if (typeof node.export === "function") {
+            node.export("png").then((res: any) => {
+              if (res && res.data) {
+                fetch(`${AGENT_BASE_URL}/agent/export-result`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    requestId: op.requestId,
+                    imageBase64: res.data,
+                  }),
+                }).catch((err) => {
+                  console.error("Failed to upload export-result:", err);
+                });
+              } else {
+                console.error("Node export returned empty data:", res);
+              }
+            }).catch((err: any) => {
+              console.error("Failed to export node:", err);
+            });
+          } else {
+            console.error("Node export is not a function", node);
+          }
+        } else {
+          console.error("export_node node not found for refId:", op.refId);
+        }
+        break;
+      }
     }
   }
 
@@ -438,11 +655,19 @@ export function useAgent(
         assistant.text += ev.text;
         break;
       case "tool_call":
-        assistant.tools.push({ id: ev.id, name: ev.tool, done: false });
+        assistant.tools.push({
+          id: ev.id,
+          name: ev.tool,
+          done: false,
+          input: ev.input,
+        });
         break;
       case "tool_result": {
         const chip = assistant.tools.find((t) => t.id === ev.id);
-        if (chip) chip.done = true;
+        if (chip) {
+          chip.done = true;
+          chip.output = ev.output;
+        }
         break;
       }
       case "canvas_op":
@@ -450,10 +675,12 @@ export function useAgent(
         break;
       case "final":
         // backend sends the full final text; prefer it if we streamed nothing
-        if (!assistant.text.trim()) assistant.text = ev.text ?? "";
+        if (!assistant.text.trim()) assistant.text = stripInternalToolErrors(ev.text ?? "");
         break;
       case "error":
-        assistant.text += `\n\n⚠️ ${ev.message}`;
+        if (!isInternalToolError(ev.message)) {
+          assistant.text += `\n\n⚠️ ${ev.message}`;
+        }
         break;
     }
   }
@@ -461,54 +688,100 @@ export function useAgent(
   /** 序列化当前画布状态，供 Agent 感知画布全貌 */
   function serializeCanvasForAgent(): any[] {
     const app = canvasApp.value;
-    if (!app?.tree?.children) return [];
-    return Array.from(app.tree.children)
-      .filter((child: any) =>
-        child.tag !== "SimulateElement" && child.__tag !== "SimulateElement",
-      )
-      .map((child: any) => {
-        const tag = child.__tag || child.tag;
-        const base: any = {
-          tag,
-          x: child.x,
-          y: child.y,
-          width: child.width,
-          height: child.height,
-        };
-        // 保留 refId 供 Agent 引用
-        if (child.refId) base.refId = child.refId;
-        // 按类型附加关键属性
-        if (tag === "Text") {
-          base.text = child.text;
-          base.fontSize = child.fontSize;
-          base.fontFamily = child.fontFamily;
-          base.fill = child.fill;
-        } else if (tag === "Image") {
-          base.url = child.url;
-        } else if (tag === "ImageGen") {
-          base.prompt = child.prompt;
-          base.generationStatus = child.generationStatus;
-        } else if (tag === "VideoGen") {
-          base.prompt = child.prompt;
-          base.generationStatus = child.generationStatus;
-        } else if (tag === "VideoNode") {
-          base.videoUrl = child.videoUrl;
-          base.thumbnailUrl = child.thumbnailUrl;
-        } else if (tag === "Rect") {
-          base.fill = child.fill;
-          base.cornerRadius = child.cornerRadius;
-          base.stroke = child.stroke;
-        } else if (tag === "Ellipse" || tag === "Polygon" || tag === "Star") {
-          base.fill = child.fill;
-        } else if (tag === "Frame") {
-          base.fill = child.fill;
+    if (!app?.tree) return [];
+    
+    if (app.tree.children) {
+      app.tree.children.forEach(scanTreeAndPopulateNodeMap);
+    }
+
+    const serializedList: any[] = [];
+
+    function serializeNode(node: any, parentNode?: any) {
+      if (!node) return;
+      if (node === app.tree) {
+        if (node.children) {
+          node.children.forEach((child: any) => serializeNode(child, node));
         }
-        if (child.opacity !== undefined && child.opacity !== 1) {
-          base.opacity = child.opacity;
-        }
-        if (child.rotation) base.rotation = child.rotation;
-        return base;
-      });
+        return;
+      }
+
+      const tag = node.__tag || node.tag;
+      if (tag === "SimulateElement") return;
+
+      const base: any = {
+        tag,
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+      };
+      base.refId = ensureNodeRefId(node);
+      
+      if (parentNode && parentNode !== app.tree) {
+        base.parentId = parentNode.refId;
+      }
+
+      // 按类型附加关键属性
+      if (tag === "Text") {
+        base.text = node.text;
+        base.fontSize = node.fontSize;
+        base.fontFamily = node.fontFamily;
+        base.fill = node.fill;
+        base.fontWeight = node.fontWeight;
+        base.textAlign = node.textAlign;
+        base.lineHeight = node.lineHeight;
+        base.letterSpacing = node.letterSpacing;
+      } else if (tag === "Image") {
+        base.url = node.url;
+      } else if (tag === "ImageGen") {
+        base.prompt = node.prompt;
+        base.model = node.model;
+        base.size = node.size;
+        base.quality = node.quality;
+        base.aspectRatio = node.aspectRatio;
+        base.generationStatus = node.generationStatus;
+        base.images = node.images;
+      } else if (tag === "VideoGen") {
+        base.prompt = node.prompt;
+        base.model = node.model;
+        base.seconds = node.seconds;
+        base.size = node.size;
+        base.generationStatus = node.generationStatus;
+        base.inputReference = node.inputReference;
+      } else if (tag === "VideoNode") {
+        base.videoUrl = node.videoUrl;
+        base.thumbnailUrl = node.thumbnailUrl;
+      } else if (tag === "Rect") {
+        base.fill = node.fill;
+        base.cornerRadius = node.cornerRadius;
+        base.stroke = node.stroke;
+      } else if (tag === "Ellipse" || tag === "Polygon" || tag === "Star") {
+        base.fill = node.fill;
+      } else if (tag === "Frame") {
+        base.fill = node.fill;
+        base.flow = node.flow;
+        base.flowAlign = node.flowAlign;
+        base.flowWrap = node.flowWrap;
+        base.gap = node.gap;
+        base.padding = node.padding;
+        base.type = "frame";
+      }
+
+      if (node.opacity !== undefined && node.opacity !== 1) {
+        base.opacity = node.opacity;
+      }
+      if (node.rotation) base.rotation = node.rotation;
+
+      serializedList.push(base);
+
+      const isContainer = tag === "Frame" || tag === "Group";
+      if (isContainer && node.children) {
+        node.children.forEach((child: any) => serializeNode(child, node));
+      }
+    }
+
+    serializeNode(app.tree);
+    return serializedList;
   }
 
   /** Send a message and stream the agent's response. */
@@ -595,6 +868,9 @@ export function useAgent(
 
   function stop() {
     abort?.abort();
+    if (sessionId.value) {
+      stopAgent(sessionId.value).catch(() => {});
+    }
     const assistant = messages.value[messages.value.length - 1];
     if (assistant && assistant.role === "assistant" && assistant.streaming) {
       assistant.streaming = false;
@@ -612,9 +888,7 @@ export function useAgent(
       app.tree.children.forEach(scanTreeAndPopulateNodeMap);
     }
     // best-effort clear server-side history
-    fetch(`${AGENT_BASE_URL}/agent/${sessionId.value}`, {
-      method: "DELETE",
-    }).catch(() => {});
+    deleteAgentSession(sessionId.value).catch(() => {});
   }
 
   function zoomToNode(refId: string) {

@@ -1,6 +1,9 @@
 import { Injectable } from "@nestjs/common";
+import type { OnModuleInit } from "@nestjs/common";
+import { DatabaseService } from "../database/database.service";
 import { join } from "path";
 import type { YunwuApiPurpose, YunwuModel } from "../types";
+import { SYSTEM_PROMPT } from "../agent/system-prompt";
 
 export interface ModelMapping {
   id: string;
@@ -45,12 +48,90 @@ export interface ModelConfigState {
     aspectRatios: string[];
     qualities: string[];
   };
+  agentConfig?: {
+    systemPrompt: string;
+    chatModel: string;
+    visionModel?: string;
+  };
 }
 
 @Injectable()
-export class ModelConfigService {
+export class ModelConfigService implements OnModuleInit {
   private DATA_DIR = join(process.cwd(), "data");
-  private FILE_PATH = join(this.DATA_DIR, "model-config.json");
+  private CONFIG_KEY = "current_config";
+
+  constructor(private readonly dbService: DatabaseService) {}
+
+  private get db() {
+    return this.dbService.db;
+  }
+
+  async onModuleInit() {
+    // Check and run legacy JSON data migration
+    await this.migrateLegacyData();
+  }
+
+  private async migrateLegacyData(): Promise<void> {
+    const { existsSync, renameSync } = require("fs");
+    const configJsonPath = join(this.DATA_DIR, "model-config.json");
+
+    if (existsSync(configJsonPath)) {
+      try {
+        const { readFile } = require("fs/promises");
+        const content = await readFile(configJsonPath, "utf-8");
+        const parsed = JSON.parse(content || "{}");
+
+        if (parsed && (parsed.mappings || parsed.agentConfig)) {
+          // Normalize and prepare mapping structure
+          const mappings = Array.isArray(parsed.mappings)
+            ? parsed.mappings
+                .map((item: any, index: number) => this.normalizeMapping(item, index))
+                .filter(Boolean)
+            : [];
+          const imageConfigs = Array.isArray(parsed.imageConfigs)
+            ? parsed.imageConfigs
+                .map((item: any, index: number) => this.normalizeImageConfig(item, index))
+                .filter(Boolean)
+            : [];
+          const rawDict = parsed.dictionaries;
+          const dictionaries = {
+            sizes: Array.isArray(rawDict?.sizes)
+              ? rawDict.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
+              : ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
+            aspectRatios: Array.isArray(rawDict?.aspectRatios)
+              ? rawDict.aspectRatios.map((s: any) => this.normalizeString(s)).filter(Boolean)
+              : ["1:1", "16:9", "9:16", "4:3", "3:4"],
+            qualities: Array.isArray(rawDict?.qualities)
+              ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
+              : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
+          };
+          const agentConfig = this.normalizeAgentConfig(parsed.agentConfig);
+
+          const state: ModelConfigState = {
+            mappings: mappings as ModelMapping[],
+            imageConfigs: imageConfigs as ImageConfig[],
+            dictionaries,
+            agentConfig,
+          };
+
+          const stmt = this.db.prepare(`
+            INSERT OR REPLACE INTO model_config (key, data)
+            VALUES ($key, $data)
+          `);
+          stmt.run({
+            $key: this.CONFIG_KEY,
+            $data: JSON.stringify(state)
+          });
+          console.log("Successfully migrated model configuration from model-config.json to SQLite database.");
+        }
+
+        // Rename legacy file to .bak extension
+        renameSync(configJsonPath, `${configJsonPath}.bak`);
+      } catch (err) {
+        console.error("Error migrating legacy model config JSON data:", err);
+      }
+    }
+  }
 
   private getDefaultState(): ModelConfigState {
     return {
@@ -60,7 +141,20 @@ export class ModelConfigService {
         sizes: ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
         aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
         qualities: ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
+      },
+      agentConfig: {
+        systemPrompt: SYSTEM_PROMPT,
+        chatModel: "gpt-4o-mini",
+        visionModel: "gpt-4o"
       }
+    };
+  }
+
+  private normalizeAgentConfig(raw: any): { systemPrompt: string; chatModel: string; visionModel?: string } {
+    return {
+      systemPrompt: typeof raw?.systemPrompt === "string" ? raw.systemPrompt : SYSTEM_PROMPT,
+      chatModel: typeof raw?.chatModel === "string" ? raw.chatModel : "gpt-4o-mini",
+      visionModel: typeof raw?.visionModel === "string" ? raw.visionModel : "gpt-4o"
     };
   }
 
@@ -162,18 +256,28 @@ export class ModelConfigService {
     return config;
   }
 
-  private async ensureFileExists(): Promise<void> {
-    const file = Bun.file(this.FILE_PATH);
-    if (!(await file.exists())) {
-      await Bun.write(this.FILE_PATH, JSON.stringify(this.getDefaultState(), null, 2));
-    }
-  }
-
   async getConfig(): Promise<ModelConfigState> {
-    await this.ensureFileExists();
     try {
-      const content = await Bun.file(this.FILE_PATH).text();
-      const parsed = JSON.parse(content || "{}");
+      const query = this.db.query("SELECT data FROM model_config WHERE key = $key");
+      const row = query.get({ $key: this.CONFIG_KEY }) as { data: string } | null;
+      
+      let parsed: any = {};
+      if (row) {
+        parsed = JSON.parse(row.data || "{}");
+      } else {
+        // Seed default config into DB if none exists
+        const defaultState = this.getDefaultState();
+        const stmt = this.db.prepare(`
+          INSERT INTO model_config (key, data)
+          VALUES ($key, $data)
+        `);
+        stmt.run({
+          $key: this.CONFIG_KEY,
+          $data: JSON.stringify(defaultState)
+        });
+        parsed = defaultState;
+      }
+
       const mappings = Array.isArray(parsed.mappings)
         ? parsed.mappings
             .map((item: any, index: number) => this.normalizeMapping(item, index))
@@ -196,48 +300,65 @@ export class ModelConfigService {
           ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
           : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
       };
+      const agentConfig = this.normalizeAgentConfig(parsed.agentConfig);
       return {
         mappings: mappings as ModelMapping[],
         imageConfigs: imageConfigs as ImageConfig[],
         dictionaries,
+        agentConfig,
       };
     } catch (err) {
-      console.error("Failed to read model-config.json:", err);
+      console.error("Failed to query model config from database:", err);
       return this.getDefaultState();
     }
   }
 
   async updateConfig(nextState: any): Promise<ModelConfigState> {
-    const sanitizedMappings = Array.isArray(nextState?.mappings)
-      ? nextState.mappings
-          .map((item: any, index: number) => this.normalizeMapping(item, index))
-          .filter(Boolean)
-      : [];
-    const sanitizedConfigs = Array.isArray(nextState?.imageConfigs)
-      ? nextState.imageConfigs
-          .map((item: any, index: number) => this.normalizeImageConfig(item, index))
-          .filter(Boolean)
-      : [];
-    const rawDict = nextState?.dictionaries;
-    const sanitizedDictionaries = {
-      sizes: Array.isArray(rawDict?.sizes)
-        ? rawDict.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
-        : ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
-      aspectRatios: Array.isArray(rawDict?.aspectRatios)
-        ? rawDict.aspectRatios.map((s: any) => this.normalizeString(s)).filter(Boolean)
-        : ["1:1", "16:9", "9:16", "4:3", "3:4"],
-      qualities: Array.isArray(rawDict?.qualities)
-        ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
-        : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
-    };
-    const state = {
-      mappings: sanitizedMappings as ModelMapping[],
-      imageConfigs: sanitizedConfigs as ImageConfig[],
-      dictionaries: sanitizedDictionaries,
-    };
-    await this.ensureFileExists();
-    await Bun.write(this.FILE_PATH, JSON.stringify(state, null, 2));
-    return state;
+    try {
+      const sanitizedMappings = Array.isArray(nextState?.mappings)
+        ? nextState.mappings
+            .map((item: any, index: number) => this.normalizeMapping(item, index))
+            .filter(Boolean)
+        : [];
+      const sanitizedConfigs = Array.isArray(nextState?.imageConfigs)
+        ? nextState.imageConfigs
+            .map((item: any, index: number) => this.normalizeImageConfig(item, index))
+            .filter(Boolean)
+        : [];
+      const rawDict = nextState?.dictionaries;
+      const sanitizedDictionaries = {
+        sizes: Array.isArray(rawDict?.sizes)
+          ? rawDict.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
+          : ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
+        aspectRatios: Array.isArray(rawDict?.aspectRatios)
+          ? rawDict.aspectRatios.map((s: any) => this.normalizeString(s)).filter(Boolean)
+          : ["1:1", "16:9", "9:16", "4:3", "3:4"],
+        qualities: Array.isArray(rawDict?.qualities)
+          ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
+          : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
+      };
+      const sanitizedAgent = this.normalizeAgentConfig(nextState?.agentConfig);
+      
+      const state = {
+        mappings: sanitizedMappings as ModelMapping[],
+        imageConfigs: sanitizedConfigs as ImageConfig[],
+        dictionaries: sanitizedDictionaries,
+        agentConfig: sanitizedAgent,
+      };
+
+      const stmt = this.db.prepare(`
+        INSERT OR REPLACE INTO model_config (key, data)
+        VALUES ($key, $data)
+      `);
+      stmt.run({
+        $key: this.CONFIG_KEY,
+        $data: JSON.stringify(state)
+      });
+      return state;
+    } catch (err) {
+      console.error("Failed to update model config in database:", err);
+      return this.getDefaultState();
+    }
   }
 
   async getEnabledMappingsByPurpose(purpose: YunwuApiPurpose): Promise<ModelMapping[]> {

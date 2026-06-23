@@ -11,7 +11,7 @@
 /** Protocol version. Bump on breaking changes. */
 export const AGENT_PROTOCOL_VERSION = 2;
 
-export type CanvasNodeType = 'image_gen' | 'video_gen' | 'text' | 'rect';
+export type CanvasNodeType = 'image_gen' | 'video_gen' | 'text' | 'rect' | 'frame';
 
 /** A node the agent asks the canvas to create. */
 export interface CanvasNodeSpec {
@@ -24,6 +24,13 @@ export interface CanvasNodeSpec {
   y?: number;
   width?: number;
   height?: number;
+
+  parentId?: string;
+  flow?: 'x' | 'y';
+  flowAlign?: string;
+  flowWrap?: boolean;
+  gap?: number;
+  padding?: number;
 
   // image_gen / video_gen — drives your ImageGen/VideoGen node + generation
   prompt?: string;
@@ -65,13 +72,13 @@ export type CanvasOp =
   | { op: 'remove_node'; refId: string }
   | { op: 'set_frame'; width: number; height: number; background?: string }
   | {
-      // generation finished server-side: carries the taskId the frontend can
-      // poll via the EXISTING getTaskStatus pipeline, OR a direct url.
       op: 'generation_started';
       refId: string;
       kind: 'image' | 'video';
       taskId: string;
-    };
+    }
+  | { op: 'focus_node'; refId: string }
+  | { op: 'export_node'; refId: string; requestId: string };
 
 /** Unified SSE event stream sent to the frontend. */
 export type AgentEvent =

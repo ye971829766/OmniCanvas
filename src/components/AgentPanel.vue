@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { ref, watch, computed, onUnmounted, onMounted, type Ref, toRef } from "vue";
+import {
+  ref,
+  watch,
+  computed,
+  onUnmounted,
+  onMounted,
+  type Ref,
+  toRef,
+} from "vue";
 import { Sparkles } from "lucide-vue-next";
 import { useAgent } from "@/composables/useAgent";
 import { Button } from "primevue";
@@ -27,7 +35,11 @@ watch(
 );
 
 const { messages, running, send, stop, reset, nodeStates, zoomToNode } =
-  useAgent(canvasAppRef as any, props.recordHistory, toRef(props, "workspaceId"));
+  useAgent(
+    canvasAppRef as any,
+    props.recordHistory,
+    toRef(props, "workspaceId"),
+  );
 
 const collapsed = computed({
   get: () => props.collapsed,
@@ -227,6 +239,8 @@ function useSuggestion(s: string) {
         <!-- Floating Scroll-to-bottom Button -->
         <Transition name="fade">
           <Button
+            severity="secondary"
+            raised
             v-if="userScrolledUp"
             class="scroll-to-bottom-btn"
             @click="scrollToBottomForce"

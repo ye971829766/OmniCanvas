@@ -4,31 +4,29 @@ import { useRoute, useRouter } from "vue-router";
 import Canvas from "../components/Canvas.vue";
 import Sidebar from "../components/sidebar.vue";
 import AgentPanel from "../components/AgentPanel.vue";
+import { getWorkspaces } from "@/utils/api";
 
 const route = useRoute();
 const router = useRouter();
 
 const canvasRef = ref<any>(null);
-const agentPanelCollapsed = ref(false); // starts open
+const agentPanelCollapsed = ref(false);
 const activeWorkspaceId = ref<string | number | null>(null);
 const workspaces = ref<any[]>([]);
 
 const validateAndSetWorkspace = async () => {
   const queryId = route.query.projectId;
   try {
-    const res = await fetch("http://localhost:3000/workspaces");
-    if (res.ok) {
-      workspaces.value = await res.json();
-      if (queryId) {
-        const exists = workspaces.value.some(w => String(w.id) === String(queryId));
-        if (exists) {
-          activeWorkspaceId.value = String(queryId);
-        } else {
-          activeWorkspaceId.value = workspaces.value.length > 0 ? workspaces.value[0].id : null;
-        }
+    workspaces.value = await getWorkspaces();
+    if (queryId) {
+      const exists = workspaces.value.some(w => String(w.id) === String(queryId));
+      if (exists) {
+        activeWorkspaceId.value = String(queryId);
       } else {
         activeWorkspaceId.value = workspaces.value.length > 0 ? workspaces.value[0].id : null;
       }
+    } else {
+      activeWorkspaceId.value = workspaces.value.length > 0 ? workspaces.value[0].id : null;
     }
   } catch (err) {
     console.error("Failed to validate workspace ID:", err);

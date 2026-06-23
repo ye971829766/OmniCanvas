@@ -1,5 +1,7 @@
 import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
+import type { OnModuleInit } from "@nestjs/common";
 import { join } from "path";
+import { DatabaseService } from "../database/database.service";
 
 export interface WorkspaceMetadata {
   id: string;
@@ -9,170 +11,198 @@ export interface WorkspaceMetadata {
 }
 
 @Injectable()
-export class WorkspacesService {
+export class WorkspacesService implements OnModuleInit {
   private DATA_DIR = join(process.cwd(), "data");
-  private LIST_PATH = join(this.DATA_DIR, "workspaces.json");
 
-  private async ensureDataExists(): Promise<void> {
-    const listFile = Bun.file(this.LIST_PATH);
-    let exists = await listFile.exists();
-    let resetSeeding = false;
+  constructor(private readonly dbService: DatabaseService) {}
 
-    if (exists) {
+  private get db() {
+    return this.dbService.db;
+  }
+
+  async onModuleInit() {
+    // Check and run legacy JSON data migration
+    await this.migrateLegacyData();
+  }
+
+  private async migrateLegacyData(): Promise<void> {
+    const { existsSync, renameSync } = require("fs");
+    const workspacesJsonPath = join(this.DATA_DIR, "workspaces.json");
+
+    if (existsSync(workspacesJsonPath)) {
       try {
-        const content = await listFile.text();
-        const list = JSON.parse(content);
-        if (Array.isArray(list) && list.some((ws: any) => ws.id === "1")) {
-          resetSeeding = true;
+        const { readFile } = require("fs/promises");
+        const content = await readFile(workspacesJsonPath, "utf-8");
+        const list = JSON.parse(content || "[]");
+
+        if (Array.isArray(list)) {
+          const insertStmt = this.db.prepare(`
+            INSERT OR IGNORE INTO workspaces (id, name, canvasData, createdAt, updatedAt)
+            VALUES ($id, $name, $canvasData, $createdAt, $updatedAt)
+          `);
+
+          // Execute as a single transaction for efficiency and safety
+          const transaction = this.db.transaction((workspacesList: WorkspaceMetadata[]) => {
+            for (const ws of workspacesList) {
+              const canvasPath = join(this.DATA_DIR, `canvas_${ws.id}.json`);
+              let canvasData = "[]";
+              if (existsSync(canvasPath)) {
+                try {
+                  const canvasContent = require("fs").readFileSync(canvasPath, "utf-8");
+                  canvasData = JSON.stringify(JSON.parse(canvasContent || "[]"));
+                } catch (err) {
+                  console.error(`Failed to read legacy canvas for workspace ${ws.id}:`, err);
+                }
+              }
+
+              insertStmt.run({
+                $id: ws.id,
+                $name: ws.name,
+                $canvasData: canvasData,
+                $createdAt: ws.createdAt,
+                $updatedAt: ws.updatedAt
+              });
+            }
+          });
+
+          transaction(list);
+          console.log(`Successfully migrated ${list.length} workspaces from JSON files to SQLite database.`);
+        }
+
+        // Backup and rename legacy workspaces JSON file
+        renameSync(workspacesJsonPath, `${workspacesJsonPath}.bak`);
+
+        // Backup and rename legacy canvas JSON files
+        for (const ws of list) {
+          const canvasPath = join(this.DATA_DIR, `canvas_${ws.id}.json`);
+          if (existsSync(canvasPath)) {
+            try {
+              renameSync(canvasPath, `${canvasPath}.bak`);
+            } catch (err) {
+              console.warn(`Failed to rename legacy canvas file ${canvasPath}:`, err);
+            }
+          }
         }
       } catch (err) {
-        resetSeeding = true;
-      }
-    }
-
-    if (!exists || resetSeeding) {
-      // If we are resetting, try to clean up old legacy files
-      if (resetSeeding) {
-        const { unlink } = require("fs/promises");
-        for (const id of ["1", "2", "3", "4", "5"]) {
-          const path = join(this.DATA_DIR, `canvas_${id}.json`);
-          try {
-            await unlink(path);
-          } catch {}
-        }
-      }
-
-      // Seed default workspaces with 32-character hex UUIDs
-      const defaultWorkspaces: WorkspaceMetadata[] = [];
-
-      const { mkdir } = require("fs/promises");
-      await mkdir(this.DATA_DIR, { recursive: true });
-      await Bun.write(
-        this.LIST_PATH,
-        JSON.stringify(defaultWorkspaces, null, 2),
-      );
-
-      // Seed canvas files for default workspaces with a default ImageGen node
-      for (const ws of defaultWorkspaces) {
-        const canvasPath = join(this.DATA_DIR, `canvas_${ws.id}.json`);
-        const defaultCanvas = [
-          {
-            tag: "ImageGen",
-            x: 300,
-            y: 200,
-            width: 400,
-            height: 300,
-            editable: true,
-          },
-        ];
-        await Bun.write(canvasPath, JSON.stringify(defaultCanvas, null, 2));
+        console.error("Error migrating legacy workspaces JSON data:", err);
       }
     }
   }
 
   async getAll(): Promise<WorkspaceMetadata[]> {
-    await this.ensureDataExists();
     try {
-      const content = await Bun.file(this.LIST_PATH).text();
-      // 按时间倒序排序
-      const list = JSON.parse(content || "[]");
-      list.sort((a: WorkspaceMetadata, b: WorkspaceMetadata) => {
-        return (
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        );
-      });
-      return list;
+      const query = this.db.query(`
+        SELECT id, name, createdAt, updatedAt FROM workspaces 
+        ORDER BY updatedAt DESC
+      `);
+      return query.all() as WorkspaceMetadata[];
     } catch (err) {
-      console.error("Failed to read workspaces.json:", err);
+      console.error("Failed to query workspaces from database:", err);
       return [];
     }
-  }
-
-  private async saveList(list: WorkspaceMetadata[]): Promise<void> {
-    await this.ensureDataExists();
-    await Bun.write(this.LIST_PATH, JSON.stringify(list, null, 2));
   }
 
   async getCanvas(id: string): Promise<any[]> {
-    await this.ensureDataExists();
-    const canvasPath = join(this.DATA_DIR, `canvas_${id}.json`);
-    const file = Bun.file(canvasPath);
-    const exists = await file.exists();
-    if (!exists) {
-      return [];
-    }
     try {
-      const content = await file.text();
-      return JSON.parse(content || "[]");
+      const query = this.db.query("SELECT canvasData FROM workspaces WHERE id = $id");
+      const row = query.get({ $id: id }) as { canvasData: string } | null;
+      if (!row) {
+        return [];
+      }
+      return JSON.parse(row.canvasData);
     } catch (err) {
-      console.error(`Failed to read canvas file for workspace ${id}:`, err);
+      console.error(`Failed to read canvas from database for workspace ${id}:`, err);
       return [];
     }
   }
 
   async updateCanvas(id: string, canvasData: any[]): Promise<void> {
-    await this.ensureDataExists();
-    const canvasPath = join(this.DATA_DIR, `canvas_${id}.json`);
-    await Bun.write(canvasPath, JSON.stringify(canvasData, null, 2));
-
-    // Update updatedAt timestamp
-    const list = await this.getAll();
-    const index = list.findIndex((ws) => ws.id === id);
-    if (index !== -1) {
-      list[index]!.updatedAt = new Date().toISOString();
-      await this.saveList(list);
+    try {
+      const now = new Date().toISOString();
+      const stmt = this.db.prepare(`
+        UPDATE workspaces 
+        SET canvasData = $canvasData, updatedAt = $updatedAt 
+        WHERE id = $id
+      `);
+      stmt.run({
+        $id: id,
+        $canvasData: JSON.stringify(canvasData),
+        $updatedAt: now
+      });
+    } catch (err) {
+      console.error(`Failed to update canvas in database for workspace ${id}:`, err);
+      throw new HttpException("Failed to update canvas", HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   async create(name: string): Promise<WorkspaceMetadata> {
-    const list = await this.getAll();
-    const id = crypto.randomUUID().replace(/-/g, "");
-    const newWs: WorkspaceMetadata = {
-      id,
-      name,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    list.push(newWs);
-    await this.saveList(list);
+    try {
+      const id = crypto.randomUUID().replace(/-/g, "");
+      const now = new Date().toISOString();
+      const newWs: WorkspaceMetadata = {
+        id,
+        name,
+        createdAt: now,
+        updatedAt: now,
+      };
 
-    // Create empty canvas file
-    const canvasPath = join(this.DATA_DIR, `canvas_${id}.json`);
-    await Bun.write(canvasPath, JSON.stringify([], null, 2));
+      const stmt = this.db.prepare(`
+        INSERT INTO workspaces (id, name, canvasData, createdAt, updatedAt)
+        VALUES ($id, $name, $canvasData, $createdAt, $updatedAt)
+      `);
+      stmt.run({
+        $id: id,
+        $name: name,
+        $canvasData: "[]",
+        $createdAt: now,
+        $updatedAt: now
+      });
 
-    return newWs;
+      return newWs;
+    } catch (err) {
+      console.error("Failed to create workspace in database:", err);
+      throw new HttpException("Failed to create workspace", HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   async updateMetadata(id: string, name: string): Promise<WorkspaceMetadata> {
-    const list = await this.getAll();
-    const index = list.findIndex((ws) => ws.id === id);
-    if (index === -1) {
-      throw new HttpException("Workspace not found", HttpStatus.NOT_FOUND);
+    try {
+      const now = new Date().toISOString();
+      const stmt = this.db.prepare(`
+        UPDATE workspaces 
+        SET name = $name, updatedAt = $updatedAt 
+        WHERE id = $id
+      `);
+      const info = stmt.run({
+        $id: id,
+        $name: name,
+        $updatedAt: now
+      });
+
+      if (info.changes === 0) {
+        throw new HttpException("Workspace not found", HttpStatus.NOT_FOUND);
+      }
+
+      const getStmt = this.db.query("SELECT id, name, createdAt, updatedAt FROM workspaces WHERE id = $id");
+      return getStmt.get({ $id: id }) as WorkspaceMetadata;
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      console.error(`Failed to update workspace metadata in database for workspace ${id}:`, err);
+      throw new HttpException("Failed to update workspace metadata", HttpStatus.INTERNAL_SERVER_ERROR);
     }
-    list[index]!.name = name;
-    list[index]!.updatedAt = new Date().toISOString();
-    await this.saveList(list);
-    return list[index]!;
   }
 
   async delete(id: string): Promise<void> {
-    const list = await this.getAll();
-    const filtered = list.filter((ws) => ws.id !== id);
-    if (filtered.length === list.length) {
-      throw new HttpException("Workspace not found", HttpStatus.NOT_FOUND);
-    }
-    await this.saveList(filtered);
-
-    // Delete canvas file
-    const canvasPath = join(this.DATA_DIR, `canvas_${id}.json`);
-    const file = Bun.file(canvasPath);
-    if (await file.exists()) {
-      const { unlink } = require("fs/promises");
-      try {
-        await unlink(canvasPath);
-      } catch (err) {
-        console.warn(`Failed to delete canvas file ${canvasPath}:`, err);
+    try {
+      const stmt = this.db.prepare("DELETE FROM workspaces WHERE id = $id");
+      const info = stmt.run({ $id: id });
+      if (info.changes === 0) {
+        throw new HttpException("Workspace not found", HttpStatus.NOT_FOUND);
       }
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      console.error(`Failed to delete workspace from database: ${id}`, err);
+      throw new HttpException("Failed to delete workspace", HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 }

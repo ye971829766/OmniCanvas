@@ -29,9 +29,10 @@
             无图层元素
           </div>
           <div
-            v-for="(layer, index) in layersList"
+            v-for="layer in layersList"
             :key="layer.innerId"
             :class="['layer-item', { active: selectedId === layer.innerId }]"
+            :style="{ paddingLeft: (layer.depth * 14 + 10) + 'px' }"
             @click="selectLayerOnCanvas(layer)"
             @dblclick="focusElementOnCanvas(layer)"
           >
@@ -39,7 +40,7 @@
             <div class="layer-actions-left">
               <button
                 class="reorder-btn"
-                :disabled="index === 0"
+                :disabled="!canMoveUp(layer)"
                 title="上移一层"
                 @click.stop="moveLayerUp(layer)"
               >
@@ -47,13 +48,24 @@
               </button>
               <button
                 class="reorder-btn"
-                :disabled="index === layersList.length - 1"
+                :disabled="!canMoveDown(layer)"
                 title="下移一层"
                 @click.stop="moveLayerDown(layer)"
               >
                 <ChevronDown :size="12" />
               </button>
             </div>
+
+            <!-- Collapse Toggle for Containers -->
+            <span
+              v-if="layer.hasChildren"
+              class="collapse-toggle-btn"
+              @click.stop="toggleCollapse(layer)"
+            >
+              <ChevronDown v-if="!isCollapsed(layer)" :size="12" />
+              <ChevronRight v-else :size="12" />
+            </span>
+            <span v-else class="collapse-spacer"></span>
 
             <!-- Element Type Icon -->
             <div class="layer-type-icon">
@@ -141,6 +153,7 @@ import {
   Trash2,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   Boxes,
 } from "lucide-vue-next";
 
@@ -163,6 +176,7 @@ const props = defineProps({
 const popoverRef = ref();
 const layersList = ref<any[]>([]);
 const selectedId = ref<number | null>(null);
+const collapsedStates = ref<Record<number, boolean>>({});
 
 const renamingId = ref<number | null>(null);
 const renameValue = ref("");
@@ -171,15 +185,20 @@ const togglePopover = (event: Event) => {
   popoverRef.value?.toggle(event);
 };
 
+const getRawNode = (layer: any) => {
+  return toRaw(layer?.node || layer);
+};
+
 // Layer names and icons getters
 const getLayerName = (layer: any) => {
-  if (layer.name) return layer.name;
-  switch (layer.tag || layer.__tag) {
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer) return "";
+  if (rawLayer.name) return rawLayer.name;
+  switch (rawLayer.tag || rawLayer.__tag) {
     case "Rect":
       return "矩形元素";
     case "VideoNode":
       return "视频元素";
-
     case "Text":
       return "文本元素";
     case "Frame":
@@ -193,17 +212,18 @@ const getLayerName = (layer: any) => {
     case "Group":
       return "编组容器";
     default:
-      return `${layer.tag || "未命名图层"}`;
+      return `${rawLayer.tag || "未命名图层"}`;
   }
 };
 
 const getLayerIcon = (layer: any) => {
-  switch (layer.tag || layer.__tag) {
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer) return Square;
+  switch (rawLayer.tag || rawLayer.__tag) {
     case "Rect":
       return Square;
     case "VideoNode":
       return Video;
-
     case "Text":
       return Type;
     case "Frame":
@@ -221,10 +241,29 @@ const getLayerIcon = (layer: any) => {
   }
 };
 
+// Reorder layer checks
+const canMoveUp = (layer: any) => {
+  const rawLayer = getRawNode(layer);
+  const parent = rawLayer?.parent;
+  if (!parent) return false;
+  const children = parent.children;
+  const idx = children.indexOf(rawLayer);
+  return idx < children.length - 1;
+};
+
+const canMoveDown = (layer: any) => {
+  const rawLayer = getRawNode(layer);
+  const parent = rawLayer?.parent;
+  if (!parent) return false;
+  const children = parent.children;
+  const idx = children.indexOf(rawLayer);
+  return idx > 0;
+};
+
 // Reorder layers
 const moveLayerUp = (layer: any) => {
   if (!props.canvasApp) return;
-  const rawLayer = toRaw(layer);
+  const rawLayer = getRawNode(layer);
   const parent = rawLayer.parent;
   if (!parent) return;
 
@@ -245,7 +284,7 @@ const moveLayerUp = (layer: any) => {
 
 const moveLayerDown = (layer: any) => {
   if (!props.canvasApp) return;
-  const rawLayer = toRaw(layer);
+  const rawLayer = getRawNode(layer);
   const parent = rawLayer.parent;
   if (!parent) return;
 
@@ -264,9 +303,32 @@ const moveLayerDown = (layer: any) => {
   }
 };
 
+const toggleCollapse = (layer: any) => {
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer) return;
+  collapsedStates.value[rawLayer.innerId] = !collapsedStates.value[rawLayer.innerId];
+  updateLayers();
+};
+
+const isCollapsed = (layer: any) => {
+  const rawLayer = getRawNode(layer);
+  return rawLayer ? !!collapsedStates.value[rawLayer.innerId] : false;
+};
+
+const expandAncestors = (node: any) => {
+  const app = props.canvasApp;
+  if (!app?.tree) return;
+  let current = node?.parent;
+  while (current && current !== app.tree) {
+    collapsedStates.value[current.innerId] = false;
+    current = current.parent;
+  }
+};
+
 // Visibility, lock, and delete operations
 const toggleLayerVisibility = (layer: any) => {
-  const rawLayer = toRaw(layer);
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer) return;
   rawLayer.visible = rawLayer.visible === false ? true : false;
   if (rawLayer.visible === false && props.canvasApp?.editor.hasItem(rawLayer)) {
     props.canvasApp.editor.cancel();
@@ -276,7 +338,8 @@ const toggleLayerVisibility = (layer: any) => {
 };
 
 const toggleLayerLock = (layer: any) => {
-  const rawLayer = toRaw(layer);
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer) return;
   rawLayer.locked = !rawLayer.locked;
   if (rawLayer.locked && props.canvasApp?.editor.hasItem(rawLayer)) {
     props.canvasApp.editor.cancel();
@@ -286,7 +349,8 @@ const toggleLayerLock = (layer: any) => {
 };
 
 const deleteLayer = (layer: any) => {
-  const rawLayer = toRaw(layer);
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer) return;
   if (
     (rawLayer.tag === "VideoNode" || rawLayer.__tag === "VideoNode") &&
     typeof rawLayer.removeVideoLayer === "function"
@@ -303,7 +367,8 @@ const deleteLayer = (layer: any) => {
 
 // Selection tracking
 const selectLayerOnCanvas = (layer: any) => {
-  const rawLayer = toRaw(layer);
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer) return;
   if (props.canvasApp && props.canvasApp.editor) {
     if (rawLayer.visible !== false) {
       props.canvasApp.editor.select(rawLayer);
@@ -315,7 +380,8 @@ const selectLayerOnCanvas = (layer: any) => {
 let focusTimeoutId: any = null;
 
 const focusElementOnCanvas = (layer: any) => {
-  const rawLayer = toRaw(layer);
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer) return;
   if (props.canvasApp && props.canvasApp.tree) {
     if (focusTimeoutId) {
       clearTimeout(focusTimeoutId);
@@ -338,7 +404,8 @@ const focusElementOnCanvas = (layer: any) => {
 
 // Renaming
 const startRename = (layer: any) => {
-  const rawLayer = toRaw(layer);
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer) return;
   renamingId.value = rawLayer.innerId;
   renameValue.value = getLayerName(rawLayer);
   nextTick(() => {
@@ -351,8 +418,8 @@ const startRename = (layer: any) => {
 };
 
 const finishRename = (layer: any) => {
-  const rawLayer = toRaw(layer);
-  if (renamingId.value !== rawLayer.innerId) return;
+  const rawLayer = getRawNode(layer);
+  if (!rawLayer || renamingId.value !== rawLayer.innerId) return;
   const newName = renameValue.value.trim();
   if (newName) {
     rawLayer.name = newName;
@@ -369,14 +436,66 @@ const cancelRename = () => {
 const updateLayers = () => {
   const app = props.canvasApp;
   if (!app?.tree) return;
-  layersList.value = [...app.tree.children].reverse();
+  const treeRoot = app.tree;
+
+  const result: any[] = [];
+
+  function traverse(node: any, depth = 0) {
+    if (node === treeRoot) {
+      if (node.children) {
+        const reversed = [...node.children].reverse();
+        reversed.forEach((child) => traverse(child, depth));
+      }
+      return;
+    }
+
+    // Skip helper / simulate nodes
+    if (
+      node.tag === "SimulateElement" ||
+      node.__tag === "SimulateElement" ||
+      node.className === "Editor"
+    ) {
+      return;
+    }
+
+    const isContainer = node.tag === "Frame" || node.__tag === "Frame" || node.tag === "Group" || node.__tag === "Group";
+    const hasChildren = isContainer && node.children && node.children.length > 0;
+
+    const nodeItem = {
+      innerId: node.innerId,
+      refId: node.refId,
+      node: node,
+      tag: node.tag || node.__tag,
+      name: node.name,
+      visible: node.visible,
+      locked: node.locked,
+      depth: depth,
+      parent: node.parent,
+      children: hasChildren ? node.children : [],
+      hasChildren: hasChildren,
+    };
+
+    result.push(nodeItem);
+
+    const collapsed = !!collapsedStates.value[node.innerId];
+    if (!collapsed && hasChildren) {
+      const reversed = [...node.children].reverse();
+      reversed.forEach((child) => traverse(child, depth + 1));
+    }
+  }
+
+  traverse(app.tree);
+  layersList.value = result;
 };
 
 const updateSelection = () => {
   const app = props.canvasApp;
   if (!app?.editor) return;
   if (app.editor.list.length === 1) {
-    selectedId.value = app.editor.list[0].innerId;
+    const selectedNode = app.editor.list[0];
+    selectedId.value = selectedNode.innerId;
+    expandAncestors(selectedNode);
+    updateLayers();
   } else {
     selectedId.value = null;
   }
@@ -508,6 +627,30 @@ watch(
 .reorder-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.collapse-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary, #64748b);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.collapse-toggle-btn:hover {
+  background: var(--p-surface-100);
+  color: var(--p-surface-800);
+}
+
+.collapse-spacer {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .layer-type-icon {

@@ -1,13 +1,6 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
 import { computeLayout } from '../design-knowledge/layout-engine';
-
-// Helper to retrieve tracked nodes from context
-function getNodes(ctx: ToolContext): Map<string, Record<string, any>> {
-  if (!(ctx as any).__nodes) {
-    (ctx as any).__nodes = new Map<string, Record<string, any>>();
-  }
-  return (ctx as any).__nodes;
-}
+import { getCanvasNodeMap, getFrame, upsertCanvasNode } from '../canvas-state';
 
 export const autoLayoutTool: AgentTool = {
   name: 'auto_layout',
@@ -27,12 +20,12 @@ export const autoLayoutTool: AgentTool = {
     required: ['layoutHint'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const nodesMap = getNodes(ctx);
+    const nodesMap = getCanvasNodeMap(ctx);
     if (nodesMap.size === 0) {
       return { output: { note: 'No nodes on canvas to layout.' } };
     }
 
-    const frame = (ctx as any).__frame ?? { width: 1080, height: 1080 };
+    const frame = getFrame(ctx);
     const elements: any[] = [];
 
     // Map existing nodes to layout engine format, using heuristics for missing roles
@@ -88,7 +81,7 @@ export const autoLayoutTool: AgentTool = {
           width: item.width,
           height: item.height,
         };
-        nodesMap.set(item.id, { ...existing, ...patch });
+        upsertCanvasNode(ctx, item.id, patch);
         ctx.sink.canvas({ op: 'update_node', refId: item.id, patch });
         updated.push(item.id);
       }
@@ -122,7 +115,7 @@ export const alignNodesTool: AgentTool = {
     required: ['refIds', 'alignment'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const nodesMap = getNodes(ctx);
+    const nodesMap = getCanvasNodeMap(ctx);
     const targets = input.refIds.map((id: string) => ({ id, node: nodesMap.get(id) })).filter((t: any) => t.node);
 
     if (targets.length < 2) {
@@ -176,7 +169,7 @@ export const alignNodesTool: AgentTool = {
       }
 
       if (Object.keys(patch).length > 0) {
-        nodesMap.set(id, { ...node, ...patch });
+        upsertCanvasNode(ctx, id, patch);
         ctx.sink.canvas({ op: 'update_node', refId: id, patch });
         updated.push(id);
       }
@@ -210,7 +203,7 @@ export const distributeNodesTool: AgentTool = {
     required: ['refIds', 'direction'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const nodesMap = getNodes(ctx);
+    const nodesMap = getCanvasNodeMap(ctx);
     const targets = input.refIds
       .map((id: string) => ({ id, node: nodesMap.get(id) }))
       .filter((t: any) => t.node && t.node.x !== undefined && t.node.y !== undefined);
@@ -263,7 +256,7 @@ export const distributeNodesTool: AgentTool = {
         } else {
           patch.y = Math.round(currentCoord);
         }
-        nodesMap.set(id, { ...node, ...patch });
+        upsertCanvasNode(ctx, id, patch);
         ctx.sink.canvas({ op: 'update_node', refId: id, patch });
         updated.push(id);
       }

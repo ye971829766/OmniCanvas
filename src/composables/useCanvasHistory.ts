@@ -17,7 +17,7 @@ import {
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 import { VideoNode } from "@/components/canvas/nodes/VideoNode";
-import { API_BASE_URL } from "@/config";
+import { getWorkspaceCanvas, updateWorkspaceCanvas } from "@/utils/api";
 
 const tagClassMap: Record<string, any> = {
   Rect,
@@ -354,13 +354,7 @@ export function useCanvasHistory(
             child.__tag !== "SimulateElement",
         )
         .map((child: any) => serializeNode(child));
-      await fetch(`${API_BASE_URL}/workspaces/${targetId}/canvas`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(childrenData),
-      });
+      await updateWorkspaceCanvas(String(targetId), childrenData);
     } catch (e) {
       console.error("Failed to save canvas state to server:", e);
     }
@@ -381,37 +375,34 @@ export function useCanvasHistory(
     const targetId = workspaceId || activeWorkspaceIdRef?.value;
     if (!targetId) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/workspaces/${targetId}/canvas`);
-      if (res.ok) {
-        const dataList = await res.json();
-        if (Array.isArray(dataList)) {
-          if (app.editor) {
-            app.editor.cancel();
-          }
-          // 清理旧 VideoNode 的 DOM 层
-          app.tree.children.forEach((child: any) => cleanUpSingleNode(child));
-          app.tree.clear();
-          dataList.forEach((data: any) => {
-            const child = deserializeNode(data);
-            if (child) {
-              ensureHistoryIdDeep(child);
-              app.tree.add(child);
-            }
-          });
-
-          // 重置历史基线：使用 JSON 序列化快照
-          history.length = 0;
-          const serialized = app.tree.children
-            .filter(
-              (child: any) =>
-                child.tag !== "SimulateElement" &&
-                child.__tag !== "SimulateElement",
-            )
-            .map((child: any) => serializeNode(child));
-          history.push({ serialized, selectedHistoryIds: [] });
-          currentIndex = 0;
-          return;
+      const dataList = await getWorkspaceCanvas(String(targetId));
+      if (Array.isArray(dataList)) {
+        if (app.editor) {
+          app.editor.cancel();
         }
+        // 清理旧 VideoNode 的 DOM 层
+        app.tree.children.forEach((child: any) => cleanUpSingleNode(child));
+        app.tree.clear();
+        dataList.forEach((data: any) => {
+          const child = deserializeNode(data);
+          if (child) {
+            ensureHistoryIdDeep(child);
+            app.tree.add(child);
+          }
+        });
+
+        // 重置历史基线：使用 JSON 序列化快照
+        history.length = 0;
+        const serialized = app.tree.children
+          .filter(
+            (child: any) =>
+              child.tag !== "SimulateElement" &&
+              child.__tag !== "SimulateElement",
+          )
+          .map((child: any) => serializeNode(child));
+        history.push({ serialized, selectedHistoryIds: [] });
+        currentIndex = 0;
+        return;
       }
     } catch (e) {
       console.error("Failed to restore canvas state:", e);

@@ -17,6 +17,8 @@ export interface ToolContext {
   memory: AgentMemory;
   /** real-time canvas state sent from the frontend (all nodes currently on the canvas) */
   canvasState: any[];
+  /** abort signal for the current agent turn */
+  abortSignal?: AbortSignal;
 }
 
 export interface ToolResult {

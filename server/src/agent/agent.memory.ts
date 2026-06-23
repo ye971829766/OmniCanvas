@@ -1,17 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type { ModelMessage } from 'ai';
+import { DatabaseService } from '../database/database.service';
+import * as fs from 'fs';
+import { join } from 'path';
 
 /**
- * In-memory conversation history per session. Stores OpenAI message params so
- * they replay straight into the next turn.
+ * Conversation history per session, persisted in SQLite database.
+ * Screenshots are saved as local files in './files' to prevent DB bloat.
  *
- * Improvements over the original:
+ * Key features:
+ *  - Persistent storage across backend restarts/reloads.
  *  - Token-aware truncation (approximate) instead of raw message count.
- *  - Session TTL: stale sessions are cleaned up automatically.
+ *  - Session TTL: stale sessions and their files are cleaned up automatically.
  *  - Preserves tool-call / tool-result pairs when truncating.
  */
 interface SessionEntry {
-  messages: ChatCompletionMessageParam[];
+  messages: ModelMessage[];
   lastAccess: number;
   brand?: {
     palette?: {
@@ -24,13 +28,13 @@ interface SessionEntry {
     fontFamily?: string;
     styleKeywords?: string[];
   };
-  screenshot?: string; // base64 image
+  screenshot?: string; // local file path
+  lastExportedNodeImage?: string; // local file path
 }
 
 @Injectable()
 export class AgentMemory {
   private readonly logger = new Logger(AgentMemory.name);
-  private store = new Map<string, SessionEntry>();
 
   /** Approximate max tokens to keep in history. */
   private readonly MAX_TOKENS = 24_000;
@@ -41,65 +45,219 @@ export class AgentMemory {
 
   private cleanupTimer: ReturnType<typeof setInterval>;
 
-  constructor() {
+  constructor(private readonly dbService: DatabaseService) {
     // Periodically clean up expired sessions
     this.cleanupTimer = setInterval(() => this.cleanup(), this.CLEANUP_INTERVAL_MS);
   }
 
-  get(sessionId: string): ChatCompletionMessageParam[] {
-    const entry = this.store.get(sessionId);
-    if (!entry) return [];
-    entry.lastAccess = Date.now();
-    return entry.messages;
+  private getFilePath(sessionId: string, type: 'screenshot' | 'node_image'): string {
+    return join('files', `${type}_${sessionId}.png`);
   }
 
-  set(sessionId: string, messages: ChatCompletionMessageParam[]): void {
-    const truncated = this.truncateByTokens(messages);
-    const entry = this.store.get(sessionId);
-    if (entry) {
-      entry.messages = truncated;
-      entry.lastAccess = Date.now();
-    } else {
-      this.store.set(sessionId, { messages: truncated, lastAccess: Date.now() });
+  private saveFileSync(sessionId: string, type: 'screenshot' | 'node_image', base64: string): string | null {
+    if (!base64) return null;
+    const cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, "");
+    const filePath = this.getFilePath(sessionId, type);
+    try {
+      // Ensure target directory exists (should be './files')
+      const dir = join(process.cwd(), 'files');
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(filePath, Buffer.from(cleanBase64, "base64"));
+      return filePath;
+    } catch (e: any) {
+      this.logger.error(`Failed to save file for session ${sessionId}: ${e.message}`);
+      return null;
     }
+  }
+
+  private readFileSync(filePath: string): string | null {
+    if (!filePath) return null;
+    try {
+      if (fs.existsSync(filePath)) {
+        const buffer = fs.readFileSync(filePath);
+        const base64 = buffer.toString('base64');
+        return `data:image/png;base64,${base64}`;
+      }
+    } catch (e: any) {
+      this.logger.error(`Failed to read file ${filePath}: ${e.message}`);
+    }
+    return null;
+  }
+
+  private getSession(sessionId: string): SessionEntry | null {
+    const db = this.dbService.db;
+    try {
+      const row = db.query("SELECT * FROM agent_sessions WHERE sessionId = ?").get(sessionId) as any;
+      if (!row) return null;
+      return {
+        messages: JSON.parse(row.messages),
+        lastAccess: Number(row.lastAccess),
+        brand: row.brand ? JSON.parse(row.brand) : undefined,
+        screenshot: row.screenshot || undefined,
+        lastExportedNodeImage: row.lastExportedNodeImage || undefined,
+      };
+    } catch (e: any) {
+      this.logger.error(`Failed to get session ${sessionId}: ${e.message}`);
+      return null;
+    }
+  }
+
+  private saveSession(sessionId: string, entry: SessionEntry): void {
+    const db = this.dbService.db;
+    const now = Date.now();
+    try {
+      const row = db.query("SELECT sessionId FROM agent_sessions WHERE sessionId = ?").get(sessionId) as any;
+      if (row) {
+        db.query(
+          "UPDATE agent_sessions SET messages = ?, brand = ?, screenshot = ?, lastExportedNodeImage = ?, lastAccess = ? WHERE sessionId = ?"
+        ).run(
+          JSON.stringify(entry.messages),
+          entry.brand ? JSON.stringify(entry.brand) : null,
+          entry.screenshot || null,
+          entry.lastExportedNodeImage || null,
+          now,
+          sessionId
+        );
+      } else {
+        db.query(
+          "INSERT INTO agent_sessions (sessionId, messages, brand, screenshot, lastExportedNodeImage, lastAccess) VALUES (?, ?, ?, ?, ?, ?)"
+        ).run(
+          sessionId,
+          JSON.stringify(entry.messages),
+          entry.brand ? JSON.stringify(entry.brand) : null,
+          entry.screenshot || null,
+          entry.lastExportedNodeImage || null,
+          now
+        );
+      }
+    } catch (e: any) {
+      this.logger.error(`Failed to save session ${sessionId}: ${e.message}`);
+    }
+  }
+
+  get(sessionId: string): ModelMessage[] {
+    const session = this.getSession(sessionId);
+    if (!session) return [];
+    
+    // Update lastAccess in DB
+    try {
+      const db = this.dbService.db;
+      db.query("UPDATE agent_sessions SET lastAccess = ? WHERE sessionId = ?").run(Date.now(), sessionId);
+    } catch (e: any) {
+      this.logger.error(`Failed to update lastAccess for session ${sessionId}: ${e.message}`);
+    }
+    
+    return session.messages;
+  }
+
+  set(sessionId: string, messages: ModelMessage[]): void {
+    const stripped = this.stripOldImages(messages);
+    const truncated = this.truncateByTokens(stripped);
+    
+    let session = this.getSession(sessionId);
+    if (session) {
+      session.messages = truncated;
+    } else {
+      session = { messages: truncated, lastAccess: Date.now() };
+    }
+    this.saveSession(sessionId, session);
   }
 
   reset(sessionId: string): void {
-    this.store.delete(sessionId);
+    const db = this.dbService.db;
+    const session = this.getSession(sessionId);
+    if (session) {
+      if (session.screenshot && fs.existsSync(session.screenshot)) {
+        try { fs.unlinkSync(session.screenshot); } catch {}
+      }
+      if (session.lastExportedNodeImage && fs.existsSync(session.lastExportedNodeImage)) {
+        try { fs.unlinkSync(session.lastExportedNodeImage); } catch {}
+      }
+    }
+    try {
+      db.query("DELETE FROM agent_sessions WHERE sessionId = ?").run(sessionId);
+    } catch (e: any) {
+      this.logger.error(`Failed to delete session ${sessionId} from database: ${e.message}`);
+    }
   }
 
   getBrand(sessionId: string) {
-    return this.store.get(sessionId)?.brand ?? null;
+    const session = this.getSession(sessionId);
+    return session?.brand ?? null;
   }
 
   setBrand(sessionId: string, brand: NonNullable<SessionEntry['brand']>): void {
-    const entry = this.store.get(sessionId);
-    if (entry) {
-      entry.brand = brand;
-      entry.lastAccess = Date.now();
+    let session = this.getSession(sessionId);
+    if (session) {
+      session.brand = brand;
     } else {
-      this.store.set(sessionId, { messages: [], lastAccess: Date.now(), brand });
+      session = { messages: [], lastAccess: Date.now(), brand };
     }
+    this.saveSession(sessionId, session);
   }
 
   getScreenshot(sessionId: string): string | null {
-    return this.store.get(sessionId)?.screenshot ?? null;
+    const session = this.getSession(sessionId);
+    if (!session || !session.screenshot) return null;
+    return this.readFileSync(session.screenshot);
   }
 
   setScreenshot(sessionId: string, base64: string): void {
-    const entry = this.store.get(sessionId);
-    if (entry) {
-      entry.screenshot = base64;
-      entry.lastAccess = Date.now();
+    const filePath = this.saveFileSync(sessionId, 'screenshot', base64);
+    let session = this.getSession(sessionId);
+    if (session) {
+      session.screenshot = filePath || undefined;
     } else {
-      this.store.set(sessionId, { messages: [], lastAccess: Date.now(), screenshot: base64 });
+      session = { messages: [], lastAccess: Date.now(), screenshot: filePath || undefined };
     }
+    this.saveSession(sessionId, session);
+  }
+
+  getLastExportedNodeImage(sessionId: string): string | null {
+    const session = this.getSession(sessionId);
+    if (!session || !session.lastExportedNodeImage) return null;
+    return this.readFileSync(session.lastExportedNodeImage);
+  }
+
+  setLastExportedNodeImage(sessionId: string, base64: string): void {
+    const filePath = this.saveFileSync(sessionId, 'node_image', base64);
+    let session = this.getSession(sessionId);
+    if (session) {
+      session.lastExportedNodeImage = filePath || undefined;
+    } else {
+      session = { messages: [], lastAccess: Date.now(), lastExportedNodeImage: filePath || undefined };
+    }
+    this.saveSession(sessionId, session);
   }
 
   /** Return count of active sessions (useful for monitoring). */
   get sessionCount(): number {
-    return this.store.size;
+    const db = this.dbService.db;
+    try {
+      const row = db.query("SELECT COUNT(*) as count FROM agent_sessions").get() as any;
+      return row ? Number(row.count) : 0;
+    } catch {
+      return 0;
+    }
   }
+
+  getAllSessions(): { sessionId: string; messages: ModelMessage[]; lastAccess: number }[] {
+    const db = this.dbService.db;
+    try {
+      const rows = db.query("SELECT sessionId, messages, lastAccess FROM agent_sessions").all() as any[];
+      return rows.map((row) => ({
+        sessionId: row.sessionId,
+        messages: JSON.parse(row.messages),
+        lastAccess: Number(row.lastAccess),
+      }));
+    } catch (e: any) {
+      this.logger.error(`Failed to get all sessions: ${e.message}`);
+      return [];
+    }
+  }
+
 
   // ── Token-aware truncation ─────────────────────────────────────────────────
 
@@ -108,36 +266,60 @@ export class AgentMemory {
    * ~4 chars per token for English, ~2 chars per token for CJK.
    * Good enough for truncation decisions; not for billing.
    */
-  private estimateTokens(msg: ChatCompletionMessageParam): number {
+  private estimateTokens(msg: ModelMessage): number {
     let text = '';
+    let imageTokens = 0;
     if (typeof msg.content === 'string') {
       text = msg.content;
     } else if (Array.isArray(msg.content)) {
-      text = msg.content
-        .filter((p: any) => p.type === 'text')
-        .map((p: any) => p.text ?? '')
-        .join('');
-    }
-    // tool_calls have function args
-    if ('tool_calls' in msg && Array.isArray((msg as any).tool_calls)) {
-      for (const tc of (msg as any).tool_calls) {
-        text += tc.function?.name ?? '';
-        text += tc.function?.arguments ?? '';
+      for (const p of msg.content as any[]) {
+        if (p.type === 'text') {
+          text += p.text ?? '';
+        } else if (p.type === 'image') {
+          imageTokens += 1000; // standard vision model cost
+        } else if (p.type === 'tool-call') {
+          text += p.toolName ?? '';
+          text += typeof p.input === 'string' ? p.input : JSON.stringify(p.input ?? {});
+        } else if (p.type === 'tool-result') {
+          text += typeof p.output === 'string' ? p.output : JSON.stringify(p.output ?? {});
+        }
       }
     }
-    if (!text) return 4; // minimal overhead for role/metadata
+    if (!text && imageTokens === 0) return 4; // minimal overhead for role/metadata
 
     // Rough heuristic: CJK chars ≈ 0.5 tokens each, ASCII ≈ 0.25 tokens each
     const cjkCount = (text.match(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) ?? []).length;
     const asciiCount = text.length - cjkCount;
-    return Math.ceil(cjkCount * 0.5 + asciiCount * 0.25) + 4; // +4 for message overhead
+    return Math.ceil(cjkCount * 0.5 + asciiCount * 0.25) + imageTokens + 4; // +4 for message overhead
+  }
+
+  private stripOldImages(messages: ModelMessage[]): ModelMessage[] {
+    // Only keep visual images in the last 6 messages of history to avoid token accumulation and size explosion.
+    // Earlier image parts are replaced with a text descriptor.
+    return messages.map((msg, index) => {
+      if (index >= messages.length - 6) return msg;
+
+      if (Array.isArray(msg.content)) {
+        const hasImage = msg.content.some((p: any) => p.type === 'image');
+        if (hasImage) {
+          const strippedParts = msg.content.map((p: any) => {
+            if (p.type === 'image') {
+              return { type: 'text', text: '[Visual Image Expired in History]' };
+            }
+            return p;
+          });
+          return { ...msg, content: strippedParts } as any;
+        }
+      }
+      return msg;
+    }) as ModelMessage[];
   }
 
   /**
    * Truncate from the front, preserving the most recent messages,
    * while keeping tool_call / tool pairs intact.
    */
-  private truncateByTokens(messages: ChatCompletionMessageParam[]): ChatCompletionMessageParam[] {
+  private truncateByTokens(messages: ModelMessage[]): ModelMessage[] {
     // Calculate total tokens
     const tokenCounts = messages.map((m) => this.estimateTokens(m));
     let totalTokens = tokenCounts.reduce((a, b) => a + b, 0);
@@ -152,7 +334,6 @@ export class AgentMemory {
     }
 
     // Ensure we don't start on a 'tool' message (orphaned tool result)
-    // because OpenAI API rejects tool messages without a matching assistant tool_call
     while (startIdx < messages.length && messages[startIdx]!.role === 'tool') {
       totalTokens -= tokenCounts[startIdx]!;
       startIdx++;
@@ -171,16 +352,25 @@ export class AgentMemory {
   // ── Session cleanup ────────────────────────────────────────────────────────
 
   private cleanup(): void {
-    const now = Date.now();
-    let cleaned = 0;
-    for (const [sid, entry] of this.store) {
-      if (now - entry.lastAccess > this.SESSION_TTL_MS) {
-        this.store.delete(sid);
-        cleaned++;
+    const db = this.dbService.db;
+    const expireTime = Date.now() - this.SESSION_TTL_MS;
+    try {
+      // Find expired sessions to delete their files
+      const expired = db.query("SELECT * FROM agent_sessions WHERE lastAccess < ?").all(expireTime) as any[];
+      for (const row of expired) {
+        if (row.screenshot && fs.existsSync(row.screenshot)) {
+          try { fs.unlinkSync(row.screenshot); } catch {}
+        }
+        if (row.lastExportedNodeImage && fs.existsSync(row.lastExportedNodeImage)) {
+          try { fs.unlinkSync(row.lastExportedNodeImage); } catch {}
+        }
       }
-    }
-    if (cleaned > 0) {
-      this.logger.log(`Cleaned up ${cleaned} expired session(s). Active: ${this.store.size}`);
+      const res = db.query("DELETE FROM agent_sessions WHERE lastAccess < ?").run(expireTime);
+      if (res.changes > 0) {
+        this.logger.log(`Cleaned up ${res.changes} expired session(s) from database.`);
+      }
+    } catch (e: any) {
+      this.logger.error(`Failed to clean up expired sessions: ${e.message}`);
     }
   }
 }

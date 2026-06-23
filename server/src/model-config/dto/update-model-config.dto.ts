@@ -16,4 +16,11 @@ export class UpdateModelConfigDto {
     aspectRatios?: string[];
     qualities?: string[];
   };
+
+  @IsOptional()
+  @IsObject()
+  agentConfig?: {
+    systemPrompt?: string;
+    chatModel?: string;
+  };
 }

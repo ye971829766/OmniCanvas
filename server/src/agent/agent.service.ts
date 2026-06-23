@@ -1,23 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
-import OpenAI from "openai";
-import type {
-  ChatCompletionMessageParam,
-  ChatCompletionChunk,
-} from "openai/resources/chat/completions";
+import { streamText, type ModelMessage, jsonSchema } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { AiService } from "../ai/ai.service";
 import { EventSink } from "./event-sink";
-import type { ToolContext } from "./tool.interface";
-import { TOOL_MAP, toOpenAiTools } from "./tool.registry";
+import type { ToolContext, ToolResult } from "./tool.interface";
+import { TOOL_MAP } from "./tool.registry";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { AgentMemory } from "./agent.memory";
+import { ModelConfigService } from "../model-config/model-config.service";
 // No planner imports
-
-/** accumulator for a streamed tool_call */
-interface ToolAcc {
-  id: string;
-  name: string;
-  args: string;
-}
 
 /** Per-turn usage tracking */
 interface TurnUsage {
@@ -31,18 +22,25 @@ interface TurnUsage {
 @Injectable()
 export class AgentService {
   private readonly logger = new Logger(AgentService.name);
-  private readonly MAX_STEPS = 12;
+  private readonly MAX_STEPS = 100;
   private readonly chatModel = process.env.AGENT_CHAT_MODEL || "gpt-4o-mini";
   /** Per-session mutex: prevents concurrent runs on the same session. */
   private readonly sessionLocks = new Map<string, Promise<void>>();
+  private readonly activeRuns = new Map<string, AbortController>();
+  /** Generation task states: refId -> { status, url, timestamp } */
+  private readonly generationStates = new Map<
+    string,
+    { status: "generating" | "done" | "error"; url?: string; timestamp: number }
+  >();
 
   // ── Timeout configuration ─────────────────────────────────────────────────
-  private readonly LLM_TIMEOUT_MS = 30_000;
-  private readonly TOOL_TIMEOUT_MS = 20_000;
+  private readonly LLM_TIMEOUT_MS = 90_000;
+  private readonly TOOL_TIMEOUT_MS = 45_000;
 
   constructor(
     private readonly ai: AiService,
     private readonly memory: AgentMemory,
+    private readonly modelConfigService: ModelConfigService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -50,19 +48,76 @@ export class AgentService {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /** Run one user turn; returns an EventSink the controller pipes to SSE. */
-  run(sessionId: string, userInput: string, origin: string, images?: string[], canvasState?: any[]): EventSink {
+  run(
+    sessionId: string,
+    userInput: string,
+    origin: string,
+    images?: string[],
+    canvasState?: any[],
+  ): EventSink {
     const sink = new EventSink();
+    const abortController = new AbortController();
+    this.activeRuns.set(sessionId, abortController);
     const doRun = async () => {
       await this.withSessionLock(sessionId, () =>
-        this.dispatch(sessionId, userInput, origin, sink, images, canvasState),
+        this.dispatch(
+          sessionId,
+          userInput,
+          origin,
+          sink,
+          images,
+          canvasState,
+          abortController.signal,
+        ),
       );
     };
-    doRun().catch((e) => {
-      this.logger.error(e?.stack || e);
-      sink.emit({ type: "error", message: e?.message ?? "agent error" });
-      sink.close();
-    });
+    doRun()
+      .catch((e) => {
+        if (e?.name === "AbortError" || abortController.signal.aborted) {
+          sink.emit({ type: "final", text: "已停止当前任务。" });
+        } else {
+          this.logger.error(e?.stack || e);
+          sink.emit({ type: "error", message: e?.message ?? "agent error" });
+        }
+        sink.close();
+      })
+      .finally(() => {
+        if (this.activeRuns.get(sessionId) === abortController) {
+          this.activeRuns.delete(sessionId);
+        }
+      });
     return sink;
+  }
+
+  stop(sessionId: string): boolean {
+    const controller = this.activeRuns.get(sessionId);
+    if (!controller) return false;
+    controller.abort();
+    this.activeRuns.delete(sessionId);
+    return true;
+  }
+
+  updateGenerationState(
+    refId: string,
+    status: "done" | "error",
+    url?: string,
+    error?: string,
+  ): void {
+    this.generationStates.set(refId, { status, url, timestamp: Date.now() });
+    this.logger.debug(`Generation state updated: ${refId} -> ${status}`);
+  }
+
+  getGenerationState(
+    refId: string,
+  ): { status: "generating" | "done" | "error"; url?: string } | null {
+    const state = this.generationStates.get(refId);
+    if (!state) return null;
+    // 清理超过5分钟的旧状态
+    if (Date.now() - state.timestamp > 300_000) {
+      this.generationStates.delete(refId);
+      return null;
+    }
+    return state;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -79,6 +134,7 @@ export class AgentService {
     sink: EventSink,
     images?: string[],
     canvasState?: any[],
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     const usage: TurnUsage = {
       promptTokens: 0,
@@ -89,7 +145,20 @@ export class AgentService {
     };
 
     try {
-      await this.reactLoop(sessionId, userInput, origin, sink, usage, images, canvasState);
+      if (!userInput.trim() && (!images || images.length === 0)) {
+        sink.emit({ type: "error", message: "请输入任务内容。" });
+        return;
+      }
+      await this.reactLoop(
+        sessionId,
+        userInput,
+        origin,
+        sink,
+        usage,
+        images,
+        canvasState,
+        abortSignal,
+      );
     } finally {
       const elapsedMs = Date.now() - usage.startedAt;
       this.logger.log(
@@ -106,6 +175,9 @@ export class AgentService {
         toolCalls: usage.toolCalls,
         elapsedMs,
       } as any);
+      if (abortSignal?.aborted) {
+        sink.emit({ type: "final", text: "已停止当前任务。" });
+      }
       sink.emit({ type: "done" });
       sink.close();
     }
@@ -122,43 +194,72 @@ export class AgentService {
     usage: TurnUsage,
     images?: string[],
     canvasState?: any[],
+    abortSignal?: AbortSignal,
   ): Promise<void> {
-    const { client, model } = await this.buildClient();
+    const config = await this.modelConfigService.getConfig();
+    const systemPrompt = config.agentConfig?.systemPrompt || SYSTEM_PROMPT;
+    const chatModel = config.agentConfig?.chatModel || this.chatModel;
+
+    const { modelInstance } = await this.buildClient(chatModel);
 
     const history = this.memory.get(sessionId);
     const screenshot = this.memory.getScreenshot(sessionId);
 
-    let userContent: ChatCompletionMessageParam["content"] = userInput;
+    let userContent: string | any[] = userInput;
     if (screenshot || (images && images.length > 0)) {
       const parts: any[] = [{ type: "text", text: userInput }];
       if (screenshot) {
+        const uploadedUrl = await this.ai.uploadImageToHost(screenshot);
         parts.push({
-          type: "image_url",
-          image_url: {
-            url: screenshot.startsWith("data:")
-              ? screenshot
-              : `data:image/png;base64,${screenshot}`,
-          },
+          type: "image",
+          image: uploadedUrl,
         });
       }
       if (images && images.length > 0) {
         for (const img of images) {
+          const uploadedUrl = await this.ai.uploadImageToHost(img);
           parts.push({
-            type: "image_url",
-            image_url: {
-              url: img.startsWith("data:") ? img : `data:image/png;base64,${img}`,
-            },
+            type: "image",
+            image: uploadedUrl,
           });
         }
       }
       userContent = parts;
     }
 
-    const messages: ChatCompletionMessageParam[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+    const messages: ModelMessage[] = [
+      { role: "system", content: systemPrompt },
       ...history,
       { role: "user", content: userContent as any },
     ];
+
+    try {
+      const loggedMessages = messages.map((m) => {
+        if (typeof m.content === "string") return m;
+        if (Array.isArray(m.content)) {
+          return {
+            ...m,
+            content: m.content.map((p: any) =>
+              p.type === "image"
+                ? {
+                    type: "image",
+                    image:
+                      typeof p.image === "string"
+                        ? p.image.slice(0, 100) + "..."
+                        : "[Buffer/URL]",
+                  }
+                : p,
+            ),
+          };
+        }
+        return m;
+      });
+      this.logger.debug(
+        `[reactLoop] sending messages to model: ${JSON.stringify(loggedMessages, null, 2)}`,
+      );
+    } catch (err) {
+      this.logger.warn(`Failed to print debug log of messages: ${err}`);
+    }
 
     const ctx: ToolContext = {
       sessionId,
@@ -169,57 +270,128 @@ export class AgentService {
         `${prefix}_${Math.random().toString(36).slice(2, 10)}`,
       memory: this.memory,
       canvasState: canvasState ?? [],
-    };
+      abortSignal,
+      agentService: this,
+    } as any;
+
+    // Convert TOOL_MAP to SDK-compatible tools format
+    const sdkTools: Record<string, any> = {};
+    for (const [name, tool] of TOOL_MAP.entries()) {
+      sdkTools[name] = {
+        description: tool.description,
+        parameters: jsonSchema(tool.parameters),
+      };
+    }
 
     for (let step = 0; step < this.MAX_STEPS; step++) {
+      if (abortSignal?.aborted) {
+        throw new DOMException("Agent run aborted", "AbortError");
+      }
       usage.steps = step + 1;
 
-      const { text, toolCalls, chunkUsage } = await this.withTimeout(
-        this.streamTurn(client, model, messages, sink),
+      // Single turn with streamText
+      const result = await this.withTimeout(
+        Promise.resolve(
+          streamText({
+            model: modelInstance,
+            messages: messages as any,
+            tools: sdkTools,
+            toolChoice: "auto",
+            abortSignal,
+          }),
+        ),
         this.LLM_TIMEOUT_MS,
         "LLM streaming timed out",
       );
 
-      usage.promptTokens += chunkUsage.promptTokens;
-      usage.completionTokens += chunkUsage.completionTokens;
+      let text = "";
+      const toolCalls: any[] = [];
+
+      for await (const chunk of result.fullStream) {
+        if (abortSignal?.aborted) {
+          throw new DOMException("Agent run aborted", "AbortError");
+        }
+        if (chunk.type === "text-delta") {
+          text += chunk.text;
+          sink.emit({ type: "thinking", text: chunk.text });
+        } else if (chunk.type === "tool-call") {
+          toolCalls.push({
+            id: chunk.toolCallId,
+            name: chunk.toolName,
+            args:
+              typeof chunk.input === "string"
+                ? chunk.input
+                : JSON.stringify(chunk.input),
+          });
+        }
+      }
+
+      // Track usage
+      const currentUsage = await result.usage;
+      usage.promptTokens += currentUsage.inputTokens ?? 0;
+      usage.completionTokens += currentUsage.outputTokens ?? 0;
+
+      // Record assistant turn
+      const contentParts: any[] = [];
+      if (text) {
+        contentParts.push({ type: "text" as const, text });
+      }
+      if (toolCalls.length) {
+        contentParts.push(
+          ...toolCalls.map((t) => ({
+            type: "tool-call" as const,
+            toolCallId: t.id,
+            toolName: t.name,
+            input: JSON.parse(t.args),
+          })),
+        );
+      }
+      if (contentParts.length === 0) {
+        contentParts.push({ type: "text" as const, text: "" });
+      }
 
       messages.push({
         role: "assistant",
-        content: text || null,
-        tool_calls: toolCalls.length
-          ? toolCalls.map((t) => ({
-              id: t.id,
-              type: "function" as const,
-              function: { name: t.name, arguments: t.args || "{}" },
-            }))
-          : undefined,
-      } as ChatCompletionMessageParam);
+        content: contentParts,
+      });
 
       if (toolCalls.length === 0) {
         sink.emit({ type: "final", text });
         break;
       }
 
+      const stepVisualObservations: any[] = [];
       for (const call of toolCalls) {
         usage.toolCalls++;
         const input = this.safeParse(call.args);
+        if (abortSignal?.aborted) {
+          throw new DOMException("Agent run aborted", "AbortError");
+        }
         const validationError = this.validateToolInput(call.name, input);
         if (validationError) {
-          sink.emit({
-            type: "error",
-            message: `${call.name}: ${validationError}`,
-          });
+          this.logger.warn(
+            `[session=${sessionId}] ${call.name}: ${validationError}`,
+          );
           messages.push({
             role: "tool",
-            tool_call_id: call.id,
-            content: `Validation error: ${validationError}`,
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: call.id,
+                toolName: call.name,
+                output: {
+                  type: "text" as const,
+                  value: `Validation error: ${validationError}`,
+                },
+              },
+            ],
           });
           continue;
         }
 
         sink.emit({ type: "tool_call", id: call.id, tool: call.name, input });
         const tool = TOOL_MAP.get(call.name);
-        let content: string;
+        let content: any;
         if (!tool) {
           content = `Unknown tool: ${call.name}`;
         } else {
@@ -235,20 +407,82 @@ export class AgentService {
               tool: call.name,
               output: result.output,
             });
-            content = JSON.stringify(result.output);
+
+            // MCoT visual check image cache handling
+            const output = result.output as any;
+            if (
+              output &&
+              typeof output.image === "string" &&
+              output.image.startsWith("data:image/")
+            ) {
+              stepVisualObservations.push({
+                image: output.image,
+              });
+              const strippedOutput = {
+                ...output,
+                image:
+                  "[Base64 Image URL Data - sent as image part in subsequent message]",
+              };
+              content = strippedOutput;
+            } else {
+              content = result.output;
+            }
           } catch (e: any) {
-            sink.emit({
-              type: "error",
-              message: `${call.name}: ${e?.message}`,
-            });
-            content = `Error: ${e?.message ?? "tool failed"}`;
+            let errMsg = e?.message ?? "tool failed";
+            this.logger.warn(`[session=${sessionId}] ${call.name}: ${errMsg}`);
+            content = { error: errMsg };
           }
         }
-        messages.push({ role: "tool", tool_call_id: call.id, content });
+
+        // 🆕 MCoT Checkpoint checklist
+        if (
+          (call.name === "generate_image" || call.name === "generate_video") &&
+          content &&
+          content.refId
+        ) {
+          content.mcotCheckpoint =
+            `[MCoT Checkpoint] You have just generated media node "${content.refId}". ` +
+            `To ensure premium design quality, you MUST take a screenshot of it using the "export_node_image" tool, ` +
+            `and then call "analyze_design" to run a visual self-critique. Do NOT output a final response to the user ` +
+            `until you have analyzed the design, evaluated the score, and performed any necessary adjustments.`;
+        }
+
+        messages.push({
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: call.id,
+              toolName: call.name,
+              output:
+                typeof content === "string"
+                  ? { type: "text" as const, value: content }
+                  : { type: "json" as const, value: content as any },
+            },
+          ],
+        });
+      }
+
+      // Append visual observations if any
+      if (stepVisualObservations.length > 0) {
+        const combinedParts: any[] = [
+          {
+            type: "text",
+            text: `Visual observation snapshots after tool execution:`,
+          },
+        ];
+        for (const obs of stepVisualObservations) {
+          const uploadedUrl = await this.ai.uploadImageToHost(obs.image);
+          combinedParts.push({ type: "image", image: uploadedUrl });
+        }
+        messages.push({ role: "user", content: combinedParts });
       }
 
       if (step === this.MAX_STEPS - 1) {
-        sink.emit({ type: "final", text: "已达到本轮步数上限。" });
+        sink.emit({
+          type: "final",
+          text: "已达到安全步数上限（100步），为防止死循环任务已自动停止。",
+        });
       }
     }
 
@@ -256,77 +490,86 @@ export class AgentService {
     this.memory.set(sessionId, historyToSave as any);
   }
 
+
   // ═══════════════════════════════════════════════════════════════════════════
   // SHARED UTILITIES
   // ═══════════════════════════════════════════════════════════════════════════
 
-  private async buildClient(): Promise<{ client: OpenAI; model: string }> {
-    const route = await this.ai.resolveChannelAndModel("chat", this.chatModel);
+  private async buildClient(
+    chatModel: string,
+  ): Promise<{ modelInstance: any }> {
+    const route = await this.ai.resolveChannelAndModel("chat", chatModel);
     if (!route.channel) {
       throw new Error(
-        `没有可用于 chat 模型 "${this.chatModel}" 的渠道,请在渠道管理中配置`,
+        `没有可用于 chat 模型 "${chatModel}" 的渠道,请在渠道管理中配置`,
       );
     }
+    const customOpenAI = createOpenAI({
+      apiKey: route.channel.apiKey,
+      baseURL: route.channel.baseUrl,
+      fetch: (async (url: string | URL, init: any) => {
+        try {
+          if (init && init.body && typeof init.body === "string") {
+            const body = JSON.parse(init.body);
+            if (Array.isArray(body.messages)) {
+              let hasModified = false;
+              for (const msg of body.messages) {
+                if (msg.role === "assistant" && Array.isArray(msg.tool_calls)) {
+                  for (const tc of msg.tool_calls) {
+                    if (!tc.thought_signature && !tc.thoughtSignature) {
+                      tc.thought_signature = "skip_thought_signature_validator";
+                      tc.thoughtSignature = "skip_thought_signature_validator";
+                      hasModified = true;
+                    }
+                    if (!tc.provider_specific_fields) {
+                      tc.provider_specific_fields = {};
+                      hasModified = true;
+                    }
+                    if (
+                      !tc.provider_specific_fields.thought_signature &&
+                      !tc.provider_specific_fields.thoughtSignature
+                    ) {
+                      tc.provider_specific_fields.thought_signature =
+                        tc.thought_signature;
+                      tc.provider_specific_fields.thoughtSignature =
+                        tc.thoughtSignature;
+                      hasModified = true;
+                    }
+                    if (!tc.extra_content) {
+                      tc.extra_content = {};
+                      hasModified = true;
+                    }
+                    if (!tc.extra_content.google) {
+                      tc.extra_content.google = {};
+                      hasModified = true;
+                    }
+                    if (
+                      !tc.extra_content.google.thought_signature &&
+                      !tc.extra_content.google.thoughtSignature
+                    ) {
+                      tc.extra_content.google.thought_signature =
+                        "skip_thought_signature_validator";
+                      tc.extra_content.google.thoughtSignature =
+                        "skip_thought_signature_validator";
+                      hasModified = true;
+                    }
+                  }
+                }
+              }
+              if (hasModified) {
+                init.body = JSON.stringify(body);
+              }
+            }
+          }
+        } catch (err) {
+          // Ignore parsing errors and fallback to original request
+        }
+        return fetch(url, init);
+      }) as any,
+    });
     return {
-      client: new OpenAI({
-        apiKey: route.channel.apiKey,
-        baseURL: route.channel.baseUrl,
-      }),
-      model: route.upstreamModel || this.chatModel,
+      modelInstance: customOpenAI.chat(route.upstreamModel || chatModel),
     };
-  }
-
-  private async streamTurn(
-    client: OpenAI,
-    model: string,
-    messages: ChatCompletionMessageParam[],
-    sink: EventSink,
-  ): Promise<{
-    text: string;
-    toolCalls: ToolAcc[];
-    chunkUsage: { promptTokens: number; completionTokens: number };
-  }> {
-    const stream = await client.chat.completions.create({
-      model,
-      stream: true,
-      stream_options: { include_usage: true },
-      tools: toOpenAiTools(),
-      messages,
-      max_tokens: 4096,
-      tool_choice: "auto",
-    });
-    console.log(model);
-
-    let text = "";
-    const acc = new Map<number, ToolAcc>();
-    const chunkUsage = { promptTokens: 0, completionTokens: 0 };
-
-    for await (const chunk of stream as AsyncIterable<ChatCompletionChunk>) {
-      if (chunk.usage) {
-        chunkUsage.promptTokens = chunk.usage.prompt_tokens ?? 0;
-        chunkUsage.completionTokens = chunk.usage.completion_tokens ?? 0;
-      }
-      const delta = chunk.choices[0]?.delta;
-      if (!delta) continue;
-      if (delta.content) {
-        text += delta.content;
-        sink.emit({ type: "thinking", text: delta.content });
-      }
-      for (const tc of delta.tool_calls ?? []) {
-        const idx = tc.index ?? 0;
-        const cur = acc.get(idx) ?? { id: "", name: "", args: "" };
-        if (tc.id) cur.id = tc.id;
-        if (tc.function?.name) cur.name = tc.function.name;
-        if (tc.function?.arguments) cur.args += tc.function.arguments;
-        acc.set(idx, cur);
-      }
-    }
-
-    const toolCalls = [...acc.values()].filter((t) => t.name);
-    toolCalls.forEach((t, i) => {
-      if (!t.id) t.id = `call_${i}_${Math.random().toString(36).slice(2, 8)}`;
-    });
-    return { text, toolCalls, chunkUsage };
   }
 
   private safeParse(s: string): any {
@@ -352,19 +595,116 @@ export class AgentService {
     for (const [key, schema] of Object.entries(props) as [string, any][]) {
       if (input[key] === undefined) continue;
       if (schema.type === "number" && typeof input[key] !== "number") {
-        const num = Number(input[key]);
-        if (isNaN(num))
+        const num = this.coerceNumber(input[key]);
+        if (num === null)
           return `Parameter "${key}" must be a number, got ${typeof input[key]}`;
         input[key] = num;
       }
       if (schema.type === "string" && typeof input[key] !== "string") {
-        input[key] = String(input[key]);
+        input[key] = this.coerceString(input[key]);
+      }
+      if (schema.enum && !schema.enum.includes(input[key])) {
+        input[key] = this.normalizeEnumValue(key, input[key], schema.enum);
       }
       if (schema.enum && !schema.enum.includes(input[key])) {
         return `Parameter "${key}" must be one of [${schema.enum.join(", ")}], got "${input[key]}"`;
       }
     }
     return null;
+  }
+
+  private coerceNumber(value: unknown): number | null {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const exact = Number(trimmed);
+      if (Number.isFinite(exact)) return exact;
+      const match = trimmed.match(/-?\d+(?:\.\d+)?/);
+      if (!match) return null;
+      const parsed = Number(match[0]);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const parsed = this.coerceNumber(item);
+        if (parsed !== null) return parsed;
+      }
+      return null;
+    }
+    if (value && typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      const preferredKeys = [
+        "value",
+        "number",
+        "amount",
+        "px",
+        "pixels",
+        "ratio",
+        "lineHeight",
+        "fontSize",
+        "width",
+        "height",
+        "x",
+        "y",
+      ];
+      for (const key of preferredKeys) {
+        if (record[key] !== undefined) {
+          const parsed = this.coerceNumber(record[key]);
+          if (parsed !== null) return parsed;
+        }
+      }
+      for (const item of Object.values(record)) {
+        const parsed = this.coerceNumber(item);
+        if (parsed !== null) return parsed;
+      }
+    }
+    return null;
+  }
+
+  private coerceString(value: unknown): string {
+    if (typeof value === "string") return value;
+    if (value && typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      for (const key of ["value", "text", "label", "name", "color"]) {
+        if (record[key] !== undefined) return String(record[key]);
+      }
+    }
+    return String(value);
+  }
+
+  private normalizeEnumValue(
+    key: string,
+    value: unknown,
+    choices: string[],
+  ): string {
+    const raw = String(value).trim().toLowerCase();
+    if (key === "fontWeight") {
+      const numeric = Number(raw);
+      if (Number.isFinite(numeric)) {
+        if (numeric >= 600 && choices.includes("bold")) return "bold";
+        if (numeric <= 300 && choices.includes("light")) return "light";
+        if (choices.includes("normal")) return "normal";
+      }
+      if (
+        ["semibold", "medium", "heavy", "black"].includes(raw) &&
+        choices.includes("bold")
+      ) {
+        return "bold";
+      }
+      if (["regular", "book"].includes(raw) && choices.includes("normal")) {
+        return "normal";
+      }
+    }
+    if (key === "textAlign") {
+      if (["middle", "centre"].includes(raw) && choices.includes("center"))
+        return "center";
+      if (["start"].includes(raw) && choices.includes("left")) return "left";
+      if (["end"].includes(raw) && choices.includes("right")) return "right";
+    }
+    return String(value);
   }
 
   private withTimeout<T>(

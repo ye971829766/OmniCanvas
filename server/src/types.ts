@@ -65,7 +65,7 @@ export interface GenerateImageResponse {
 
 export interface ChatMessage {
   role: ChatRole;
-  content: string;
+  content: string | any[];
 }
 
 export interface ChatRequest {
@@ -73,6 +73,8 @@ export interface ChatRequest {
   messages?: unknown;
   temperature?: unknown;
   maxTokens?: unknown;
+  response_format?: any;
+  responseFormat?: any;
 }
 
 export interface ChatResponse {

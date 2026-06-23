@@ -1,0 +1,121 @@
+[
+  {
+    "tag": "Frame",
+    "fill": "#f1f8e9",
+    "width": 1240,
+    "height": 1754,
+    "x": 157.2000770713705,
+    "y": 11.64445015343485,
+    "editable": true,
+    "stroke": "",
+    "strokeWidth": 0,
+    "children": [
+      {
+        "tag": "Text",
+        "width": 1140,
+        "fill": "#1b5e20",
+        "text": "猫狗乐园",
+        "fontFamily": "sans-serif",
+        "fontSize": 72,
+        "fontWeight": "bold",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 50,
+        "y": 100,
+        "editable": true,
+        "__historyId": "hid_23_opqc",
+        "refId": "txt_xb3l7nvs"
+      },
+      {
+        "tag": "Text",
+        "width": 1140,
+        "fill": "#558b2f",
+        "text": "— 自由奔跑，快乐成长 —",
+        "fontFamily": "sans-serif",
+        "fontSize": 32,
+        "fontWeight": "normal",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 50,
+        "y": 200,
+        "editable": true,
+        "__historyId": "hid_24_ig0x",
+        "refId": "txt_avpiecwz"
+      },
+      {
+        "tag": "Text",
+        "width": 1140,
+        "fill": "#33691e",
+        "text": "在自然的怀抱中，让毛孩子释放爱动的天性",
+        "fontFamily": "sans-serif",
+        "fontSize": 28,
+        "fontWeight": "normal",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 50,
+        "y": 1230,
+        "editable": true,
+        "__historyId": "hid_25_9dxm",
+        "refId": "txt_84p8fzt6"
+      },
+      {
+        "tag": "Text",
+        "width": 300,
+        "fill": "#ffffff",
+        "text": "开启探索之旅",
+        "fontFamily": "sans-serif",
+        "fontSize": 26,
+        "fontWeight": "bold",
+        "lineHeight": {
+          "type": "percent",
+          "value": 1.5
+        },
+        "textAlign": "center",
+        "x": 470,
+        "y": 1370,
+        "editable": true,
+        "__historyId": "hid_26_yd6m",
+        "refId": "txt_2c5le1ul"
+      },
+      {
+        "tag": "Rect",
+        "x": 470,
+        "y": 1350,
+        "width": 300,
+        "height": 70,
+        "editable": true,
+        "fill": "#2e7d32",
+        "cornerRadius": 35,
+        "__historyId": "hid_28_8tjb",
+        "refId": "rect_9su5vc9j"
+      },
+      {
+        "tag": "Image",
+        "url": "http://localhost:3000/files/36f45115-6782-41d4-89cc-df858a996736.png",
+        "x": -4.547473508864641e-13,
+        "y": 174.9325628160218,
+        "width": 1254,
+        "height": 1254,
+        "scaleX": 0.9999999999999996,
+        "scaleY": 0.9999999999999996,
+        "rotation": 0,
+        "skewX": 0,
+        "skewY": 0,
+        "editable": true,
+        "__historyId": "hid_34_btcq",
+        "refId": "img_zudggrdj"
+      }
+    ],
+    "__historyId": "hid_22_7ivk",
+    "refId": "agent_frame"
+  }
+]

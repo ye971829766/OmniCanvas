@@ -1,13 +1,6 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
 import { PALETTES } from '../design-knowledge/color-system';
-
-// Helper to retrieve tracked nodes from context
-function getNodes(ctx: ToolContext): Map<string, Record<string, any>> {
-  if (!(ctx as any).__nodes) {
-    (ctx as any).__nodes = new Map<string, Record<string, any>>();
-  }
-  return (ctx as any).__nodes;
-}
+import { getCanvasNodeMap, getFrame, setFrame, upsertCanvasNode } from '../canvas-state';
 
 export const setBrandTool: AgentTool = {
   name: 'set_brand',
@@ -89,18 +82,18 @@ export const applyPaletteTool: AgentTool = {
       return { output: { error: `Palette with ID "${input.paletteId}" not found.` } };
     }
 
-    const nodesMap = getNodes(ctx);
+    const nodesMap = getCanvasNodeMap(ctx);
     if (nodesMap.size === 0) {
       // If there are no nodes, update the frame background
       ctx.sink.canvas({ op: 'set_frame', width: 1080, height: 1080, background: palette.background });
-      (ctx as any).__frame = { ...(ctx as any).__frame, background: palette.background };
+      setFrame(ctx, { ...getFrame(ctx), background: palette.background });
       return { output: { note: `Applied palette "${palette.label}" to the canvas frame background.` } };
     }
 
     // Update frame background first
-    const frame = (ctx as any).__frame ?? { width: 1080, height: 1080 };
+    const frame = getFrame(ctx);
     frame.background = palette.background;
-    (ctx as any).__frame = frame;
+    setFrame(ctx, frame);
     ctx.sink.canvas({ op: 'set_frame', width: frame.width, height: frame.height, background: palette.background });
 
     const updated: string[] = [];
@@ -109,7 +102,7 @@ export const applyPaletteTool: AgentTool = {
 
       if (node.type === 'text') {
         patch.fill = palette.text;
-      } else if (node.type === 'rect') {
+      } else if (node.type === 'rect' || node.type === 'frame') {
         if (node.role === 'background') {
           patch.fill = palette.background;
         } else if (node.role === 'cta') {
@@ -121,7 +114,7 @@ export const applyPaletteTool: AgentTool = {
       }
 
       if (Object.keys(patch).length > 0) {
-        nodesMap.set(refId, { ...node, ...patch });
+        upsertCanvasNode(ctx, refId, patch);
         ctx.sink.canvas({ op: 'update_node', refId, patch });
         updated.push(refId);
       }

@@ -12,8 +12,16 @@ async function bootstrap() {
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
   
-  // Enable CORS matching Elysia behavior
-  app.enableCors();
+  // Enable CORS with security restrictions
+  const corsOrigin = process.env.CORS_ORIGIN;
+  const origins = corsOrigin
+    ? corsOrigin.split(',').map((o) => o.trim())
+    : ['http://localhost:5173', 'http://localhost:5174'];
+
+  app.enableCors({
+    origin: origins,
+    credentials: true,
+  });
 
   // Validate DTOs globally — whitelist strips unknown fields (prevents id/createdAt injection)
   app.useGlobalPipes(

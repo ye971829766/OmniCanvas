@@ -6,9 +6,11 @@ import { ChannelsModule } from "./channels/channels.module";
 import { ModelConfigModule } from "./model-config/model-config.module";
 import { AgentModule } from "./agent/agent.module";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
+import { DatabaseModule } from "./database/database.module";
 
 @Module({
   imports: [
+    DatabaseModule,
     FilesModule,
     AiModule,
     ChannelsModule,

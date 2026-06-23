@@ -1,5 +1,6 @@
-import axios from "axios";
-import { API_BASE_URL } from "@/config";
+import request from "./request";
+
+export { API_BASE_URL } from "./request";
 
 
 export interface UploadVideoResponse {
@@ -195,47 +196,41 @@ export interface ChatResponse {
 export async function uploadVideo(file: File): Promise<UploadVideoResponse> {
   const form = new FormData();
   form.append("video", file);
-  const res = await axios.post<UploadVideoResponse>(
-    `${API_BASE_URL}/upload-video`,
-    form,
-  );
+  const res = await request.post<UploadVideoResponse>("/upload-video", form);
   return res.data;
 }
 
 export async function uploadImage(file: File): Promise<UploadImageResponse> {
   const form = new FormData();
   form.append("image", file);
-  const res = await axios.post<UploadImageResponse>(
-    `${API_BASE_URL}/upload`,
-    form,
-  );
+  const res = await request.post<UploadImageResponse>("/upload", form);
   return res.data;
 }
 
 export async function generateImage(
-  request: GenerateTextToImageRequest,
+  req: GenerateTextToImageRequest,
 ): Promise<GenerateImageResponse>;
 export async function generateImage(
-  request: GenerateImageToImageRequest,
+  req: GenerateImageToImageRequest,
 ): Promise<GenerateImageResponse>;
 export async function generateImage(
-  request: GenerateImageRequest,
+  req: GenerateImageRequest,
 ): Promise<GenerateImageResponse> {
   const payload: any = {
-    prompt: request.prompt,
-    model: request.model,
-    style: request.style,
-    size: request.size,
-    aspectRatio: request.aspectRatio,
-    quality: request.quality,
-    outputFormat: request.outputFormat,
+    prompt: req.prompt,
+    model: req.model,
+    style: req.style,
+    size: req.size,
+    aspectRatio: req.aspectRatio,
+    quality: req.quality,
+    outputFormat: req.outputFormat,
   };
 
-  if (typeof request.n === "number") {
-    payload.n = request.n;
+  if (typeof req.n === "number") {
+    payload.n = req.n;
   }
 
-  if ("images" in request && request.images?.length) {
+  if ("images" in req && req.images?.length) {
     const toBase64 = (file: File): Promise<string> =>
       new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -244,22 +239,19 @@ export async function generateImage(
         reader.onerror = (error) => reject(error);
       });
 
-    payload.images = await Promise.all(request.images.map(toBase64));
+    payload.images = await Promise.all(req.images.map(toBase64));
 
-    if (request.mask) {
-      payload.mask = await toBase64(request.mask);
+    if (req.mask) {
+      payload.mask = await toBase64(req.mask);
     }
   }
 
-  const res = await axios.post<GenerateImageResponse>(
-    `${API_BASE_URL}/generate-image`,
-    payload,
-  );
+  const res = await request.post<GenerateImageResponse>("/generate-image", payload);
   return res.data;
 }
 
 export async function generateVideo(
-  request: {
+  req: {
     prompt: string;
     model: string;
     seconds: string;
@@ -269,14 +261,14 @@ export async function generateVideo(
   }
 ): Promise<any> {
   const payload: any = {
-    prompt: request.prompt,
-    model: request.model,
-    seconds: request.seconds,
-    size: request.size,
-    watermark: request.watermark || "false",
+    prompt: req.prompt,
+    model: req.model,
+    seconds: req.seconds,
+    size: req.size,
+    watermark: req.watermark || "false",
   };
 
-  if (request.input_reference) {
+  if (req.input_reference) {
     const toBase64 = (file: File): Promise<string> =>
       new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -284,13 +276,10 @@ export async function generateVideo(
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = (error) => reject(error);
       });
-    payload.input_reference = await toBase64(request.input_reference);
+    payload.input_reference = await toBase64(req.input_reference);
   }
 
-  const res = await axios.post<any>(
-    `${API_BASE_URL}/generate-video`,
-    payload,
-  );
+  const res = await request.post<any>("/generate-video", payload);
   return res.data;
 }
 
@@ -302,13 +291,12 @@ export function getYunwuModels(
 ): Promise<YunwuModelsResponse> {
   let promise = modelsCache.get(type);
   if (!promise) {
-    promise = axios.get<YunwuModelsResponse>(
-      `${API_BASE_URL}/models/${type}`,
-    ).then((res) => res.data)
-     .catch((err) => {
-       modelsCache.delete(type);
-       throw err;
-     });
+    promise = request.get<YunwuModelsResponse>(`/models/${type}`)
+      .then((res) => res.data)
+      .catch((err) => {
+        modelsCache.delete(type);
+        throw err;
+      });
     modelsCache.set(type, promise);
   }
   return promise;
@@ -319,51 +307,113 @@ export function getImageModelOptions(
 ): Promise<ImageModelOptionsResponse> {
   let promise = modelOptionsCache.get(model);
   if (!promise) {
-    promise = axios.get<ImageModelOptionsResponse>(
-      `${API_BASE_URL}/models/image/${encodeURIComponent(model)}/options`,
-    ).then((res) => res.data)
-     .catch((err) => {
-       modelOptionsCache.delete(model);
-       throw err;
-     });
+    promise = request.get<ImageModelOptionsResponse>(`/models/image/${encodeURIComponent(model)}/options`)
+      .then((res) => res.data)
+      .catch((err) => {
+        modelOptionsCache.delete(model);
+        throw err;
+      });
     modelOptionsCache.set(model, promise);
   }
   return promise;
 }
 
-export async function chat(request: ChatRequest): Promise<ChatResponse> {
-  const res = await axios.post<ChatResponse>(`${API_BASE_URL}/chat`, request);
+export async function chat(req: ChatRequest): Promise<ChatResponse> {
+  const res = await request.post<ChatResponse>("/chat", req);
   return res.data;
 }
 
 export async function getTaskStatus(taskId: string): Promise<GenerateImageResponse> {
-  const res = await axios.get<GenerateImageResponse>(
-    `${API_BASE_URL}/tasks/${taskId}`,
-  );
+  const res = await request.get<GenerateImageResponse>(`/tasks/${taskId}`);
   return res.data;
 }
 
 export async function getModelConfig(): Promise<ModelConfigState> {
-  const res = await axios.get<ModelConfigState>(`${API_BASE_URL}/model-config`);
+  const res = await request.get<ModelConfigState>("/model-config");
   return res.data;
 }
 
 const videoOptionsCache = new Map<string, Promise<VideoModelOptionsResponse>>();
 
-export function getVideoModelOptions(
+export async function getVideoModelOptions(
   model: string,
 ): Promise<VideoModelOptionsResponse> {
   let promise = videoOptionsCache.get(model);
   if (!promise) {
-    promise = axios.get<VideoModelOptionsResponse>(
-      `${API_BASE_URL}/models/video/${encodeURIComponent(model)}/options`,
-    ).then((res) => res.data)
-     .catch((err) => {
-       videoOptionsCache.delete(model);
-       throw err;
-     });
+    promise = request.get<VideoModelOptionsResponse>(`/models/video/${encodeURIComponent(model)}/options`)
+      .then((res) => res.data)
+      .catch((err) => {
+        videoOptionsCache.delete(model);
+        throw err;
+      });
     videoOptionsCache.set(model, promise);
   }
   return promise;
 }
 
+// ==================== Workspace APIs ====================
+
+export interface Workspace {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getWorkspaces(): Promise<Workspace[]> {
+  const res = await request.get<Workspace[]>("/workspaces");
+  return res.data;
+}
+
+export async function getWorkspaceCanvas(workspaceId: string): Promise<any[]> {
+  const res = await request.get<any[]>(`/workspaces/${workspaceId}/canvas`);
+  return res.data;
+}
+
+export async function updateWorkspaceCanvas(workspaceId: string, canvasData: any[]): Promise<{ success: boolean }> {
+  const res = await request.put<{ success: boolean }>(`/workspaces/${workspaceId}/canvas`, canvasData);
+  return res.data;
+}
+
+export async function createWorkspace(name: string): Promise<Workspace> {
+  const res = await request.post<Workspace>("/workspaces", { name });
+  return res.data;
+}
+
+export async function updateWorkspace(workspaceId: string, name: string): Promise<Workspace> {
+  const res = await request.put<Workspace>(`/workspaces/${workspaceId}`, { name });
+  return res.data;
+}
+
+export async function deleteWorkspace(workspaceId: string): Promise<void> {
+  await request.delete(`/workspaces/${workspaceId}`);
+}
+
+// ==================== Agent APIs ====================
+
+export interface AgentMessage {
+  role: string;
+  content: string;
+  [key: string]: any;
+}
+
+export async function getAgentHistory(sessionId: string): Promise<AgentMessage[]> {
+  const res = await request.get<AgentMessage[]>(`/agent/${sessionId}/history`);
+  return res.data;
+}
+
+export async function sendAgentMessage(sessionId: string, message: string, nodeStates?: any): Promise<any> {
+  const res = await request.post(`/agent/${sessionId}`, {
+    message,
+    nodeStates,
+  });
+  return res.data;
+}
+
+export async function stopAgent(sessionId: string): Promise<void> {
+  await request.post(`/agent/${sessionId}/stop`);
+}
+
+export async function deleteAgentSession(sessionId: string): Promise<void> {
+  await request.delete(`/agent/${sessionId}`);
+}

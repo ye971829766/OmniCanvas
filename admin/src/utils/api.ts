@@ -71,6 +71,11 @@ export interface ModelConfigState {
     aspectRatios: string[];
     qualities: string[];
   };
+  agentConfig?: {
+    systemPrompt: string;
+    chatModel: string;
+    visionModel?: string;
+  };
 }
 
 export async function getChannels(): Promise<Channel[]> {
