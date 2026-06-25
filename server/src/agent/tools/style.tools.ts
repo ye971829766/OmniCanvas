@@ -1,5 +1,6 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
-import { PALETTES } from '../design-knowledge/color-system';
+import { PALETTES, ensureReadable } from '../design-knowledge/color-system';
+import { matchFontCombination, getFontSizeForRole } from '../design-knowledge/typography';
 import { getCanvasNodeMap, getFrame, setFrame, upsertCanvasNode } from '../canvas-state';
 
 export const setBrandTool: AgentTool = {
@@ -96,19 +97,31 @@ export const applyPaletteTool: AgentTool = {
     setFrame(ctx, frame);
     ctx.sink.canvas({ op: 'set_frame', width: frame.width, height: frame.height, background: palette.background });
 
+    // Match font combo from palette keywords
+    const fontCombo = matchFontCombination(palette.keywords.join(' '));
+
     const updated: string[] = [];
     for (const [refId, node] of nodesMap.entries()) {
       const patch: Record<string, any> = {};
 
       if (node.type === 'text') {
-        patch.fill = palette.text;
+        // Apply font family based on role
+        const role = node.role || 'body';
+        patch.fontFamily = (role === 'title' || role === 'subtitle') ? fontCombo.titleFont : fontCombo.bodyFont;
+
+        // Ensure readable contrast
+        patch.fill = ensureReadable(palette.text, palette.background);
+
+        // Apply proper font size if missing
+        if (!node.fontSize) {
+          patch.fontSize = getFontSizeForRole(role, frame.height);
+        }
       } else if (node.type === 'rect' || node.type === 'frame') {
         if (node.role === 'background') {
           patch.fill = palette.background;
         } else if (node.role === 'cta') {
           patch.fill = palette.accent;
         } else {
-          // General shape
           patch.fill = palette.primary;
         }
       }

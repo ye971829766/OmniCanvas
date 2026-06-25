@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, BadRequestException } from "@nestjs/common";
 import type { OnModuleInit } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { join } from "path";
@@ -314,17 +314,47 @@ export class ModelConfigService implements OnModuleInit {
   }
 
   async updateConfig(nextState: any): Promise<ModelConfigState> {
+    const sanitizedMappings = Array.isArray(nextState?.mappings)
+      ? nextState.mappings
+          .map((item: any, index: number) => this.normalizeMapping(item, index))
+          .filter(Boolean)
+      : [];
+    const sanitizedConfigs = Array.isArray(nextState?.imageConfigs)
+      ? nextState.imageConfigs
+          .map((item: any, index: number) => this.normalizeImageConfig(item, index))
+          .filter(Boolean)
+      : [];
+
+    // Validate unique model IDs and channel + upstreamModel combination
+    const idSet = new Set<string>();
+    const channelModelSet = new Set<string>();
+    for (const mapping of sanitizedMappings) {
+      if (!mapping) continue;
+      const idLower = mapping.id.toLowerCase();
+      if (idSet.has(idLower)) {
+        throw new BadRequestException(`前端 ID "${mapping.id}" 已存在，不可重复添加`);
+      }
+      idSet.add(idLower);
+
+      const channelModelKey = `${mapping.channelId}:${mapping.upstreamModel.toLowerCase()}`;
+      if (channelModelSet.has(channelModelKey)) {
+        throw new BadRequestException(`上游渠道下已配置相同的上游模型 "${mapping.upstreamModel}"`);
+      }
+      channelModelSet.add(channelModelKey);
+    }
+
+    // Validate unique image config IDs
+    const templateIdSet = new Set<string>();
+    for (const config of sanitizedConfigs) {
+      if (!config) continue;
+      const idLower = config.id.toLowerCase();
+      if (templateIdSet.has(idLower)) {
+        throw new BadRequestException(`模板 ID "${config.id}" 已存在，不可重复添加`);
+      }
+      templateIdSet.add(idLower);
+    }
+
     try {
-      const sanitizedMappings = Array.isArray(nextState?.mappings)
-        ? nextState.mappings
-            .map((item: any, index: number) => this.normalizeMapping(item, index))
-            .filter(Boolean)
-        : [];
-      const sanitizedConfigs = Array.isArray(nextState?.imageConfigs)
-        ? nextState.imageConfigs
-            .map((item: any, index: number) => this.normalizeImageConfig(item, index))
-            .filter(Boolean)
-        : [];
       const rawDict = nextState?.dictionaries;
       const sanitizedDictionaries = {
         sizes: Array.isArray(rawDict?.sizes)
@@ -356,6 +386,9 @@ export class ModelConfigService implements OnModuleInit {
       });
       return state;
     } catch (err) {
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
       console.error("Failed to update model config in database:", err);
       return this.getDefaultState();
     }

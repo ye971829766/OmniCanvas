@@ -1,5 +1,5 @@
 import { type Ref } from "vue";
-import { App, Frame, DragEvent, DropEvent, ILeaf } from "leafer-ui";
+import { App, Frame, DragEvent, DropEvent } from "leafer-ui";
 
 /**
  * Composable for managing frame drawing, dropping elements into frames,
@@ -42,7 +42,7 @@ export function useCanvasFrame(
       const editor = canvasApp.editor;
       if (!editor || !editor.list.length) return;
 
-      editor.list.forEach((leaf: ILeaf) => {
+      editor.list.forEach((leaf: any) => {
         if (leaf.parent !== frame) return;
 
         const frameBounds = frame.worldBoxBounds;
@@ -69,7 +69,7 @@ export function useCanvasFrame(
               const oldRotation = leaf.rotation ?? 0;
 
               // Change parent to root tree
-              leaf.dropTo(canvasApp.tree);
+              leaf.dropTo(canvasApp.tree as any);
 
               // Convert starting world coordinates to new parent (tree) coordinate system
               leaf.worldToLocal(worldPoint, dragStartData.point);
@@ -78,11 +78,11 @@ export function useCanvasFrame(
               const rotationDiff = (leaf.rotation ?? 0) - oldRotation;
               dragStartData.rotation += rotationDiff;
             } else {
-              leaf.dropTo(canvasApp.tree);
+              leaf.dropTo(canvasApp.tree as any);
             }
             console.log("[Frame] removed from frame using dropTo");
           } else {
-            leaf.dropTo(canvasApp.tree);
+            leaf.dropTo(canvasApp.tree as any);
           }
         }
       });
@@ -162,7 +162,7 @@ export function useCanvasFrame(
       if (!drawingFrame) return;
 
       activeTool.value = "select";
-      canvasApp.editor.select(drawingFrame);
+      canvasApp.editor.select(drawingFrame as any);
       
       // Record history snapshot
       recordHistory();

@@ -18,7 +18,7 @@ const emit = defineEmits<{
       <span class="agent-logo">
         <img src="@/assets/logo.jpg" alt="PlotTwist" class="agent-logo-img" />
       </span>
-      <span class="font-600 text-13px">AI 设计助手</span>
+      <span class="font-600 text-15px">AI 设计助手</span>
     </div>
     <div class="flex items-center gap-1">
       <button

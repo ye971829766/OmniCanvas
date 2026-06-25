@@ -43,8 +43,8 @@ export function useCanvasMarker(
         markerPen.setStyle({
           stroke: strokeColor,
           strokeWidth,
-          strokeJoin: "round" as any,
-          strokeCap: "round" as any,
+          strokeJoin: "round",
+          strokeCap: "round",
         });
         markerPen.moveTo(0, 0);
       }
@@ -79,9 +79,9 @@ export function useCanvasMarker(
     };
 
     // Store references on DOM element for cleanup
-    (view as any)._markerDown = onPointerDown;
-    (view as any)._markerMove = onPointerMove;
-    (view as any)._markerUp = onPointerUp;
+    view._markerDown = onPointerDown;
+    view._markerMove = onPointerMove;
+    view._markerUp = onPointerUp;
 
     view.addEventListener("pointerdown", onPointerDown);
     view.addEventListener("pointermove", onPointerMove);
@@ -93,21 +93,21 @@ export function useCanvasMarker(
     if (!canvasApp?.view) return;
     const view = canvasApp.view as HTMLElement;
 
-    const onPointerDown = (view as any)._markerDown;
-    const onPointerMove = (view as any)._markerMove;
-    const onPointerUp = (view as any)._markerUp;
+    const onPointerDown = view._markerDown;
+    const onPointerMove = view._markerMove;
+    const onPointerUp = view._markerUp;
 
     if (onPointerDown) {
       view.removeEventListener("pointerdown", onPointerDown);
-      (view as any)._markerDown = null;
+      view._markerDown = null;
     }
     if (onPointerMove) {
       view.removeEventListener("pointermove", onPointerMove);
-      (view as any)._markerMove = null;
+      view._markerMove = null;
     }
     if (onPointerUp) {
       view.removeEventListener("pointerup", onPointerUp);
-      (view as any)._markerUp = null;
+      view._markerUp = null;
     }
 
     // Clean up any in-progress drawing

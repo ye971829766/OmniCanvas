@@ -59,6 +59,35 @@ const INSPIRATIONS = {
   ],
 };
 
+async function searchUnsplash(query: string): Promise<string[]> {
+  const apiKey = process.env.UNSPLASH_ACCESS_KEY;
+  if (!apiKey || !query?.trim()) return [];
+  try {
+    const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=12`;
+    const res = await fetch(url, { headers: { 'Authorization': `Client-ID ${apiKey}` } });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    return data.results?.map((r: any) => r.urls?.regular).filter(Boolean) || [];
+  } catch {
+    return [];
+  }
+}
+
+async function searchWikimedia(query: string): Promise<string[]> {
+  if (!query?.trim()) return [];
+  try {
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrsearch=${encodeURIComponent(`filetype:bitmap ${query}`)}&gsrnamespace=6&gsrlimit=20&prop=imageinfo&iiprop=url`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    return Object.values(data?.query?.pages || {})
+      .map((p: any) => p?.imageinfo?.[0]?.url)
+      .filter((u: any) => u && /\.(jpg|jpeg|png|webp)$/i.test(u));
+  } catch {
+    return [];
+  }
+}
+
 export const collectInspirationTool: AgentTool = {
   name: 'collect_inspiration',
   description: 'Search and collect visual design inspiration references (mood board thumbnails) matching keywords in user request.',
@@ -71,37 +100,40 @@ export const collectInspirationTool: AgentTool = {
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const query = (input.query || '').toLowerCase();
-    const urls: string[] = [];
-
-    // Match keywords and select up to 12 total images
+    
+    // Match keywords and select up to 12 total images from fallback list
+    const fallbackUrls: string[] = [];
     if (query.includes('赛博') || query.includes('cyber') || query.includes('霓虹')) {
-      urls.push(...INSPIRATIONS.cyberpunk.slice(0, 6));
+      fallbackUrls.push(...INSPIRATIONS.cyberpunk.slice(0, 6));
     }
     if (query.includes('禅') || query.includes('zen') || query.includes('日式') || query.includes('枯山水')) {
-      urls.push(...INSPIRATIONS.zen.slice(0, 6));
+      fallbackUrls.push(...INSPIRATIONS.zen.slice(0, 6));
     }
     if (query.includes('茶') || query.includes('tea')) {
-      urls.push(...INSPIRATIONS.tea.slice(0, 6));
+      fallbackUrls.push(...INSPIRATIONS.tea.slice(0, 6));
     }
     if (query.includes('咖啡') || query.includes('cafe') || query.includes('coffe')) {
-      urls.push(...INSPIRATIONS.cafe.slice(0, 6));
+      fallbackUrls.push(...INSPIRATIONS.cafe.slice(0, 6));
     }
     if (query.includes('科') || query.includes('tech') || query.includes('数码')) {
-      urls.push(...INSPIRATIONS.tech.slice(0, 6));
+      fallbackUrls.push(...INSPIRATIONS.tech.slice(0, 6));
     }
     if (query.includes('自') || query.includes('nature') || query.includes('绿')) {
-      urls.push(...INSPIRATIONS.nature.slice(0, 6));
+      fallbackUrls.push(...INSPIRATIONS.nature.slice(0, 6));
     }
     if (query.includes('奢') || query.includes('luxury') || query.includes('金')) {
-      urls.push(...INSPIRATIONS.luxury.slice(0, 6));
+      fallbackUrls.push(...INSPIRATIONS.luxury.slice(0, 6));
     }
 
-    // Default fallback if no keywords matched
-    if (urls.length === 0) {
-      urls.push(...INSPIRATIONS.zen.slice(0, 4));
-      urls.push(...INSPIRATIONS.cafe.slice(0, 4));
-      urls.push(...INSPIRATIONS.tech.slice(0, 4));
+    if (fallbackUrls.length === 0) {
+      fallbackUrls.push(...INSPIRATIONS.zen.slice(0, 4));
+      fallbackUrls.push(...INSPIRATIONS.cafe.slice(0, 4));
+      fallbackUrls.push(...INSPIRATIONS.tech.slice(0, 4));
     }
+
+    let urls = await searchUnsplash(input.query || '');
+    if (urls.length === 0) urls = await searchWikimedia(input.query || '');
+    if (urls.length === 0) urls = fallbackUrls;
 
     // Shuffle/slice to get unique set of up to 12 items
     const unique = [...new Set(urls)].slice(0, 12);

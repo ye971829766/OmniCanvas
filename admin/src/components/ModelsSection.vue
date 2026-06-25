@@ -1138,6 +1138,30 @@ async function saveMapping() {
     iconUrl: mappingForm.value.iconUrl?.trim() || undefined,
   };
 
+  // 1. Check duplicate Front-end ID (case-insensitive)
+  const newIdLower = next.id.toLowerCase();
+  const isDuplicateId = props.mappings.some(
+    (m) => m.id.toLowerCase() === newIdLower && m.id !== editingMappingId.value
+  );
+  if (isDuplicateId) {
+    ElMessage.warning(`前端 ID "${next.id}" 已存在，请使用其他 ID`);
+    return;
+  }
+
+  // 2. Check duplicate channelId + upstreamModel (case-insensitive)
+  const newChannelId = next.channelId;
+  const newUpstreamModelLower = next.upstreamModel.toLowerCase();
+  const isDuplicateModel = props.mappings.some(
+    (m) =>
+      m.channelId === newChannelId &&
+      m.upstreamModel.toLowerCase() === newUpstreamModelLower &&
+      m.id !== editingMappingId.value
+  );
+  if (isDuplicateModel) {
+    ElMessage.warning(`上游渠道下已配置相同的上游模型 "${next.upstreamModel}"`);
+    return;
+  }
+
   if (next.purpose === "image") {
     if (mappingFormConfigType.value === "template") {
       next.imageConfigId = mappingForm.value.imageConfigId || undefined;
@@ -1241,6 +1265,15 @@ async function saveTemplate() {
     notes: templateForm.value.notes?.trim() || undefined,
     maxGenerationCount: templateForm.value.maxGenerationCount,
   };
+
+  const newTemplateIdLower = next.id.toLowerCase();
+  const isDuplicateTemplateId = props.imageConfigs.some(
+    (c) => c.id.toLowerCase() === newTemplateIdLower && c.id !== editingTemplateId.value
+  );
+  if (isDuplicateTemplateId) {
+    ElMessage.warning(`模板 ID "${next.id}" 已存在，请使用其他 ID`);
+    return;
+  }
 
   try {
     const current = [

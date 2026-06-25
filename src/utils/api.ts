@@ -196,14 +196,22 @@ export interface ChatResponse {
 export async function uploadVideo(file: File): Promise<UploadVideoResponse> {
   const form = new FormData();
   form.append("video", file);
-  const res = await request.post<UploadVideoResponse>("/upload-video", form);
+  const res = await request.post<UploadVideoResponse>("/upload-video", form, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
   return res.data;
 }
 
 export async function uploadImage(file: File): Promise<UploadImageResponse> {
   const form = new FormData();
   form.append("image", file);
-  const res = await request.post<UploadImageResponse>("/upload", form);
+  const res = await request.post<UploadImageResponse>("/upload", form, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
   return res.data;
 }
 
@@ -402,13 +410,6 @@ export async function getAgentHistory(sessionId: string): Promise<AgentMessage[]
   return res.data;
 }
 
-export async function sendAgentMessage(sessionId: string, message: string, nodeStates?: any): Promise<any> {
-  const res = await request.post(`/agent/${sessionId}`, {
-    message,
-    nodeStates,
-  });
-  return res.data;
-}
 
 export async function stopAgent(sessionId: string): Promise<void> {
   await request.post(`/agent/${sessionId}/stop`);

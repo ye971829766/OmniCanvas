@@ -100,7 +100,12 @@
             </div>
           </Button>
 
-          <Button variant="text" rounded class="w-full !pl-0 !pr-0 action-item">
+          <Button
+            variant="text"
+            rounded
+            class="w-full !pl-0 !pr-0 action-item"
+            @click="toggleSearch"
+          >
             <div
               class="w-full flex items-center"
               :class="{
@@ -125,6 +130,32 @@
               </Transition>
             </div>
           </Button>
+        </div>
+
+        <!-- Search Input Field -->
+        <div v-if="showSearch && !collapsed" class="px-1 mt-2">
+          <div class="relative w-full flex items-center">
+            <input
+              ref="searchInputRef"
+              v-model="searchQuery"
+              type="text"
+              placeholder="搜索工作空间..."
+              class="w-full px-3 py-1.5 pr-8 text-sm rounded-lg border border-[var(--p-surface-200)] bg-[var(--p-surface-0)] text-[var(--p-text-color)] focus:outline-none focus:border-[var(--p-primary-color)] placeholder-[var(--p-text-muted-color)] transition-colors"
+              @keydown.esc="
+                showSearch = false;
+                searchQuery = '';
+              "
+            />
+            <Button
+              v-if="searchQuery"
+              variant="text"
+              rounded
+              class="absolute right-1 !p-1 w-6 h-6 flex items-center justify-center text-[var(--p-text-muted-color)]"
+              @click="searchQuery = ''"
+            >
+              <span class="text-xs">×</span>
+            </Button>
+          </div>
         </div>
 
         <!-- Main content placeholder -->
@@ -183,20 +214,21 @@
           >
             <div class="flex items-center gap-2.5">
               <div
-                class="w-30px h-30px rounded-full bg-[#5D4037] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0"
+                class="w-30px h-30px rounded-full bg-[var(--p-primary-color)] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0"
               >
-                jr
+                PT
               </div>
               <span
                 class="text-sm font-medium text-[var(--p-text-color)] whitespace-nowrap"
               >
-                jr y
+                Guest Designer
               </span>
             </div>
             <Button
               variant="text"
               rounded
               class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
+              @click="openSettings"
             >
               <Settings :size="18" />
             </Button>
@@ -212,13 +244,14 @@
               variant="text"
               rounded
               class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
+              @click="openSettings"
             >
               <Settings :size="18" />
             </Button>
             <div
-              class="w-30px h-30px rounded-full bg-[#5D4037] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0"
+              class="w-30px h-30px rounded-full bg-[var(--p-primary-color)] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0"
             >
-              jr
+              PT
             </div>
           </div>
         </div>
@@ -256,7 +289,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import {
   PanelLeftClose,
   PanelRightClose,
@@ -266,18 +299,18 @@ import {
   Pencil,
   Trash2,
   Settings,
-} from 'lucide-vue-next';
-import { gsap } from 'gsap';
-import vTooltip from 'primevue/tooltip';
-import { useConfirm } from 'primevue/useconfirm';
-import { useToast } from 'primevue/usetoast';
+} from "lucide-vue-next";
+import { gsap } from "gsap";
+import vTooltip from "primevue/tooltip";
+import { useConfirm } from "primevue/useconfirm";
+import { useToast } from "primevue/usetoast";
 
 const props = defineProps<{
   activeWorkspaceId: string | number | null;
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:activeWorkspaceId', id: string | number | null): void;
+  (e: "update:activeWorkspaceId", id: string | number | null): void;
 }>();
 
 import {
@@ -285,7 +318,7 @@ import {
   createWorkspace,
   updateWorkspace,
   deleteWorkspace,
-} from '@/utils/api';
+} from "@/utils/api";
 const confirm = useConfirm();
 const toast = useToast();
 const collapsed = ref(false);
@@ -304,11 +337,11 @@ const loadWorkspaces = async () => {
         (w) => String(w.id) === String(props.activeWorkspaceId),
       );
       if (!exists) {
-        emit('update:activeWorkspaceId', workspaces.value[0].id);
+        emit("update:activeWorkspaceId", workspaces.value[0].id);
       }
     }
   } catch (err) {
-    console.error('Failed to load workspaces:', err);
+    console.error("Failed to load workspaces:", err);
   }
 };
 
@@ -317,7 +350,7 @@ onMounted(() => {
 });
 
 const selectWorkspace = (item: any) => {
-  emit('update:activeWorkspaceId', item.id);
+  emit("update:activeWorkspaceId", item.id);
 };
 
 // Menu Popover state
@@ -325,7 +358,53 @@ const menuPopoverRef = ref();
 const selectedWorkspace = ref<any>(null);
 
 // Search state
-const searchQuery = ref('');
+const searchQuery = ref("");
+const showSearch = ref(false);
+const searchInputRef = ref<HTMLInputElement | null>(null);
+
+const toggleSearch = () => {
+  if (collapsed.value) {
+    collapsed.value = false;
+  }
+  showSearch.value = !showSearch.value;
+  if (showSearch.value) {
+    nextTick(() => {
+      searchInputRef.value?.focus();
+    });
+  } else {
+    searchQuery.value = "";
+  }
+};
+
+const openSettings = () => {
+  window.open("http://localhost:5174", "_blank");
+};
+
+const handleKeyDown = (e: KeyboardEvent) => {
+  if (e.ctrlKey && e.shiftKey) {
+    if (e.key === "O" || e.key === "o") {
+      e.preventDefault();
+      createNewWorkspace();
+    } else if (e.key === "F" || e.key === "f") {
+      e.preventDefault();
+      if (collapsed.value) {
+        collapsed.value = false;
+      }
+      showSearch.value = true;
+      nextTick(() => {
+        searchInputRef.value?.focus();
+      });
+    }
+  }
+};
+
+onMounted(() => {
+  window.addEventListener("keydown", handleKeyDown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", handleKeyDown);
+});
 
 const filteredWorkspaces = computed(() => {
   if (!searchQuery.value) return workspaces.value;
@@ -340,31 +419,31 @@ const toggleMenu = (event: Event, item: any) => {
 };
 
 const createNewWorkspace = async () => {
-  const workspaceName = '未命名工作区_' + Date.now();
+  const workspaceName = "未命名工作区_" + Date.now();
   try {
     const newWs = await createWorkspace(workspaceName);
     await loadWorkspaces();
-    emit('update:activeWorkspaceId', newWs.id);
+    emit("update:activeWorkspaceId", newWs.id);
   } catch (err) {
     toast.add({
-      severity: 'error',
-      summary: '创建失败',
+      severity: "error",
+      summary: "创建失败",
     });
-    console.error('Failed to create workspace:', err);
+    console.error("Failed to create workspace:", err);
   }
 };
 
 const renameWorkspace = async () => {
   if (!selectedWorkspace.value) return;
   menuPopoverRef.value?.hide();
-  const name = prompt('请输入新工作空间名称:', selectedWorkspace.value.name);
+  const name = prompt("请输入新工作空间名称:", selectedWorkspace.value.name);
   if (name === null) return;
-  const workspaceName = name.trim() || '未命名工作区';
+  const workspaceName = name.trim() || "未命名工作区";
   try {
     await updateWorkspace(selectedWorkspace.value.id, workspaceName);
     await loadWorkspaces();
   } catch (err) {
-    console.error('Failed to rename workspace:', err);
+    console.error("Failed to rename workspace:", err);
   }
 };
 
@@ -375,15 +454,15 @@ const confirmDelete = async () => {
 
   confirm.require({
     message: `确定要删除工作空间 "${selectedWorkspace.value.name}" 吗？`,
-    header: 'Confirmation',
-    icon: 'pi pi-exclamation-triangle',
+    header: "Confirmation",
+    icon: "pi pi-exclamation-triangle",
     rejectProps: {
-      label: '取消',
-      severity: 'secondary',
+      label: "取消",
+      severity: "secondary",
       outlined: true,
     },
     acceptProps: {
-      label: '确认',
+      label: "确认",
     },
     accept: async () => {
       try {
@@ -393,14 +472,15 @@ const confirmDelete = async () => {
           const nextId = workspaces.value.length
             ? workspaces.value[0].id
             : null;
-          emit('update:activeWorkspaceId', nextId);
+          emit("update:activeWorkspaceId", nextId);
         }
         toast.add({
-          severity: 'success',
-          summary: '操作成功',
+          severity: "success",
+          summary: "操作成功",
+          life: 3000,
         });
       } catch (err) {
-        console.error('Failed to delete workspace:', err);
+        console.error("Failed to delete workspace:", err);
       }
     },
     reject: () => {},
@@ -426,7 +506,7 @@ watch(collapsed, (isCollapsed) => {
       paddingLeft: 10,
       paddingRight: 10,
       duration: 0.35,
-      ease: 'power2.inOut',
+      ease: "power2.inOut",
     });
   } else {
     gsap.to(containerRef.value, {
@@ -434,7 +514,7 @@ watch(collapsed, (isCollapsed) => {
       paddingLeft: 10,
       paddingRight: 10,
       duration: 0.25,
-      ease: 'power2.inOut',
+      ease: "power2.inOut",
       onComplete: () => {
         renderExpandedContent.value = true;
         checkAllOverflows();
@@ -448,9 +528,9 @@ const isOverflowMap = ref<Record<string, boolean>>({});
 
 const checkAllOverflows = () => {
   nextTick(() => {
-    const elements = document.querySelectorAll('.workspace-name-span');
+    const elements = document.querySelectorAll(".workspace-name-span");
     elements.forEach((el) => {
-      const id = el.getAttribute('data-id');
+      const id = el.getAttribute("data-id");
       if (id) {
         isOverflowMap.value[id] = el.scrollWidth > el.clientWidth;
       }
@@ -494,7 +574,7 @@ watch(
 
 .history-item {
   color: var(--p-text-color);
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   font-weight: 500;
 
   .action {

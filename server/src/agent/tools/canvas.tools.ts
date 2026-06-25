@@ -60,6 +60,10 @@ export const addTextTool: AgentTool = {
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const refId = ctx.newRefId('txt');
+    const brand = ctx.memory.getBrand(ctx.sessionId);
+    const defaultFontFamily = brand?.fontFamily;
+    const defaultFill = brand?.palette?.text ?? '#111111';
+
     const node = {
       refId,
       type: 'text' as const,
@@ -69,8 +73,8 @@ export const addTextTool: AgentTool = {
       y: input.y ?? 0,
       width: input.width,
       fontSize: input.fontSize ?? 32,
-      fontFamily: input.fontFamily,
-      fill: input.fill ?? '#111111',
+      fontFamily: input.fontFamily ?? defaultFontFamily,
+      fill: input.fill ?? defaultFill,
       fontWeight: input.fontWeight,
       textAlign: input.textAlign,
       lineHeight: input.lineHeight,
@@ -113,10 +117,14 @@ export const addRectTool: AgentTool = {
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const refId = ctx.newRefId('rect');
+    const brand = ctx.memory.getBrand(ctx.sessionId);
+    const defaultFill = brand?.palette?.primary;
+
     const node = {
       refId,
       type: 'rect' as const,
       ...input,
+      fill: input.fill ?? defaultFill,
       x: input.x ?? 0,
       y: input.y ?? 0,
     };
@@ -291,15 +299,26 @@ export const exportNodeImageTool: AgentTool = {
         const maxWaitMs = 30_000;
         const checkIntervalMs = 2_000;
         const startTime = Date.now();
-        const agentService = (ctx as any).agentService;
+        const aiService = ctx.ai;
 
-        if (agentService) {
-          ctx.sink.emit({ type: 'thinking', text: `⌛ 正在等待图片生成完成以导出截图...\n` });
+        if (aiService) {
+          ctx.sink.emit({ type: 'progress', tool: 'export_node_image', message: '正在等待图片生成完成...' });
           while ((Date.now() - startTime) < maxWaitMs) {
             let allDone = true;
             for (const node of generatingNodes) {
-              const state = agentService.getGenerationState(node.refId);
-              if (!state || state.status === 'generating') {
+              const taskId = node.taskId;
+              if (taskId) {
+                try {
+                  const state = aiService.getTaskStatus(taskId);
+                  if (!state || state.status === 'generating') {
+                    allDone = false;
+                    break;
+                  }
+                } catch (e) {
+                  allDone = false;
+                  break;
+                }
+              } else {
                 allDone = false;
                 break;
               }

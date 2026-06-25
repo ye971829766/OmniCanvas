@@ -62,6 +62,16 @@ export class DatabaseService implements OnModuleInit {
         lastAccess INTEGER NOT NULL
       )
     `);
+
+    // 5. Create generation_tasks table to persist generated image/video task states
+    this.dbInstance.run(`
+      CREATE TABLE IF NOT EXISTS generation_tasks (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        data TEXT NOT NULL,
+        createdAt INTEGER NOT NULL
+      )
+    `);
   }
 
   get db(): Database {

@@ -111,11 +111,6 @@ export const generateImageTool: AgentTool = {
     // 1. tell the canvas to create an ImageGen placeholder node
     ctx.sink.canvas({ op: 'add_node', node: nodeSpec });
 
-    upsertCanvasNode(ctx, refId, {
-      ...nodeSpec,
-      status: 'generating',
-    });
-
     // 2. kick off the REAL generation through the existing AiService
     const res = await ctx.ai.generateImageFromJson(
       {
@@ -129,6 +124,13 @@ export const generateImageTool: AgentTool = {
       },
       ctx.origin,
     );
+
+    upsertCanvasNode(ctx, refId, {
+      ...nodeSpec,
+      taskId: (res as any).taskId,
+      status: 'generating',
+    });
+
 
     // 3. hand the taskId to the frontend so it polls via its existing pipeline
     ctx.sink.canvas({
@@ -198,11 +200,6 @@ export const generateVideoTool: AgentTool = {
 
     ctx.sink.canvas({ op: 'add_node', node: nodeSpec });
 
-    upsertCanvasNode(ctx, refId, {
-      ...nodeSpec,
-      status: 'generating',
-    });
-
     const res = await ctx.ai.generateVideoFromJson(
       {
         prompt: input.prompt,
@@ -213,6 +210,13 @@ export const generateVideoTool: AgentTool = {
       },
       ctx.origin,
     );
+
+    upsertCanvasNode(ctx, refId, {
+      ...nodeSpec,
+      taskId: (res as any).taskId,
+      status: 'generating',
+    });
+
 
     ctx.sink.canvas({
       op: 'generation_started',

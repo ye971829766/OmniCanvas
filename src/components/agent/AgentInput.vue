@@ -647,7 +647,7 @@ function handleSubmit() {
   resize: none;
   border: none;
   padding: 4px 24px 6px 0;
-  font-size: 13.5px;
+  font-size: var(--text-base);
   line-height: 1.6;
   outline: none;
   font-family: inherit;
@@ -682,7 +682,7 @@ function handleSubmit() {
   border-radius: 4px;
   padding: 1px 4px;
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
 }
 
 .clear-input-btn {
@@ -784,7 +784,7 @@ function handleSubmit() {
   color: var(--p-text-color, #334155);
   cursor: pointer;
   font-weight: 500;
-  font-size: 11px;
+  font-size: var(--text-xs);
   transition: all 0.2s ease;
   user-select: none;
 }
@@ -833,7 +833,7 @@ function handleSubmit() {
 }
 
 .kb-hint {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--p-text-muted-color, #9ca3af);
   letter-spacing: 0.2px;
   user-select: none;
@@ -865,7 +865,7 @@ function handleSubmit() {
 }
 
 .mentions-section-header {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--p-text-muted-color, #94a3b8);
   padding: 6px 12px 4px 12px;
@@ -943,7 +943,7 @@ function handleSubmit() {
 }
 
 .mention-item-name {
-  font-size: 13.5px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--p-text-color, #0f172a);
 }

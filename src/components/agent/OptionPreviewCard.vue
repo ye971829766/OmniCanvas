@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { Loader2 } from "lucide-vue-next";
-
 defineProps<{
   refId: string;
   state?: {
@@ -21,9 +19,9 @@ const emit = defineEmits<{
 <template>
   <div class="option-preview-card" @click="emit('zoom', refId)">
     <!-- Loading status -->
-    <div v-if="!state || state.status === 'generating'" class="preview-loading">
-      <Loader2 class="animate-spin text-primary mr-2" :size="14" />
-      <span>正在生成探索方案...</span>
+    <div v-if="!state || state.status === 'generating'" class="preview-skeleton">
+      <div class="skeleton-shimmer" />
+      <div class="skeleton-label">生成中…</div>
     </div>
 
     <!-- Error status -->
@@ -83,7 +81,6 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
   font-size: 12.5px;
   color: var(--p-text-muted-color, #6b7280);
 }
@@ -103,8 +100,7 @@ const emit = defineEmits<{
 .preview-content {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #000;
+  background: #111;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -112,9 +108,41 @@ const emit = defineEmits<{
 
 .preview-img {
   width: 100%;
-  height: 100%;
+  height: auto;
+  max-height: 480px;
+  display: block;
   object-fit: contain;
   transition: transform 0.3s ease;
+}
+
+.preview-skeleton {
+  height: 200px;
+  position: relative;
+  overflow: hidden;
+  background: var(--p-surface-100, #f3f4f6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.5) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes shimmer-sweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-label {
+  font-size: var(--text-sm, 13px);
+  color: var(--p-text-muted-color, #9ca3af);
+  position: relative;
+  z-index: 1;
 }
 
 .preview-overlay {

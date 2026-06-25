@@ -2,3 +2,8 @@ node_modules
 .qoder
 dist
 .agents
+
+# Leaked third-party prompt artifact - must not be re-committed
+Prompt.md
+.env
+server/.env

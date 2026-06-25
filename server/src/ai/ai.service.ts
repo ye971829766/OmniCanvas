@@ -1,6 +1,7 @@
 import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
 import { FilesService } from "../files/files.service";
 import { ChannelsService, type Channel } from "../channels/channels.service";
+import { DatabaseService } from "../database/database.service";
 import {
   ModelConfigService,
   type ModelMapping,
@@ -38,6 +39,7 @@ export class AiService {
     private readonly filesService: FilesService,
     private readonly channelsService: ChannelsService,
     private readonly modelConfigService: ModelConfigService,
+    private readonly dbService: DatabaseService,
   ) {}
 
   getOutputFormat(format: unknown): GenerateImageOutputFormat {
@@ -1045,17 +1047,51 @@ export class AiService {
     };
   }
 
-  private tasks = new Map<string, any>();
-
   getTaskStatus(id: string) {
-    const task = this.tasks.get(id);
-    if (!task) {
+    try {
+      const stmt = this.dbService.db.prepare(
+        "SELECT * FROM generation_tasks WHERE id = $id",
+      );
+      const row = stmt.get({ $id: id }) as any;
+      if (!row) {
+        throw new HttpException(
+          { error: "Task not found" },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      const data = JSON.parse(row.data);
+      return {
+        id: row.id,
+        status: row.status,
+        ...data,
+      };
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
       throw new HttpException(
-        { error: "Task not found" },
-        HttpStatus.NOT_FOUND,
+        { error: "Internal database error" },
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    return task;
+  }
+
+  private setTaskStatus(id: string, status: string, data: any) {
+    try {
+      const stmt = this.dbService.db.prepare(`
+        INSERT INTO generation_tasks (id, status, data, createdAt)
+        VALUES ($id, $status, $data, $createdAt)
+        ON CONFLICT(id) DO UPDATE SET
+          status = excluded.status,
+          data = excluded.data
+      `);
+      stmt.run({
+        $id: id,
+        $status: status,
+        $data: JSON.stringify(data),
+        $createdAt: Date.now(),
+      });
+    } catch (err) {
+      console.error(`Failed to save task status for ${id}:`, err);
+    }
   }
 
   async runGenerationTaskInBackground(
@@ -1065,10 +1101,31 @@ export class AiService {
   ) {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const outputFormat = this.getOutputFormat(body?.outputFormat);
+
+    if (
+      process.env.MOCK_IMAGE_GENERATION === "true" ||
+      process.env.MOCK_AGENT === "true"
+    ) {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        const imageUrl = `http://101.200.138.2:8093/i/49496bbf-85cc-4f9b-a275-5736cb2497f8.png`;
+
+        this.setTaskStatus(taskId, "success", { imageUrl });
+        return;
+      } catch (err: any) {
+        this.setTaskStatus(taskId, "error", {
+          error: err.message || "Mock generation failed",
+        });
+        return;
+      }
+    }
+
     let model = this.getSelectedModel(body?.model, "");
     if (!model) {
-      const mappings = await this.modelConfigService.getEnabledMappingsByPurpose("image");
-      const activeMapping = mappings.find(m => m.enabled);
+      const mappings =
+        await this.modelConfigService.getEnabledMappingsByPurpose("image");
+      const activeMapping = mappings.find((m) => m.enabled);
       model = activeMapping ? activeMapping.id : this.YUNWU_IMAGE_MODEL;
     }
     const options = await this.getImageModelOptions(model);
@@ -1230,7 +1287,7 @@ export class AiService {
         imageUrl = `${originUrl}/files/${filename}`;
       } else {
         // If base64 reference images are provided for image-to-image / edits
-           const channel = route.channel;
+        const channel = route.channel;
         if (Array.isArray(body?.images) && body.images.length > 0) {
           // Checked against model options at function entry
 
@@ -1330,8 +1387,7 @@ export class AiService {
             "edits",
             upstreamForm,
           );
-        
-       
+
           const filename = await this.filesService.saveGeneratedImage(
             providerBody,
             outputFormat,
@@ -1362,7 +1418,9 @@ export class AiService {
             generateParams.quality = body.quality.trim();
           }
 
-          const sdkResponse = await openAi.images.generate(generateParams as any);
+          const sdkResponse = await openAi.images.generate(
+            generateParams as any,
+          );
           const providerBody = JSON.parse(JSON.stringify(sdkResponse));
 
           const filename = await this.filesService.saveGeneratedImage(
@@ -1373,9 +1431,7 @@ export class AiService {
         }
       }
 
-      this.tasks.set(taskId, {
-        id: taskId,
-        status: "success",
+      this.setTaskStatus(taskId, "success", {
         imageUrl,
       });
     } catch (err: any) {
@@ -1397,9 +1453,7 @@ export class AiService {
           }
         }
       }
-      this.tasks.set(taskId, {
-        id: taskId,
-        status: "error",
+      this.setTaskStatus(taskId, "error", {
         error: errMsg,
       });
     }
@@ -1418,10 +1472,7 @@ export class AiService {
     }
 
     const taskId = crypto.randomUUID();
-    this.tasks.set(taskId, {
-      id: taskId,
-      status: "generating",
-    });
+    this.setTaskStatus(taskId, "generating", {});
 
     this.runGenerationTaskInBackground(taskId, body, originUrl);
 
@@ -1488,9 +1539,7 @@ export class AiService {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         const localResult =
           await this.filesService.generateMockVideo(originUrl);
-        this.tasks.set(taskId, {
-          id: taskId,
-          status: "success",
+        this.setTaskStatus(taskId, "success", {
           videoUrl: localResult.videoUrl,
           thumbnailUrl: localResult.thumbnailUrl,
         });
@@ -1595,9 +1644,7 @@ export class AiService {
             originUrl,
           );
 
-          this.tasks.set(taskId, {
-            id: taskId,
-            status: "success",
+          this.setTaskStatus(taskId, "success", {
             videoUrl: localResult.videoUrl,
             thumbnailUrl: localResult.thumbnailUrl,
           });
@@ -1631,15 +1678,16 @@ export class AiService {
           }
         }
       }
-      this.tasks.set(taskId, {
-        id: taskId,
-        status: "error",
+      this.setTaskStatus(taskId, "error", {
         error: errMsg,
       });
     }
   }
 
-  async generateVideoFromJson(body: GenerateVideoJsonRequest, originUrl: string): Promise<any> {
+  async generateVideoFromJson(
+    body: GenerateVideoJsonRequest,
+    originUrl: string,
+  ): Promise<any> {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt) {
       throw new HttpException(
@@ -1649,10 +1697,7 @@ export class AiService {
     }
 
     const taskId = crypto.randomUUID();
-    this.tasks.set(taskId, {
-      id: taskId,
-      status: "generating",
-    });
+    this.setTaskStatus(taskId, "generating", {});
 
     this.runVideoGenerationTaskInBackground(taskId, body, originUrl);
 
@@ -1774,15 +1819,24 @@ export class AiService {
   }
 
   async uploadImageToHost(base64: string): Promise<string> {
-    if (!base64 || typeof base64 !== 'string') return base64;
-    if (base64.startsWith('http://') || base64.startsWith('https://') || base64.startsWith('[')) {
+    if (!base64 || typeof base64 !== "string") return base64;
+    if (
+      base64.startsWith("http://") ||
+      base64.startsWith("https://") ||
+      base64.startsWith("[")
+    ) {
       return base64;
     }
-    const url = "http://101.200.138.2:8092/api/upload/private";
-    const apiKey = "sk-a9f76e82c4df42f58afbefd53d3b4f8e";
-    
+    const url = process.env.IMAGE_HOST_UPLOAD_URL || "";
+    const apiKey = process.env.IMAGE_HOST_API_KEY || "";
+
+    // If no image host is configured, skip upload and fall back to inline base64.
+    if (!url) {
+      return base64;
+    }
+
     let formattedBase64 = base64;
-    if (!base64.startsWith('data:')) {
+    if (!base64.startsWith("data:")) {
       formattedBase64 = `data:image/png;base64,${base64}`;
     }
 
@@ -1791,21 +1845,30 @@ export class AiService {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": apiKey
+          ...(apiKey ? { "X-API-Key": apiKey } : {}),
         },
         body: JSON.stringify({
           base64: formattedBase64,
-          filename: `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.png`
-        })
+          filename: `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.png`,
+        }),
       });
-      
-      const resData = await response.json() as any;
-      if (response.ok && resData && resData.success && resData.data && resData.data.url) {
+
+      const resData = (await response.json()) as any;
+      if (
+        response.ok &&
+        resData &&
+        resData.success &&
+        resData.data &&
+        resData.data.url
+      ) {
         return resData.data.url;
       }
       throw new Error(resData?.message || `HTTP ${response.status}`);
     } catch (err: any) {
-      console.warn("[uploadImageToHost] failed, falling back to base64:", err.message);
+      console.warn(
+        "[uploadImageToHost] failed, falling back to base64:",
+        err.message,
+      );
       return base64;
     }
   }

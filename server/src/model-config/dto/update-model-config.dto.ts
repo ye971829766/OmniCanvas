@@ -22,5 +22,6 @@ export class UpdateModelConfigDto {
   agentConfig?: {
     systemPrompt?: string;
     chatModel?: string;
+    visionModel?: string;
   };
 }

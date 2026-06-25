@@ -8,7 +8,6 @@ import {
   type Ref,
   toRef,
 } from "vue";
-import { Sparkles } from "lucide-vue-next";
 import { useAgent } from "@/composables/useAgent";
 import { Button } from "primevue";
 import { gsap } from "gsap";
@@ -115,7 +114,7 @@ const notificationEnabled = ref(false);
 watch(running, (newRunning) => {
   if (newRunning) {
     elapsedTime.value = 0;
-    showNotificationBanner.value = true;
+    showNotificationBanner.value = !notificationEnabled.value; // Only show banner if notification is not yet enabled
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
       elapsedTime.value++;
@@ -126,6 +125,14 @@ watch(running, (newRunning) => {
       timerInterval = null;
     }
     showNotificationBanner.value = false;
+    
+    // Trigger real system notification if enabled
+    if (notificationEnabled.value && Notification.permission === "granted") {
+      new Notification("AgentsBoard 设计任务已完成", {
+        body: `AI 助手已经完成了设计！总共耗时 ${formattedElapsedTime.value}。`,
+        icon: "/favicon.ico",
+      });
+    }
   }
 });
 
@@ -147,13 +154,20 @@ const TOOL_LABELS: Record<string, string> = {
   add_rect: "添加图形",
   update_node: "调整元素",
   remove_node: "删除元素",
-  query_canvas: "查看画布",
-  collect_inspiration: "🔍 收集图片灵感",
-  auto_layout: "📐 自动布局",
+  query_canvas: "读取画布",
+  collect_inspiration: "收集灵感",
+  auto_layout: "自动布局",
   align_nodes: "对齐元素",
   distribute_nodes: "分布元素",
-  set_brand: "🏷️ 设置品牌",
-  apply_palette: "🎨 应用色板",
+  set_brand: "设置品牌",
+  apply_palette: "应用配色",
+  verify_design: "视觉质检",
+  plan_design: "规划任务",
+  export_node_image: "截取画面",
+  analyze_design: "视觉分析",
+  review_and_adjust: "布局检查",
+  focus_node: "聚焦元素",
+  add_frame: "添加画板",
 };
 
 function toolLabel(name: string) {
@@ -165,31 +179,29 @@ const currentStatusText = computed(() => {
   const lastMsg = messages.value[messages.value.length - 1];
   if (lastMsg && lastMsg.role === "assistant") {
     const activeTool = lastMsg.tools.find((t) => !t.done);
-    if (activeTool) {
-      if (activeTool.name === "collect_inspiration")
-        return "正在收集图片灵感...";
-      return `正在执行 ${toolLabel(activeTool.name)}...`;
-    }
-    return "思考中...";
+    if (activeTool) return toolLabel(activeTool.name);
+    return "思考中";
   }
-  return "思考中...";
-});
-
-const estimatedTimeText = computed(() => {
-  const lastMsg = messages.value[messages.value.length - 1];
-  if (lastMsg && lastMsg.role === "assistant") {
-    const activeTool = lastMsg.tools.find((t) => !t.done);
-    if (activeTool) {
-      if (activeTool.name === "collect_inspiration") return "1分钟";
-    }
-  }
-  return "30秒";
+  return "思考中";
 });
 
 function enableNotification() {
-  notificationEnabled.value = true;
-  showNotificationBanner.value = false;
-  alert("任务完成通知已开启");
+  if (!("Notification" in window)) {
+    alert("您的浏览器不支持系统通知。");
+    return;
+  }
+  Notification.requestPermission().then((permission) => {
+    if (permission === "granted") {
+      notificationEnabled.value = true;
+      showNotificationBanner.value = false;
+      // Show confirmation notification
+      new Notification("通知已开启", {
+        body: "当 Agent 任务完成时，您将会收到通知气泡！",
+      });
+    } else {
+      alert("系统通知权限已被拒绝，请在浏览器设置中允许通知以启用该功能。");
+    }
+  });
 }
 
 const suggestions = [
@@ -255,34 +267,18 @@ function useSuggestion(s: string) {
           v-if="showNotificationBanner && running"
           class="notification-banner"
         >
-          <div class="notification-left">
-            <span class="notification-icon">🔔</span>
-            <span class="notification-text">任务完成时通知我</span>
-          </div>
+          <span class="notification-text">完成后通知我</span>
           <div class="notification-actions">
-            <button class="notification-btn-enable" @click="enableNotification">
-              开启
-            </button>
-            <button
-              class="notification-btn-close"
-              @click="showNotificationBanner = false"
-            >
-              ×
-            </button>
+            <button class="notification-btn-enable" @click="enableNotification">开启</button>
+            <button class="notification-btn-close" @click="showNotificationBanner = false">×</button>
           </div>
         </div>
 
         <!-- Bottom Status Bar -->
         <div v-if="running" class="agent-status-bar">
-          <div class="status-left">
-            <span class="status-logo-pulse"><Sparkles :size="10" /></span>
-            <span class="status-text">{{ currentStatusText }}</span>
-          </div>
-          <div class="status-right">
-            <span class="status-timer"
-              >{{ formattedElapsedTime }} / {{ estimatedTimeText }}</span
-            >
-          </div>
+          <span class="status-dot" />
+          <span class="status-text">{{ currentStatusText }}</span>
+          <span class="status-timer">{{ formattedElapsedTime }}</span>
         </div>
 
         <!-- Input Wrap -->
@@ -317,6 +313,7 @@ function useSuggestion(s: string) {
   display: flex;
   flex-direction: column;
   background: var(--p-surface-0, #fff);
+  box-shadow: 0 -8px 16px -4px rgba(0, 0, 0, 0.04);
   z-index: 50;
 }
 
@@ -332,106 +329,80 @@ function useSuggestion(s: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: rgba(59, 130, 246, 0.08);
-  border-top: 1px solid rgba(59, 130, 246, 0.12);
-  border-bottom: 1px solid rgba(59, 130, 246, 0.12);
-  font-size: 12px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--p-surface-100, #f3f4f6);
+  font-size: var(--text-sm);
+  color: var(--p-text-muted-color, #6b7280);
 }
 
-.notification-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #2563eb;
-  font-weight: 500;
+.notification-text {
+  font-weight: 400;
 }
 
 .notification-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .notification-btn-enable {
-  background: #2563eb;
-  color: #fff;
+  background: transparent;
+  color: var(--p-primary-color, #6d28d9);
   border: none;
-  padding: 2.5px 8px;
-  border-radius: 4px;
+  padding: 0;
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 600;
-  transition: opacity 0.15s ease;
 }
 
 .notification-btn-enable:hover {
-  opacity: 0.9;
+  opacity: 0.75;
 }
 
 .notification-btn-close {
   background: transparent;
-  color: #6b7280;
+  color: var(--p-text-muted-color, #9ca3af);
   border: none;
   font-size: 14px;
   cursor: pointer;
   line-height: 1;
+  padding: 0;
 }
 
 .agent-status-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--p-surface-50, #f9fafb);
-  border-top: 1px solid var(--p-surface-100, #f3f4f6);
-  font-size: 12px;
+  gap: 7px;
+  padding: 7px 14px;
+  font-size: var(--text-sm);
   color: var(--p-text-muted-color, #6b7280);
 }
 
-.status-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--p-primary-color, #6d28d9);
+  flex-shrink: 0;
+  animation: dot-pulse 1.6s ease-in-out infinite;
 }
 
-.status-logo-pulse {
-  width: 16px;
-  height: 16px;
-  border-radius: 4.5px;
-  background: linear-gradient(
-    135deg,
-    var(--p-primary-color),
-    var(--p-primary-active-color, #6d28d9)
-  );
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: pulse-glow 1.5s infinite ease-in-out;
-}
-
-@keyframes pulse-glow {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.08);
-    opacity: 1;
-  }
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
 .status-text {
-  font-weight: 500;
-  color: var(--p-text-color, #111);
+  flex: 1;
+  font-weight: 400;
+  color: var(--p-text-muted-color, #6b7280);
 }
 
 .status-timer {
   font-family: var(--font-family-mono, monospace);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  color: var(--p-text-muted-color, #9ca3af);
+  font-weight: 400;
 }
 
 /* Transitions */

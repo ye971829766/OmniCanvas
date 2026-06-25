@@ -136,21 +136,22 @@ export class VideoGen extends Box {
       width: this.width,
       height: this.height,
       hittable: true,
+      overflow: "hide",
     });
 
     const w = this.width ?? 400;
     const h = this.height ?? 300;
 
-    // Soft violet/blue background (giving it a unique look vs image generator's soft blue)
+    // Background card shape (soft blue background, matching ImageGen)
     const bg = new Rect({
       width: w,
       height: h,
-      fill: "#eef2ff", // indigo-50
+      fill: "#e2e8f0", // slate-200
       cornerRadius: 12,
     });
     group.add(bg);
 
-    // Camera Icon in the center
+    // Camera Icon in the center (white fill, matching ImageGen's sun and mountains)
     const iconWidth = 120;
     const iconHeight = 80;
 
@@ -175,7 +176,7 @@ export class VideoGen extends Box {
       y: 20,
       width: 55,
       height: 40,
-      fill: "#c7d2fe", // indigo-200
+      fill: "#ffffff", // white
       cornerRadius: 6,
     });
     iconGroup.add(body);
@@ -183,7 +184,7 @@ export class VideoGen extends Box {
     // 2. Camera Lens (Polygon / Triangle on the right side)
     const lens = new Polygon({
       points: [70, 30, 95, 20, 95, 60, 70, 50],
-      fill: "#c7d2fe", // indigo-200
+      fill: "#ffffff", // white
     });
     iconGroup.add(lens);
 
@@ -193,33 +194,62 @@ export class VideoGen extends Box {
       y: 8,
       width: 16,
       height: 16,
-      fill: "#c7d2fe",
+      fill: "#ffffff", // white
     });
     const reel2 = new Ellipse({
       x: 44,
       y: 8,
       width: 16,
       height: 16,
-      fill: "#c7d2fe",
+      fill: "#ffffff", // white
     });
     iconGroup.add(reel1);
     iconGroup.add(reel2);
 
     group.add(iconGroup);
 
-    // Loading state
+    // Loading state (shimmer animation and prompt text)
     if (this.generationStatus === "generating") {
       const loadingText = new Text({
         x: w / 2,
         y: h / 2 + 45,
-        text: "正在生成 AI 视频...",
+        text: this.prompt,
         fontSize: 14,
         fontWeight: "bold",
-        fill: "#4f46e5", // indigo-600
+        fill: "#00000050", // grey transparent
         textAlign: "center",
         verticalAlign: "middle",
       });
+
+      const loadingRect = new Rect({
+        x: -w,
+        width: w,
+        height: h,
+        fill: {
+          type: "linear",
+          from: { type: "percent", x: 0, y: 0.5 },
+          to: { type: "percent", x: 1, y: 0.5 },
+          stops: [
+            "rgba(255,255,255,0)",
+            "rgba(255,255,255,0.6)",
+            "rgba(255,255,255,0)",
+          ],
+        },
+      });
+
+      group.add(loadingRect);
       group.add(loadingText);
+      group.remove(iconGroup);
+
+      loadingRect.animate(
+        {
+          x: w,
+        },
+        {
+          duration: 1.2,
+          loop: true,
+        },
+      );
     }
     // Error state
     else if (this.generationStatus === "error") {

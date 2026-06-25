@@ -1,4 +1,4 @@
-import { ref, shallowRef, watch, type Ref, reactive } from "vue";
+import { ref, watch, type Ref, reactive } from "vue";
 import { Text, Rect, Frame } from "leafer-ui";
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
@@ -188,7 +188,18 @@ export function useAgent(
     localStorage.setItem('agent_session_id', newId);
     return newId;
   };
-  const sessionId = shallowRef(getOrCreateSessionId());
+  const sessionId = ref("");
+  watch(
+    () => activeWorkspaceIdRef?.value,
+    (newWorkspaceId) => {
+      if (newWorkspaceId) {
+        sessionId.value = String(newWorkspaceId);
+      } else {
+        sessionId.value = getOrCreateSessionId();
+      }
+    },
+    { immediate: true }
+  );
 
   // refId -> leafer node, so update_node / generation_started can find nodes
   const nodeMap = new Map<string, any>();
@@ -251,7 +262,9 @@ export function useAgent(
 
   // Load history once on mount
   const loadHistory = async () => {
+    if (!sessionId.value) return;
     try {
+      messages.value = []; // Clear current history before loading the new one
       const rawHistory = await getAgentHistory(sessionId.value);
       if (Array.isArray(rawHistory)) {
         const parsed: ChatMessage[] = [];
@@ -281,7 +294,10 @@ export function useAgent(
       console.error("Failed to load agent chat history:", err);
     }
   };
-  loadHistory();
+
+  watch(sessionId, () => {
+    loadHistory();
+  }, { immediate: true });
 
   // Sync nodeMap when workspace changes
   watch(
@@ -567,14 +583,6 @@ export function useAgent(
         if (node) {
           node.set({ taskId: op.taskId, generationStatus: "generating" });
           node.emit("task-start", { bubbles: true });
-
-          // 监听生成完成事件，自动触发布局检查
-          node.once("generation-complete", () => {
-            setTimeout(() => {
-              // 自动发送一条"检查并调整布局"的消息
-              send("检查布局并调整", []);
-            }, 1000); // 延迟1秒确保状态已更新
-          });
         }
         if (nodeStates.value[op.refId]) {
           nodeStates.value[op.refId].status = "generating";
@@ -624,6 +632,7 @@ export function useAgent(
                 fetch(`${AGENT_BASE_URL}/agent/export-result`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
+                  signal: AbortSignal.timeout(10000),
                   body: JSON.stringify({
                     requestId: op.requestId,
                     imageBase64: res.data,
@@ -654,6 +663,9 @@ export function useAgent(
       case "thinking":
         assistant.text += ev.text;
         break;
+      case "progress":
+        // tool progress — shown in ToolActivity, not in chat text
+        break;
       case "tool_call":
         assistant.tools.push({
           id: ev.id,
@@ -677,11 +689,25 @@ export function useAgent(
         // backend sends the full final text; prefer it if we streamed nothing
         if (!assistant.text.trim()) assistant.text = stripInternalToolErrors(ev.text ?? "");
         break;
-      case "error":
+      case "error": {
         if (!isInternalToolError(ev.message)) {
-          assistant.text += `\n\n⚠️ ${ev.message}`;
+          const raw = String(ev.message ?? "");
+          const friendly =
+            raw.includes("insufficient_quota") || raw.includes("insufficient quota")
+              ? "渠道额度不足，请在管理后台充值或更换渠道"
+              : raw.includes("AI_NoOutputGenerated") || raw.includes("No output generated")
+                ? "模型未返回内容，请检查渠道配置或稍后重试"
+                : raw.includes("API_KEY") || raw.includes("Unauthorized") || raw.includes("401")
+                  ? "API Key 无效，请检查渠道配置"
+                  : raw || "请求失败，请稍后重试";
+          if (!assistant.text.trim()) {
+            assistant.text = `⚠️ ${friendly}`;
+          } else {
+            assistant.text += `\n\n⚠️ ${friendly}`;
+          }
         }
         break;
+      }
     }
   }
 

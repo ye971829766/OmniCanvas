@@ -77,7 +77,7 @@ function activeCopy(name: string) {
     add_rect: "正在添加图形",
     update_node: "正在微调元素",
     remove_node: "正在清理元素",
-    query_canvas: "正在查看画布",
+    query_canvas: "正在读取画布",
     collect_inspiration: "正在收集灵感",
     generate_image: "正在生成图片",
     generate_video: "正在生成视频",
@@ -86,6 +86,13 @@ function activeCopy(name: string) {
     distribute_nodes: "正在调整间距",
     set_brand: "正在应用品牌",
     apply_palette: "正在调整配色",
+    add_frame: "正在添加画板",
+    export_node_image: "正在截取画面",
+    analyze_design: "正在分析设计",
+    verify_design: "正在验证质量",
+    plan_design: "正在规划任务",
+    review_and_adjust: "正在检查布局",
+    focus_node: "正在聚焦元素",
   };
   return copy[name] ?? "正在处理画布";
 }
@@ -150,10 +157,7 @@ function truncate(value: unknown, maxLength: number) {
 }
 
 .activity-text {
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-  color: var(--p-text-muted-color, #64748b);
+  font-size: var(--text-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

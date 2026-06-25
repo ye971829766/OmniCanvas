@@ -13,8 +13,8 @@ export const autoLayoutTool: AgentTool = {
     properties: {
       layoutHint: {
         type: 'string',
-        enum: ['hero', 'centered', 'split-horizontal', 'split-vertical', 'grid', 'hero-overlay'],
-        description: 'The visual structure to apply.',
+        enum: ['hero', 'centered', 'split-horizontal', 'split-vertical', 'grid', 'hero-overlay', 'columns'],
+        description: 'The visual structure to apply. Choose "columns" for horizontal row layouts.',
       },
     },
     required: ['layoutHint'],

@@ -38,8 +38,8 @@ export class AgentMemory {
 
   /** Approximate max tokens to keep in history. */
   private readonly MAX_TOKENS = 24_000;
-  /** Session TTL in ms (default 30 min). */
-  private readonly SESSION_TTL_MS = 30 * 60 * 1000;
+  /** Session TTL in ms (default 30 days). */
+  private readonly SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
   /** Cleanup interval in ms (every 5 min). */
   private readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 

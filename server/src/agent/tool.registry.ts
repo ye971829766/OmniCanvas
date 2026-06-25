@@ -16,6 +16,8 @@ import { setBrandTool, applyPaletteTool } from './tools/style.tools';
 import { collectInspirationTool } from './tools/inspiration.tools';
 import { reviewAndAdjustTool } from './tools/review.tools';
 import { analyzeDesignTool } from './tools/vision-analysis.tools';
+import { verifyDesignTool } from './tools/verify-design.tools';
+import { planDesignTool } from './tools/plan-design.tools';
 
 /** All design tools the agent can call. */
 export const ALL_TOOLS: AgentTool[] = [
@@ -38,6 +40,8 @@ export const ALL_TOOLS: AgentTool[] = [
   addFrameTool,
   reviewAndAdjustTool,
   analyzeDesignTool,
+  verifyDesignTool,
+  planDesignTool,
 ];
 
 export const TOOL_MAP = new Map(ALL_TOOLS.map((t) => [t.name, t]));

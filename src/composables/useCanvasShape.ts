@@ -69,7 +69,7 @@ export function useCanvasShape(
           sides: shapeSides.value,
           fill: fillColor,
           editable: true,
-        } as any);
+        });
       } else if (type === "star") {
         drawingShape = new Star({
           x: startX,
@@ -80,7 +80,7 @@ export function useCanvasShape(
           innerRadius: shapeInnerRadius.value,
           fill: fillColor,
           editable: true,
-        } as any);
+        });
       } else if (type === "line") {
         drawingShape = new Line({
           x: startX,
@@ -176,9 +176,9 @@ export function useCanvasShape(
     };
 
     // Store references on DOM element for cleanup
-    (view as any)._shapeDown = onPointerDown;
-    (view as any)._shapeMove = onPointerMove;
-    (view as any)._shapeUp = onPointerUp;
+    view._shapeDown = onPointerDown;
+    view._shapeMove = onPointerMove;
+    view._shapeUp = onPointerUp;
 
     view.addEventListener("pointerdown", onPointerDown);
     view.addEventListener("pointermove", onPointerMove);
@@ -190,21 +190,21 @@ export function useCanvasShape(
     if (!canvasApp?.view) return;
     const view = canvasApp.view as HTMLElement;
 
-    const onPointerDown = (view as any)._shapeDown;
-    const onPointerMove = (view as any)._shapeMove;
-    const onPointerUp = (view as any)._shapeUp;
+    const onPointerDown = view._shapeDown;
+    const onPointerMove = view._shapeMove;
+    const onPointerUp = view._shapeUp;
 
     if (onPointerDown) {
       view.removeEventListener("pointerdown", onPointerDown);
-      (view as any)._shapeDown = null;
+      view._shapeDown = null;
     }
     if (onPointerMove) {
       view.removeEventListener("pointermove", onPointerMove);
-      (view as any)._shapeMove = null;
+      view._shapeMove = null;
     }
     if (onPointerUp) {
       view.removeEventListener("pointerup", onPointerUp);
-      (view as any)._shapeUp = null;
+      view._shapeUp = null;
     }
   };
 

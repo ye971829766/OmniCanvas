@@ -8,9 +8,9 @@ import { listCanvasNodes, getFrame } from '../canvas-state';
 export const reviewAndAdjustTool: AgentTool = {
   name: 'review_and_adjust',
   description:
-    'Analyze the current canvas layout and return a diagnostic report. ' +
-    'Automatically waits up to 30 seconds for image/video generation to complete. ' +
-    'Returns element positions and sizing for you to adjust.',
+    'Analyze the layout geometry, alignment, and spacing metrics of elements on the canvas (heuristic check). ' +
+    'Does not use vision AI tokens. Automatically waits up to 30 seconds for image/video generation to complete. ' +
+    'Returns element positions and sizing coordinates for adjustment.',
   parameters: {
     type: 'object',
     properties: {},
@@ -30,16 +30,25 @@ export const reviewAndAdjustTool: AgentTool = {
       const maxWaitMs = 30_000;
       const checkIntervalMs = 2_500;
       const startTime = Date.now();
-
-      // 获取 AgentService 实例（通过 ctx 传递）
-      const agentService = (ctx as any).agentService;
+      const aiService = ctx.ai;
 
       while ((Date.now() - startTime) < maxWaitMs) {
         // 检查所有生成节点的状态
         let allDone = true;
         for (const node of generatingNodes) {
-          const state = agentService?.getGenerationState?.(node.refId);
-          if (!state || state.status === 'generating') {
+          const taskId = node.taskId;
+          if (taskId && aiService) {
+            try {
+              const state = aiService.getTaskStatus(taskId);
+              if (!state || state.status === 'generating') {
+                allDone = false;
+                break;
+              }
+            } catch (e) {
+              allDone = false;
+              break;
+            }
+          } else {
             allDone = false;
             break;
           }

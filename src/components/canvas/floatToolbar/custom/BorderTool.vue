@@ -142,9 +142,10 @@ function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
 // Color string parser
 function parseColor(stroke: any): { h: number; s: number; l: number; a: number } {
   const defaultColor = { h: 0, s: 0, l: 0, a: 100 }; // Default black
-  if (typeof stroke !== "string" || !stroke) return defaultColor;
+  const val = typeof stroke === "function" ? stroke.toString() : stroke;
+  if (typeof val !== "string" || !val) return defaultColor;
 
-  const str = stroke.trim().toLowerCase();
+  const str = val.trim().toLowerCase();
 
   // 1. Hex
   if (str.startsWith("#")) {

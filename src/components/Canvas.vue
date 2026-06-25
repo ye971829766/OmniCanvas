@@ -115,7 +115,6 @@ import { useCanvas } from "@/composables/useCanvas";
 import {
   uploadImage,
   uploadVideo,
-  type ImageModelOptionsResponse,
 } from "@/utils/api";
 import LayerPanel from "@/components/canvas/LayerPanel.vue";
 import ZoomController from "@/components/canvas/ZoomController.vue";
@@ -125,30 +124,6 @@ import {
   isVideoFile,
 } from "@/utils/utils.ts";
 import { Image } from "leafer-ui";
-
-const option = ref<{
-  model: string;
-  size: string;
-  quality: string;
-  aspectRatio: string;
-  options: ImageModelOptionsResponse | null;
-}>({
-  model: "gpt-image-2",
-  size: "1024x1024",
-  quality: "standard",
-  aspectRatio: "1:1",
-  options: null,
-});
-
-watch(
-  () => option.value,
-  (value) => {
-    console.log(value);
-  },
-  {
-    deep: true,
-  },
-);
 
 const canvasRef = useTemplateRef("canvasRef");
 
@@ -219,8 +194,113 @@ const onFontFamilyChange = (newFamily: string) => {
   fontFamily.value = newFamily;
 };
 
-const onSubmitLink = (url: string) => {
-  alert(`Submitted Link to Parent: ${url}`);
+const onSubmitLink = async (url: string) => {
+  if (!url || typeof url !== 'string') return;
+  const trimmed = url.trim();
+  const app = canvasApp.value;
+  if (!app || !app.tree) return;
+
+  try {
+    const isImg = trimmed.match(/\.(jpeg|jpg|gif|png|webp)/i) || trimmed.startsWith('data:image/');
+    const isVid = trimmed.match(/\.(mp4|webm|ogg|mov)/i);
+    
+    if (isImg) {
+      const img = new window.Image();
+      img.src = trimmed;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => {
+          const naturalWidth = img.naturalWidth || 400;
+          const naturalHeight = img.naturalHeight || 300;
+          
+          const existingBounds = Array.from(app.tree.children || [])
+            .filter((child: any) => child.x !== undefined && child.y !== undefined)
+            .map((child: any) => ({
+              x: child.x,
+              y: child.y,
+              width: child.width || naturalWidth,
+              height: child.height || naturalHeight,
+            }));
+
+          const { x, y } = getNonOverlappingCoordinates({
+            range: 2000,
+            existingBounds,
+            newWidth: naturalWidth,
+            newHeight: naturalHeight,
+            margin: 50,
+          });
+
+          const image = new Image({
+            x,
+            y,
+            width: naturalWidth,
+            height: naturalHeight,
+            url: trimmed,
+            editable: true,
+          });
+          app.tree.add(image);
+          recordHistoryDebounced();
+          
+          setTimeout(() => {
+            (app.tree as any).zoom(image, 100, undefined, 0.8);
+          }, 100);
+          resolve();
+        };
+        img.onerror = reject;
+      });
+    } else if (isVid) {
+      const video = document.createElement("video");
+      video.src = trimmed;
+      video.muted = true;
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => {
+          const naturalWidth = video.videoWidth || 480;
+          const naturalHeight = video.videoHeight || 270;
+          
+          const existingBounds = Array.from(app.tree.children || [])
+            .filter((child: any) => child.x !== undefined && child.y !== undefined)
+            .map((child: any) => ({
+              x: child.x,
+              y: child.y,
+              width: child.width || naturalWidth,
+              height: child.height || naturalHeight,
+            }));
+
+          const { x, y } = getNonOverlappingCoordinates({
+            range: 2000,
+            existingBounds,
+            newWidth: naturalWidth,
+            newHeight: naturalHeight,
+            margin: 50,
+          });
+
+          VideoNode.create({
+            x,
+            y,
+            width: naturalWidth,
+            height: naturalHeight,
+            videoUrl: trimmed,
+            thumbnailUrl: trimmed,
+            editable: true,
+          }).then(videoNode => {
+            if (videoNode) {
+              app.tree.add(videoNode);
+              recordHistoryDebounced();
+              setTimeout(() => {
+                (app.tree as any).zoom(videoNode, 100, undefined, 0.8);
+              }, 100);
+            }
+            resolve();
+          }).catch(reject);
+        };
+        video.onerror = reject;
+      });
+    } else {
+      alert("不支持的媒体链接格式，请提供图片（PNG/JPG/WEBP）或视频（MP4/WEBM）的直链。");
+    }
+  } catch (err: any) {
+    console.error("Failed to load link:", err);
+    alert("加载链接失败，请确认链接有效且支持跨域访问。");
+  }
 };
 
 const onUploadFile = async (file: File) => {

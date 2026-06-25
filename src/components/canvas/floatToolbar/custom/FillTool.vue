@@ -103,9 +103,10 @@ function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
 // Color string parser
 function parseColor(fill: any): { h: number; s: number; l: number; a: number } {
   const defaultColor = { h: 0, s: 100, l: 50, a: 0 }; // Default transparent
-  if (typeof fill !== "string" || !fill) return defaultColor;
+  const val = typeof fill === "function" ? fill.toString() : fill;
+  if (typeof val !== "string" || !val) return defaultColor;
 
-  const str = fill.trim().toLowerCase();
+  const str = val.trim().toLowerCase();
 
   // 1. Hex
   if (str.startsWith("#")) {

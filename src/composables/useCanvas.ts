@@ -5,16 +5,24 @@ import {
   PropertyEvent,
   DragEvent,
   Cursor,
-  Pen,
   Image,
+  Debug,
 } from "leafer-ui";
 
+// Suppress EventCreator repeat warnings from plugins
+Debug.showWarn = false;
 // Define stroke, strokeWidth, and fill getters/setters on Pen prototype
 // to delegate styling properties of Pen (which is a Group under the hood) to its child Path elements.
+/*
 Object.defineProperty(Pen.prototype, "stroke", {
   get(this: any) {
     const firstPath = this.children?.[0];
-    return firstPath ? firstPath.stroke : this._stroke;
+    const color = firstPath ? firstPath.stroke : this._stroke;
+    const fn = function () {};
+    fn.toString = () => String(color || "");
+    fn.valueOf = () => color;
+    (fn as any).color = color;
+    return fn as any;
   },
   set(this: any, val: any) {
     this._stroke = val;
@@ -50,7 +58,12 @@ Object.defineProperty(Pen.prototype, "strokeWidth", {
 Object.defineProperty(Pen.prototype, "fill", {
   get(this: any) {
     const firstPath = this.children?.[0];
-    return firstPath ? firstPath.fill : this._fill;
+    const color = firstPath ? firstPath.fill : this._fill;
+    const fn = function () {};
+    fn.toString = () => String(color || "");
+    fn.valueOf = () => color;
+    (fn as any).color = color;
+    return fn as any;
   },
   set(this: any, val: any) {
     this._fill = val;
@@ -64,7 +77,9 @@ Object.defineProperty(Pen.prototype, "fill", {
   },
   configurable: true,
 });
+*/
 
+/*
 Object.defineProperty(Pen.prototype, "strokeCap", {
   get(this: any) {
     const firstPath = this.children?.[0];
@@ -100,7 +115,9 @@ Object.defineProperty(Pen.prototype, "strokeJoin", {
   },
   configurable: true,
 });
+*/
 
+/*
 // Helper to copy Pen styles to newly added child paths
 function applyPenStyleToChild(pen: any, child: any) {
   if (child && (child.tag === "Path" || child.__tag === "Path")) {
@@ -123,6 +140,7 @@ Pen.prototype.addAt = function (this: any, child: any, index: number) {
   applyPenStyleToChild(this, child);
   return originalPenAddAt.call(this, child, index);
 };
+*/
 
 import { useCanvasFrame } from "./useCanvasFrame";
 import { useCanvasToolbar } from "./useCanvasToolbar";
@@ -143,7 +161,7 @@ import "@leafer-in/export";
 import "@leafer-in/flow";
 import "@leafer-in/view";
 import "@leafer-in/animate";
-import { Snap } from "leafer-x-snap";
+import { CustomSnap as Snap } from "@/utils/CustomSnap";
 import { getNonOverlappingCoordinates } from "@/utils/utils";
 
 /**
@@ -396,9 +414,9 @@ export function useCanvas(
   const setToolMode = (toolName: string) => {
     const app = canvasApp.value;
     if (!app?.tree) return;
-    const editor = app.editor as any;
+    const editor = app.editor;
     const view = app.view as HTMLElement;
-    const treeConfig = (app.tree as any).config;
+    const treeConfig = app.tree.config;
 
     // Clean up previous MoveEvent listeners
     if (moveStartHandler) {
@@ -427,23 +445,23 @@ export function useCanvas(
       }
       view.style.cursor = "grab";
       app.tree.cursor = "grab";
-      (app as any).cursor = "grab";
+      app.cursor = "grab";
 
       // Grabbing cursor feedback
       moveStartHandler = () => {
         if (activeTool.value === "pan") {
           view.style.cursor = "grabbing";
           app.tree.cursor = "grabbing";
-          (app as any).cursor = "grabbing";
-          (app as any).updateCursor();
+          app.cursor = "grabbing";
+          app.updateCursor?.();
         }
       };
       moveEndHandler = () => {
         if (activeTool.value === "pan") {
           view.style.cursor = "grab";
           app.tree.cursor = "grab";
-          (app as any).cursor = "grab";
-          (app as any).updateCursor();
+          app.cursor = "grab";
+          app.updateCursor?.();
         }
       };
       app.tree.on(MoveEvent.START, moveStartHandler);
@@ -459,7 +477,7 @@ export function useCanvas(
       }
       view.style.cursor = "crosshair";
       app.tree.cursor = "crosshair";
-      (app as any).cursor = "crosshair";
+      app.cursor = "crosshair";
       enableFrameDraw();
     } else if (toolName === "shape") {
       // Shape mode: disable editor, enable shape drawing pointer events
@@ -472,7 +490,7 @@ export function useCanvas(
       }
       view.style.cursor = "crosshair";
       app.tree.cursor = "crosshair";
-      (app as any).cursor = "crosshair";
+      app.cursor = "crosshair";
       enableShapeDraw();
     } else if (toolName === "marker") {
       // Marker mode: disable editor, enable marker drawing pointer events
@@ -485,7 +503,7 @@ export function useCanvas(
       }
       view.style.cursor = "url('/pen-cursor.png') 3 28, crosshair";
       app.tree.cursor = "pen" as any;
-      (app as any).cursor = "pen";
+      app.cursor = "pen" as any;
       enableMarkerDraw();
     } else if (toolName === "text") {
       // Text mode: disable editor, enable double click creation
@@ -498,7 +516,7 @@ export function useCanvas(
       }
       view.style.cursor = "text";
       app.tree.cursor = "text";
-      (app as any).cursor = "text";
+      app.cursor = "text";
       enableTextDraw();
     } else {
       // Select mode: enable editor, disable pan drag
@@ -510,11 +528,11 @@ export function useCanvas(
       }
       view.style.cursor = "default";
       app.tree.cursor = "default";
-      (app as any).cursor = "default";
+      app.cursor = "default";
     }
 
     // Immediately trigger update to sync the new cursor state globally
-    (app as any).updateCursor();
+    app.updateCursor?.();
   };
 
   // Watch tool state to update canvas tool mode
@@ -566,9 +584,9 @@ export function useCanvas(
     }
 
     canvasApp.value = app;
-    (window as any).canvasApp = app;
-    (app as any).recordHistory = recordHistory;
-    (app as any).recordHistoryDebounced = recordHistoryDebounced;
+    window.canvasApp = app;
+    app.recordHistory = recordHistory;
+    app.recordHistoryDebounced = recordHistoryDebounced;
 
     // Register custom pen cursor in Leafer UI
     Cursor.set("pen", {
@@ -578,7 +596,7 @@ export function useCanvas(
     });
 
     // Initialize smart snapping using leafer-x-snap
-    const snap = new Snap(app, {
+    const snap = new Snap(app as any, {
       snapSize: 6,
       lineColor: "#000000",
       strokeWidth: 1.5,
@@ -619,14 +637,14 @@ export function useCanvas(
       const taskId = node.taskId;
       if (!taskId) return;
 
-      if ((node as any)._pollingInterval) {
-        clearInterval((node as any)._pollingInterval);
+      if (node._pollingInterval) {
+        clearInterval(node._pollingInterval);
       }
 
       const pollInterval = setInterval(async () => {
         if (!node.parent) {
           clearInterval(pollInterval);
-          delete (node as any)._pollingInterval;
+          delete node._pollingInterval;
           return;
         }
 
@@ -634,7 +652,8 @@ export function useCanvas(
           const res = await getTaskStatus(taskId);
           if (res.status === "success" && res.imageUrl) {
             clearInterval(pollInterval);
-            delete (node as any)._pollingInterval;
+            delete node._pollingInterval;
+            node.generationStatus = "success"; // hide placeholder immediately
 
             const img = new window.Image();
             img.src = res.imageUrl;
@@ -661,10 +680,11 @@ export function useCanvas(
                 editable: true,
               });
               if (node.refId) {
-                (imageNode as any).refId = node.refId;
+                imageNode.refId = node.refId;
               }
               const index = parent.children.indexOf(node);
               parent.addAt(imageNode, index);
+              node.emit("generation-complete", {});
               node.remove();
               if (app.editor) {
                 app.editor.select(imageNode);
@@ -673,7 +693,7 @@ export function useCanvas(
             }
           } else if (res.status === "error") {
             clearInterval(pollInterval);
-            delete (node as any)._pollingInterval;
+            delete node._pollingInterval;
             const errMsg = res.error || "生成失败，请重试";
             node.set({
               generationStatus: "error",
@@ -685,7 +705,7 @@ export function useCanvas(
           console.error(`Polling failed for task ${taskId}:`, err);
           if (err.response?.status === 404) {
             clearInterval(pollInterval);
-            delete (node as any)._pollingInterval;
+            delete node._pollingInterval;
             node.set({
               generationStatus: "error",
               errorMessage: "任务不存在或服务器已重启，请重新生成",
@@ -695,7 +715,7 @@ export function useCanvas(
         }
       }, 2000);
 
-      (node as any)._pollingInterval = pollInterval;
+      node._pollingInterval = pollInterval;
     };
 
     // Restore saved elements or add initial ImageGen element
@@ -719,14 +739,14 @@ export function useCanvas(
       const taskId = node.taskId;
       if (!taskId) return;
 
-      if ((node as any)._pollingInterval) {
-        clearInterval((node as any)._pollingInterval);
+      if (node._pollingInterval) {
+        clearInterval(node._pollingInterval);
       }
 
       const pollInterval = setInterval(async () => {
         if (!node.parent) {
           clearInterval(pollInterval);
-          delete (node as any)._pollingInterval;
+          delete node._pollingInterval;
           return;
         }
 
@@ -734,7 +754,7 @@ export function useCanvas(
           const res = await getTaskStatus(taskId);
           if (res.status === "success" && res.videoUrl && res.thumbnailUrl) {
             clearInterval(pollInterval);
-            delete (node as any)._pollingInterval;
+            delete node._pollingInterval;
 
             const img = new window.Image();
             img.src = res.thumbnailUrl;
@@ -766,20 +786,21 @@ export function useCanvas(
               });
               if (videoNode) {
                 if (node.refId) {
-                  (videoNode as any).refId = node.refId;
+                  videoNode.refId = node.refId;
                 }
                 const index = parent.children.indexOf(node);
-                parent.addAt(videoNode, index);
+                parent.addAt(videoNode as any, index);
+                node.emit("generation-complete", {});
                 node.remove();
                 if (app.editor) {
-                  app.editor.select(videoNode);
+                  app.editor.select(videoNode as any);
                 }
                 recordHistoryDebounced();
               }
             }
           } else if (res.status === "error") {
             clearInterval(pollInterval);
-            delete (node as any)._pollingInterval;
+            delete node._pollingInterval;
             const errMsg = res.error || "生成失败，请重试";
             node.set({
               generationStatus: "error",
@@ -791,7 +812,7 @@ export function useCanvas(
           console.error(`Polling failed for video task ${taskId}:`, err);
           if (err.response?.status === 404) {
             clearInterval(pollInterval);
-            delete (node as any)._pollingInterval;
+            delete node._pollingInterval;
             node.set({
               generationStatus: "error",
               errorMessage: "任务不存在或服务器已重启，请重新生成",
@@ -801,7 +822,7 @@ export function useCanvas(
         }
       }, 2000);
 
-      (node as any)._pollingInterval = pollInterval;
+      node._pollingInterval = pollInterval;
     };
 
     const attachTaskStartListener = (node: any) => {
@@ -817,8 +838,8 @@ export function useCanvas(
     };
 
     const attachContainerChildAddListener = (container: any) => {
-      if (!container || (container as any)._hasChildAddListener) return;
-      (container as any)._hasChildAddListener = true;
+      if (!container || container._hasChildAddListener) return;
+      container._hasChildAddListener = true;
 
       container.on("child.add", (e: any) => {
         const child = e.child;
@@ -872,11 +893,9 @@ export function useCanvas(
 
     // Listen to editor transform end events to record history immediately
     app.editor.on(DragEvent.END, () => {
-      console.log("拖拽结束");
       recordHistory();
     });
     app.editor.on(MoveEvent.END, () => {
-      console.log("移动结束");
       recordHistory();
     });
 
@@ -920,7 +939,7 @@ export function useCanvas(
             setTimeout(() => {
               try {
                 if (app.tree.children && app.tree.children.length > 0) {
-                  (app.tree as any).zoom("fit", 80, undefined, 0);
+                  app.tree.zoom?.("fit", 80, undefined, 0);
                 }
                 loading.value = false;
               } catch (err) {
@@ -1003,12 +1022,12 @@ export function useCanvas(
       editable: true,
     });
 
-    app.tree.add(imageGen);
+    app.tree.add(imageGen as any);
 
     if (app.editor) {
-      app.editor.app.tree?.zoom(imageGen, 300, undefined, 0.5);
+      app.editor.app.tree?.zoom?.(imageGen as any, 300, undefined, 0.5);
       setTimeout(() => {
-        app.editor.select(imageGen);
+        app.editor.select(imageGen as any);
       }, 500);
     }
 
@@ -1045,12 +1064,12 @@ export function useCanvas(
       editable: true,
     });
 
-    app.tree.add(videoGen);
+    app.tree.add(videoGen as any);
 
     if (app.editor) {
-      app.editor.app.tree?.zoom(videoGen, 300, undefined, 0.5);
+      app.editor.app.tree?.zoom?.(videoGen as any, 300, undefined, 0.5);
       setTimeout(() => {
-        app.editor.select(videoGen);
+        app.editor.select(videoGen as any);
       }, 500);
     }
 

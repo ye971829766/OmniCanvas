@@ -147,10 +147,8 @@ function parseUserText(text: string) {
       <div class="agent-empty-logo">
         <img :src="logoImg" alt="PlotTwist" class="agent-empty-logo-img" />
       </div>
-      <p class="text-14px font-600 mt-3">告诉我你想设计什么</p>
-      <p class="text-12px text-pTextMutedColor mt-1 leading-relaxed">
-        我会在画布上为你生成图片、视频 and 排版
-      </p>
+      <p class="empty-title">告诉我你想设计什么</p>
+      <p class="empty-sub">描述想法，我来生成图像、视频和排版</p>
       <div class="agent-suggestions">
         <button
           v-for="s in suggestions"
@@ -237,6 +235,9 @@ function parseUserText(text: string) {
             >
               <span /><span /><span />
             </div>
+            <div v-else-if="!m.streaming && !m.tools.length" class="msg-failed">
+              出了点问题，请重试
+            </div>
 
             <ToolActivity
               v-if="m.tools.length"
@@ -278,20 +279,19 @@ function parseUserText(text: string) {
 .agent-empty {
   margin: auto 0;
   text-align: center;
-  padding: 16px 8px;
+  padding: 16px 4px;
 }
 
 .agent-empty-logo {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  border: 1px solid var(--p-surface-200, #e5e7eb);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .agent-empty-logo-img {
@@ -301,58 +301,71 @@ function parseUserText(text: string) {
   display: block;
 }
 
+.empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--p-text-color, #111);
+  margin-top: 14px;
+}
+
+.empty-sub {
+  font-size: var(--text-sm);
+  color: var(--p-text-muted-color, #9ca3af);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
 .agent-suggestions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 16px;
 }
 
 .agent-chip {
-  padding: 9px 12px;
+  padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--p-surface-200, #e5e7eb);
-  background: var(--p-surface-50, #f9fafb);
+  background: transparent;
   color: var(--p-text-color, #111);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
+  line-height: 1.4;
   text-align: left;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
 .agent-chip:hover {
-  border-color: var(--p-primary-color);
-  background: var(--p-primary-50, #f5f3ff);
+  background: var(--p-surface-50, #f9fafb);
+  border-color: var(--p-surface-300, #d1d5db);
 }
 
 .agent-bubble-user {
-  max-width: 95%;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--p-surface-50, #f9fafb);
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-  color: var(--p-text-color, #111);
-  font-size: 13px;
-  line-height: 1.5;
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 18px 18px 4px 18px;
+  background: #f0f0f1;
+  color: var(--p-text-color, #0f172a);
+  font-size: var(--text-base);
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .agent-bubble-ai {
   max-width: 100%;
-  padding: 2px 0 0;
+  padding: 0;
   background: transparent;
   color: #0f172a;
-  font-size: 13px;
-  line-height: 1.62;
-  white-space: pre-wrap;
+  font-size: var(--text-base);
+  line-height: 1.65;
   word-break: break-word;
 }
 
 .markdown-body {
-  font-size: 13px;
-  line-height: 1.62;
-  color: #0f172a;
+  font-size: var(--text-base);
+  line-height: 1.65;
+  color: var(--p-text-color, #0f172a);
 }
 
 .markdown-body :deep(p) {
@@ -376,27 +389,27 @@ function parseUserText(text: string) {
 
 .markdown-body :deep(strong) {
   color: #0f172a;
-  font-weight: 680;
+  font-weight: 660;
 }
 
 .agent-avatar {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   object-fit: cover;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  border: 1px solid var(--p-surface-100, #f3f4f6);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .agent-typing {
   display: inline-flex;
   gap: 4px;
-  padding: 11px 13px;
+  padding: 8px 0;
 }
 
 .agent-typing span {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--p-text-muted-color, #9ca3af);
   animation: agent-blink 1.2s infinite both;
@@ -411,35 +424,24 @@ function parseUserText(text: string) {
 }
 
 @keyframes agent-blink {
-  0%,
-  80%,
-  100% {
-    opacity: 0.3;
-  }
-  40% {
-    opacity: 1;
-  }
+  0%, 80%, 100% { opacity: 0.3; }
+  40% { opacity: 1; }
 }
 
 .inspiration-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
   margin-top: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   border-radius: 12px;
   overflow: hidden;
-  padding: 6px;
-  background: var(--p-surface-200, #e5e7eb);
 }
 
 .inspiration-item {
   aspect-ratio: 1;
-  border-radius: 8px;
   overflow: hidden;
-  position: relative;
-  background: #ccc;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: var(--p-surface-100, #f3f4f6);
 }
 
 .inspiration-img {
@@ -451,7 +453,7 @@ function parseUserText(text: string) {
 }
 
 .inspiration-img:hover {
-  transform: scale(1.1);
+  transform: scale(1.08);
   cursor: zoom-in;
 }
 
@@ -487,6 +489,12 @@ function parseUserText(text: string) {
   scrollbar-color: var(--p-surface-300, rgba(0, 0, 0, 0.15)) transparent;
 }
 
+.msg-failed {
+  font-size: 12px;
+  color: var(--p-text-muted-color, #9ca3af);
+  padding: 2px 0;
+}
+
 .mention-chip-msg {
   background: var(--p-primary-50, #f5f3ff);
   color: var(--p-primary-color, #6d28d9);
@@ -494,7 +502,7 @@ function parseUserText(text: string) {
   border-radius: 4px;
   padding: 1px 4px;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--text-sm);
   display: inline-block;
   margin: 0 2px;
 }
