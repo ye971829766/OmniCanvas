@@ -1,42 +1,79 @@
 <template>
   <div class="video-gen-card">
-    <!-- Reference Image Container (Styling consistent with ImageGenCard) -->
-    <div class="ref-images-scroll-container">
+    <!-- Reference Image Container -->
+    <div class="ref-images-scroll-container" v-if="supportReferenceType !== 'none'">
       <div class="ref-images-wrapper">
-        <!-- If empty, show a small pill upload button -->
-        <label
-          v-if="!refImage"
-          class="ref-image-empty-pill"
-          :class="{ 'is-disabled': isGenerating }"
-        >
-          <Plus :size="11" />
-          <span>首帧</span>
-          <input
-            type="file"
-            accept="image/*"
-            style="display: none"
-            @change="handleFileSelected"
-            :disabled="isGenerating"
-          />
-        </label>
-        <!-- Otherwise, show thumbnail -->
-        <div
-          v-else
-          class="ref-image-item"
-          @mouseenter="handleMouseEnter"
-          @mouseleave="handleMouseLeave"
-        >
-          <img :src="refImageUrl" class="ref-image-thumb" />
-          <button
-            type="button"
-            class="ref-image-remove-btn"
-            @click="removeRefImage"
-            title="移除参考图"
-            :disabled="isGenerating"
+        <!-- First Frame (首帧) -->
+        <template v-if="supportReferenceType === 'first' || supportReferenceType === 'first_last'">
+          <div
+            v-if="refImage"
+            class="ref-image-item"
+            @mouseenter="e => handleMouseEnter(e, 'first')"
+            @mouseleave="handleMouseLeave"
           >
-            <X :size="10" />
-          </button>
-        </div>
+            <img :src="refImageUrl" class="ref-image-thumb" />
+            <button
+              type="button"
+              class="ref-image-remove-btn"
+              @click="removeRefImage"
+              title="移除首帧"
+              :disabled="isGenerating"
+            >
+              <X :size="10" />
+            </button>
+          </div>
+          <label
+            v-else
+            class="ref-image-empty-pill"
+            :class="{ 'is-disabled': isGenerating }"
+          >
+            <Plus :size="11" />
+            <span>首帧</span>
+            <input
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @change="handleFileSelected"
+              :disabled="isGenerating"
+            />
+          </label>
+        </template>
+
+        <!-- Tail Frame (尾帧) -->
+        <template v-if="supportReferenceType === 'first_last'">
+          <div
+            v-if="refTailImage"
+            class="ref-image-item"
+            @mouseenter="e => handleMouseEnter(e, 'tail')"
+            @mouseleave="handleMouseLeave"
+          >
+            <img :src="refTailImageUrl" class="ref-image-thumb" />
+            <button
+              type="button"
+              class="ref-image-remove-btn"
+              @click="removeRefTailImage"
+              title="移除尾帧"
+              :disabled="isGenerating"
+            >
+              <X :size="10" />
+            </button>
+          </div>
+          <label
+            v-else
+            class="ref-image-empty-pill"
+            :class="{ 'is-disabled': isGenerating }"
+          >
+            <Plus :size="11" />
+            <span>尾帧</span>
+            <input
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @change="handleTailFileSelected"
+              :disabled="isGenerating"
+            />
+          </label>
+        </template>
       </div>
     </div>
 
@@ -75,16 +112,34 @@
           class="video-subselect"
         />
 
-        <!-- Seconds Select (dropdown) -->
-        <Select
-          v-model="selectedSeconds"
-          :options="secondsOptions"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="时长"
+        <!-- Seconds Select (Pill Button + Popover Slider) -->
+        <button
+          type="button"
+          class="video-subselect-btn"
           :disabled="isGenerating || optionsLoading"
-          class="video-subselect"
-        />
+          @click="toggleSecondsPopover"
+        >
+          <span>{{ selectedSeconds }} 秒</span>
+        </button>
+
+        <Popover
+          ref="secondsPopoverRef"
+          appendTo="body"
+          :dismissable="true"
+        >
+          <div class="seconds-slider-popover-content">
+            <span class="popover-slider-label">视频时长: {{ selectedSeconds }} 秒</span>
+            <div class="slider-wrapper">
+              <Slider
+                v-model="selectedSeconds"
+                :min="minSeconds"
+                :max="maxSeconds"
+                :disabled="isGenerating"
+                class="video-seconds-slider"
+              />
+            </div>
+          </div>
+        </Popover>
       </div>
 
       <!-- Generate Button -->
@@ -110,12 +165,12 @@
       :dismissable="true"
       :pt="popoverPt"
     >
-      <div v-if="refImage" class="ref-image-hover-content">
-        <img :src="refImageUrl" class="ref-image-hover-large" />
+      <div v-if="hoveredImage" class="ref-image-hover-content">
+        <img :src="hoveredImageUrl" class="ref-image-hover-large" />
         <div class="ref-image-hover-meta">
-          <span class="ref-image-hover-name">{{ refImage.name }}</span>
+          <span class="ref-image-hover-name">{{ hoveredImage.name }}</span>
           <span class="ref-image-hover-size">{{
-            formatFileSize(refImage.size)
+            formatFileSize(hoveredImage.size)
           }}</span>
         </div>
       </div>
@@ -131,7 +186,7 @@ import Textarea from "primevue/textarea";
 import Button from "primevue/button";
 import ModelSelector from "@/components/ModelSelector.vue";
 import { generateVideo, getVideoModelOptions, type VideoModelOptionsResponse } from "@/utils/api";
-import { ref, watch, type PropType, onUnmounted } from "vue";
+import { ref, watch, type PropType, onUnmounted, computed } from "vue";
 import type { ToolbarChangePayload, ToolbarTarget } from "../types";
 
 const props = defineProps({
@@ -146,16 +201,24 @@ const emit = defineEmits<{
 }>();
 
 const promptText = ref("");
-const selectedModel = ref("veo_3_1_fast_vip");
-const selectedSize = ref("16x9");
-const selectedSeconds = ref("8");
+const selectedModel = ref("");
+const selectedSize = ref("");
+const selectedSeconds = ref<number>(5);
 const refImage = ref<File | null>(null);
 const refImageUrl = ref("");
+const refTailImage = ref<File | null>(null);
+const refTailImageUrl = ref("");
 
 const sizeOptions = ref<{ label: string; value: string }[]>([]);
-const secondsOptions = ref<{ label: string; value: string }[]>([]);
+const minSeconds = ref(5);
+const maxSeconds = ref(10);
 const videoOptions = ref<VideoModelOptionsResponse | null>(null);
 const optionsLoading = ref(false);
+
+const secondsPopoverRef = ref();
+const toggleSecondsPopover = (event: Event) => {
+  secondsPopoverRef.value?.toggle(event);
+};
 
 watch(selectedModel, async (model) => {
   if (!model) return;
@@ -164,14 +227,15 @@ watch(selectedModel, async (model) => {
     const opts = await getVideoModelOptions(model);
     videoOptions.value = opts;
     sizeOptions.value = opts.sizes;
-    secondsOptions.value = opts.seconds;
+    minSeconds.value = opts.minSeconds ?? 5;
+    maxSeconds.value = opts.maxSeconds ?? 10;
 
     // Set defaults if current selection is not valid or not present in available options
     if (opts.defaults) {
       if (!selectedSize.value || !opts.sizes.some((s) => s.value === selectedSize.value)) {
         selectedSize.value = opts.defaults.size;
       }
-      if (!selectedSeconds.value || !opts.seconds.some((s) => s.value === selectedSeconds.value)) {
+      if (selectedSeconds.value < minSeconds.value || selectedSeconds.value > maxSeconds.value) {
         selectedSeconds.value = opts.defaults.seconds;
       }
     }
@@ -187,11 +251,18 @@ const popoverPt = {
   content: { style: { padding: "6px" } },
 };
 
-const handleMouseEnter = (event: Event) => {
+const supportReferenceType = computed(() => videoOptions.value?.supportReferenceType ?? 'first');
+const hoveredType = ref<'first' | 'tail' | null>(null);
+const hoveredImage = computed(() => hoveredType.value === 'first' ? refImage.value : refTailImage.value);
+const hoveredImageUrl = computed(() => hoveredType.value === 'first' ? refImageUrl.value : refTailImageUrl.value);
+
+const handleMouseEnter = (event: Event, type: 'first' | 'tail') => {
+  hoveredType.value = type;
   previewPopoverRef.value?.show(event);
 };
 
 const handleMouseLeave = () => {
+  hoveredType.value = null;
   previewPopoverRef.value?.hide();
 };
 
@@ -213,6 +284,24 @@ const removeRefImage = () => {
   }
 };
 
+const handleTailFileSelected = (e: Event) => {
+  const files = (e.target as HTMLInputElement).files;
+  if (files && files[0]) {
+    refTailImage.value = files[0];
+    if (refTailImageUrl.value) URL.revokeObjectURL(refTailImageUrl.value);
+    refTailImageUrl.value = URL.createObjectURL(files[0]);
+  }
+  (e.target as HTMLInputElement).value = "";
+};
+
+const removeRefTailImage = () => {
+  refTailImage.value = null;
+  if (refTailImageUrl.value) {
+    URL.revokeObjectURL(refTailImageUrl.value);
+    refTailImageUrl.value = "";
+  }
+};
+
 const formatFileSize = (bytes: number) => {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -227,6 +316,7 @@ const errorMessage = ref("");
 // Clean up URLs
 onUnmounted(() => {
   if (refImageUrl.value) URL.revokeObjectURL(refImageUrl.value);
+  if (refTailImageUrl.value) URL.revokeObjectURL(refTailImageUrl.value);
 });
 
 // Sync properties from/to Canvas target
@@ -240,9 +330,16 @@ watch(
     if (!newTarget) return;
     const targetAny = newTarget as any;
     promptText.value = targetAny.prompt || "";
-    selectedModel.value = targetAny.model || "veo_3_1_fast_vip";
-    selectedSize.value = targetAny.size || "16x9";
-    selectedSeconds.value = targetAny.seconds || "8";
+    selectedModel.value = targetAny.model || "";
+    selectedSize.value = targetAny.size || "";
+    const secVal = Number(targetAny.seconds);
+    if (!isNaN(secVal) && secVal > 0) {
+      selectedSeconds.value = secVal;
+    } else if (videoOptions.value?.defaults?.seconds) {
+      selectedSeconds.value = videoOptions.value.defaults.seconds;
+    } else {
+      selectedSeconds.value = minSeconds.value;
+    }
     errorMessage.value = targetAny.errorMessage || "";
     isGenerating.value = targetAny.generationStatus === "generating";
   },
@@ -263,7 +360,7 @@ watch([selectedModel, selectedSize, selectedSeconds], () => {
     targetAny.set({
       model: selectedModel.value,
       size: selectedSize.value,
-      seconds: selectedSeconds.value,
+      seconds: String(selectedSeconds.value),
     });
     emit("change", { key: "model", value: selectedModel.value });
   }
@@ -288,11 +385,15 @@ const handleGenerate = async () => {
       prompt: promptText.value,
       model: selectedModel.value,
       size: selectedSize.value,
-      seconds: selectedSeconds.value,
+      seconds: String(selectedSeconds.value),
     };
 
-    if (refImage.value) {
+    if (refImage.value && (supportReferenceType.value === "first" || supportReferenceType.value === "first_last")) {
       payload.input_reference = refImage.value;
+    }
+
+    if (refTailImage.value && supportReferenceType.value === "first_last") {
+      payload.input_tail_reference = refTailImage.value;
     }
 
     const res = await generateVideo(payload);
@@ -700,5 +801,54 @@ const handleGenerate = async () => {
 
 .ref-image-hover-size {
   color: var(--text-tertiary, #9ca3af);
+}
+
+.video-subselect-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 24px !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+  background-color: var(--p-surface-50) !important;
+  border-radius: 9999px !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  transition: all 0.2s ease !important;
+
+  &:hover:not(:disabled) {
+    background-color: var(--p-surface-100) !important;
+    border-color: var(--p-primary-color) !important;
+  }
+
+  &:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+  }
+}
+
+.seconds-slider-popover-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 160px;
+  padding: 4px;
+}
+
+.popover-slider-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--p-surface-800);
+}
+
+.slider-wrapper {
+  padding: 6px 4px;
+}
+
+.video-seconds-slider {
+  width: 100%;
 }
 </style>

@@ -195,8 +195,14 @@ export function useCanvas(
   const colors = colorState || defaultColors;
 
   // History Composable
-  const { recordHistory, recordHistoryDebounced, undo, redo, loadCanvasState, saveCanvasState } =
-    useCanvasHistory(canvasApp, activeWorkspaceIdRef);
+  const {
+    recordHistory,
+    recordHistoryDebounced,
+    undo,
+    redo,
+    loadCanvasState,
+    saveCanvasState,
+  } = useCanvasHistory(canvasApp, activeWorkspaceIdRef);
 
   // Sub-composable for frame creation and containment logic
   const { enableFrameDraw, disableFrameDraw, attachFrameListeners } =
@@ -608,12 +614,18 @@ export function useCanvas(
           if (
             element.tag === "VideoNode" ||
             element.__tag === "VideoNode" ||
+            element.tag === "VideoGen" ||
+            element.__tag === "VideoGen" ||
             element.tag === "ImageGen" ||
             element.__tag === "ImageGen"
           )
             return true;
-          const points = element.getLayoutPoints("box", app.tree);
-          return !!(points && points.length > 0);
+          if (typeof element.getLayoutPoints === "function") {
+            const points = element.getLayoutPoints("box", app.tree);
+            if (points && points.length > 0) return true;
+          }
+          const bounds = element.getLayoutBounds("box", app.tree);
+          return !!(bounds && bounds.width !== undefined);
         } catch {
           return false;
         }
@@ -687,7 +699,11 @@ export function useCanvas(
               node.emit("generation-complete", {});
               node.remove();
               if (app.editor) {
-                app.editor.select(imageNode);
+                setTimeout(() => {
+                  if (imageNode.parent && app.editor) {
+                    app.editor.select(imageNode);
+                  }
+                }, 50);
               }
               recordHistoryDebounced();
             }
@@ -783,6 +799,7 @@ export function useCanvas(
                 videoUrl: res.videoUrl,
                 thumbnailUrl: res.thumbnailUrl,
                 editable: true,
+                isSnap: true,
               });
               if (videoNode) {
                 if (node.refId) {
@@ -793,7 +810,11 @@ export function useCanvas(
                 node.emit("generation-complete", {});
                 node.remove();
                 if (app.editor) {
-                  app.editor.select(videoNode as any);
+                  setTimeout(() => {
+                    if (videoNode.parent && app.editor) {
+                      app.editor.select(videoNode as any);
+                    }
+                  }, 50);
                 }
                 recordHistoryDebounced();
               }
@@ -852,7 +873,12 @@ export function useCanvas(
     const initNodeListeners = (node: any) => {
       if (!node) return;
 
-      if (node.tag === "Frame" || node.__tag === "Frame" || node.tag === "Group" || node.__tag === "Group") {
+      if (
+        node.tag === "Frame" ||
+        node.__tag === "Frame" ||
+        node.tag === "Group" ||
+        node.__tag === "Group"
+      ) {
         attachFrameListeners(node);
         attachContainerChildAddListener(node);
       }

@@ -24,6 +24,11 @@ export interface ModelMapping {
   defaultQuality?: string;
   qualityMode?: string;
   imageConfigId?: string;
+  videoConfigId?: string;
+  minSeconds?: number;
+  maxSeconds?: number;
+  defaultSeconds?: number;
+  supportReferenceType?: string;
 }
 
 export interface ImageConfig {
@@ -40,13 +45,27 @@ export interface ImageConfig {
   maxGenerationCount?: number;
 }
 
+export interface VideoConfig {
+  id: string;
+  label: string;
+  sizes?: string[];
+  minSeconds?: number;
+  maxSeconds?: number;
+  defaultSize?: string;
+  defaultSeconds?: number;
+  supportReferenceType?: string;
+  notes?: string;
+}
+
 export interface ModelConfigState {
   mappings: ModelMapping[];
   imageConfigs?: ImageConfig[];
+  videoConfigs?: VideoConfig[];
   dictionaries?: {
     sizes: string[];
     aspectRatios: string[];
     qualities: string[];
+    videoSizes?: string[];
   };
   agentConfig?: {
     systemPrompt: string;
@@ -137,10 +156,12 @@ export class ModelConfigService implements OnModuleInit {
     return {
       mappings: [],
       imageConfigs: [],
+      videoConfigs: [],
       dictionaries: {
         sizes: ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
         aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
-        qualities: ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
+        qualities: ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"],
+        videoSizes: ["16x9", "9x16", "1x1", "4x3", "3x4", "21x9"]
       },
       agentConfig: {
         systemPrompt: SYSTEM_PROMPT,
@@ -148,6 +169,12 @@ export class ModelConfigService implements OnModuleInit {
         visionModel: "gpt-4o"
       }
     };
+  }
+
+  private normalizeNumber(value: unknown): number | undefined {
+    if (value === undefined || value === null || value === "") return undefined;
+    const num = Number(value);
+    return isNaN(num) ? undefined : num;
   }
 
   private normalizeAgentConfig(raw: any): { systemPrompt: string; chatModel: string; visionModel?: string } {
@@ -188,6 +215,7 @@ export class ModelConfigService implements OnModuleInit {
       brandColor: this.normalizeString(raw?.brandColor) || undefined,
       iconUrl: this.normalizeString(raw?.iconUrl) || undefined,
       imageConfigId: this.normalizeString(raw?.imageConfigId) || undefined,
+      videoConfigId: this.normalizeString(raw?.videoConfigId) || undefined,
     };
 
     if (mapping.purpose === "image") {
@@ -211,6 +239,36 @@ export class ModelConfigService implements OnModuleInit {
       }
       if (raw?.qualityMode) {
         mapping.qualityMode = this.normalizeString(raw.qualityMode) || undefined;
+      }
+    }
+
+    if (mapping.purpose === "video") {
+      if (Array.isArray(raw?.sizes)) {
+        mapping.sizes = raw.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean);
+      }
+      if (raw?.minSeconds !== undefined) {
+        mapping.minSeconds = this.normalizeNumber(raw.minSeconds);
+      } else if (Array.isArray(raw?.seconds) && raw.seconds.length > 0) {
+        const nums = raw.seconds.map((s: any) => Number(s)).filter((n: any) => !isNaN(n));
+        if (nums.length > 0) mapping.minSeconds = Math.min(...nums);
+      }
+      if (raw?.maxSeconds !== undefined) {
+        mapping.maxSeconds = this.normalizeNumber(raw.maxSeconds);
+      } else if (Array.isArray(raw?.seconds) && raw.seconds.length > 0) {
+        const nums = raw.seconds.map((s: any) => Number(s)).filter((n: any) => !isNaN(n));
+        if (nums.length > 0) mapping.maxSeconds = Math.max(...nums);
+      }
+      if (raw?.defaultSeconds !== undefined) {
+        mapping.defaultSeconds = this.normalizeNumber(raw.defaultSeconds);
+      } else if (raw?.defaultSeconds) {
+        const dNum = Number(raw.defaultSeconds);
+        if (!isNaN(dNum)) mapping.defaultSeconds = dNum;
+      }
+      if (raw?.defaultSize) {
+        mapping.defaultSize = this.normalizeString(raw.defaultSize) || undefined;
+      }
+      if (raw?.supportReferenceType) {
+        mapping.supportReferenceType = this.normalizeString(raw.supportReferenceType) || undefined;
       }
     }
 
@@ -256,6 +314,46 @@ export class ModelConfigService implements OnModuleInit {
     return config;
   }
 
+  private normalizeVideoConfig(raw: any, index: number): VideoConfig | null {
+    const id = this.normalizeString(raw?.id) || `video-config-${index + 1}`;
+    const label = this.normalizeString(raw?.label) || id;
+    const config: VideoConfig = {
+      id,
+      label,
+    };
+    if (Array.isArray(raw?.sizes)) {
+      config.sizes = raw.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean);
+    }
+    if (raw?.minSeconds !== undefined) {
+      config.minSeconds = this.normalizeNumber(raw.minSeconds);
+    } else if (Array.isArray(raw?.seconds) && raw.seconds.length > 0) {
+      const nums = raw.seconds.map((s: any) => Number(s)).filter((n: any) => !isNaN(n));
+      if (nums.length > 0) config.minSeconds = Math.min(...nums);
+    }
+    if (raw?.maxSeconds !== undefined) {
+      config.maxSeconds = this.normalizeNumber(raw.maxSeconds);
+    } else if (Array.isArray(raw?.seconds) && raw.seconds.length > 0) {
+      const nums = raw.seconds.map((s: any) => Number(s)).filter((n: any) => !isNaN(n));
+      if (nums.length > 0) config.maxSeconds = Math.max(...nums);
+    }
+    if (raw?.defaultSeconds !== undefined) {
+      config.defaultSeconds = this.normalizeNumber(raw.defaultSeconds);
+    } else if (raw?.defaultSeconds) {
+      const dNum = Number(raw.defaultSeconds);
+      if (!isNaN(dNum)) config.defaultSeconds = dNum;
+    }
+    if (raw?.defaultSize) {
+      config.defaultSize = this.normalizeString(raw.defaultSize) || undefined;
+    }
+    if (raw?.supportReferenceType) {
+      config.supportReferenceType = this.normalizeString(raw.supportReferenceType) || undefined;
+    }
+    if (raw?.notes) {
+      config.notes = this.normalizeString(raw.notes) || undefined;
+    }
+    return config;
+  }
+
   async getConfig(): Promise<ModelConfigState> {
     try {
       const query = this.db.query("SELECT data FROM model_config WHERE key = $key");
@@ -288,6 +386,11 @@ export class ModelConfigService implements OnModuleInit {
             .map((item: any, index: number) => this.normalizeImageConfig(item, index))
             .filter(Boolean)
         : [];
+      const videoConfigs = Array.isArray(parsed.videoConfigs)
+        ? parsed.videoConfigs
+            .map((item: any, index: number) => this.normalizeVideoConfig(item, index))
+            .filter(Boolean)
+        : [];
       const rawDict = parsed.dictionaries;
       const dictionaries = {
         sizes: Array.isArray(rawDict?.sizes)
@@ -298,12 +401,16 @@ export class ModelConfigService implements OnModuleInit {
           : ["1:1", "16:9", "9:16", "4:3", "3:4"],
         qualities: Array.isArray(rawDict?.qualities)
           ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
-          : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
+          : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"],
+        videoSizes: Array.isArray(rawDict?.videoSizes)
+          ? rawDict.videoSizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
+          : ["16x9", "9x16", "1x1", "4x3", "3x4", "21x9"]
       };
       const agentConfig = this.normalizeAgentConfig(parsed.agentConfig);
       return {
         mappings: mappings as ModelMapping[],
         imageConfigs: imageConfigs as ImageConfig[],
+        videoConfigs: videoConfigs as VideoConfig[],
         dictionaries,
         agentConfig,
       };
@@ -322,6 +429,11 @@ export class ModelConfigService implements OnModuleInit {
     const sanitizedConfigs = Array.isArray(nextState?.imageConfigs)
       ? nextState.imageConfigs
           .map((item: any, index: number) => this.normalizeImageConfig(item, index))
+          .filter(Boolean)
+      : [];
+    const sanitizedVideoConfigs = Array.isArray(nextState?.videoConfigs)
+      ? nextState.videoConfigs
+          .map((item: any, index: number) => this.normalizeVideoConfig(item, index))
           .filter(Boolean)
       : [];
 
@@ -354,6 +466,17 @@ export class ModelConfigService implements OnModuleInit {
       templateIdSet.add(idLower);
     }
 
+    // Validate unique video config IDs
+    const videoTemplateIdSet = new Set<string>();
+    for (const config of sanitizedVideoConfigs) {
+      if (!config) continue;
+      const idLower = config.id.toLowerCase();
+      if (videoTemplateIdSet.has(idLower)) {
+        throw new BadRequestException(`视频模板 ID "${config.id}" 已存在，不可重复添加`);
+      }
+      videoTemplateIdSet.add(idLower);
+    }
+
     try {
       const rawDict = nextState?.dictionaries;
       const sanitizedDictionaries = {
@@ -365,13 +488,17 @@ export class ModelConfigService implements OnModuleInit {
           : ["1:1", "16:9", "9:16", "4:3", "3:4"],
         qualities: Array.isArray(rawDict?.qualities)
           ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
-          : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"]
+          : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"],
+        videoSizes: Array.isArray(rawDict?.videoSizes)
+          ? rawDict.videoSizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
+          : ["16x9", "9x16", "1x1", "4x3", "3x4", "21x9"]
       };
       const sanitizedAgent = this.normalizeAgentConfig(nextState?.agentConfig);
       
       const state = {
         mappings: sanitizedMappings as ModelMapping[],
         imageConfigs: sanitizedConfigs as ImageConfig[],
+        videoConfigs: sanitizedVideoConfigs as VideoConfig[],
         dictionaries: sanitizedDictionaries,
         agentConfig: sanitizedAgent,
       };

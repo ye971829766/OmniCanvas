@@ -84,14 +84,16 @@ export interface ImageModelOptionsResponse {
 export interface VideoModelOptionsResponse {
   model: string;
   sizes: { label: string; value: string }[];
-  seconds: { label: string; value: string }[];
+  minSeconds: number;
+  maxSeconds: number;
   defaults: {
     size: string;
-    seconds: string;
+    seconds: number;
   };
   notes?: string[];
   source?: string;
   sourceUrls?: string[];
+  supportReferenceType?: "none" | "first" | "first_last";
 }
 
 export interface GenerateImageBaseRequest {
@@ -265,6 +267,7 @@ export async function generateVideo(
     seconds: string;
     size: string;
     input_reference?: File;
+    input_tail_reference?: File;
     watermark?: string;
   }
 ): Promise<any> {
@@ -276,15 +279,20 @@ export async function generateVideo(
     watermark: req.watermark || "false",
   };
 
+  const toBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+
   if (req.input_reference) {
-    const toBase64 = (file: File): Promise<string> =>
-      new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (error) => reject(error);
-      });
     payload.input_reference = await toBase64(req.input_reference);
+  }
+
+  if (req.input_tail_reference) {
+    payload.input_tail_reference = await toBase64(req.input_tail_reference);
   }
 
   const res = await request.post<any>("/generate-video", payload);

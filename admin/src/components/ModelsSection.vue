@@ -184,6 +184,68 @@
         </div>
       </el-tab-pane>
 
+      <!-- Tab 2.5: Video Config Templates -->
+      <el-tab-pane label="视频配置模板" name="videoTemplates">
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 12px">
+          <el-table v-loading="mappingsLoading" :data="videoConfigs" style="width: 100%" border>
+            <el-table-column label="模板 ID" prop="id" min-width="150" sortable>
+              <template #default="{ row }">
+                <span style="font-family: monospace; font-weight: bold; color: #ef4444">{{ row.id }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="模板名称" prop="label" min-width="150">
+              <template #default="{ row }">
+                <span style="font-weight: 600; color: #fff">{{ row.label }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="比例选项 (Sizes)" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.sizes && row.sizes.length ? row.sizes.join(', ') : '未配置' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="时长范围 (秒)" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.minSeconds !== undefined && row.maxSeconds !== undefined">
+                  {{ row.minSeconds }} - {{ row.maxSeconds }} 秒
+                </span>
+                <span v-else-if="row.minSeconds !== undefined">>= {{ row.minSeconds }} 秒</span>
+                <span v-else-if="row.maxSeconds !== undefined"><= {{ row.maxSeconds }} 秒</span>
+                <span v-else>未配置</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="默认分辨率/比例" prop="defaultSize" width="150" align="center" />
+            <el-table-column label="默认时长" prop="defaultSeconds" width="120" align="center">
+              <template #default="{ row }">
+                <span v-if="row.defaultSeconds !== undefined">{{ row.defaultSeconds }} 秒</span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="参考帧支持" prop="supportReferenceType" width="130" align="center">
+              <template #default="{ row }">
+                <span>{{ row.supportReferenceType === 'none' ? '不支持' : row.supportReferenceType === 'first' ? '仅首帧' : '首尾帧' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="160" align="center" fixed="right">
+              <template #default="{ row }">
+                <div style="display: flex; justify-content: center; gap: 8px">
+                  <el-button size="small" type="primary" plain @click="openVideoTemplateModal(row)">
+                    编辑
+                  </el-button>
+                  <el-popconfirm
+                    title="确定删除该视频配置模板吗？关联了此模板的映射将失效。"
+                    @confirm="confirmDeleteVideoTemplate(row)"
+                  >
+                    <template #reference>
+                      <el-button size="small" type="danger" plain>删除</el-button>
+                    </template>
+                  </el-popconfirm>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-tab-pane>
+
       <!-- Tab 3: Configuration Dictionaries -->
       <el-tab-pane label="参数配置字典" name="dictionaries">
         <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 20px">
@@ -285,6 +347,42 @@
                       @keyup.enter="addDictItem('qualities')"
                     />
                     <el-button type="primary" size="small" @click="addDictItem('qualities')">添加</el-button>
+                  </div>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+
+          <el-row :gutter="20" style="margin-top: 16px">
+            <!-- Video Sizes Dictionary -->
+            <el-col :span="24">
+              <el-card
+                style="background-color: #141416; border: 1px solid #27272a; border-radius: 12px"
+              >
+                <template #header>
+                  <span style="font-size: 14px; font-weight: 600; color: #fff">可选视频分辨率/比例字典 (Video Sizes)</span>
+                </template>
+                <div style="display: flex; flex-direction: column; gap: 12px">
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 120px; align-content: flex-start; border: 1px solid #27272a; border-radius: 8px; padding: 12px; background-color: #09090b">
+                    <el-tag
+                      v-for="size in localDict.videoSizes"
+                      :key="size"
+                      closable
+                      type="danger"
+                      @close="removeDictItem('videoSizes', size)"
+                    >
+                      {{ size }}
+                    </el-tag>
+                    <span v-if="!localDict.videoSizes?.length" style="color: #71717a; font-size: 13px">字典为空</span>
+                  </div>
+                  <div style="display: flex; gap: 8px">
+                    <el-input
+                      v-model="newDictItemInput.videoSizes"
+                      placeholder="例如: 16x9"
+                      size="small"
+                      @keyup.enter="addDictItem('videoSizes')"
+                    />
+                    <el-button type="primary" size="small" @click="addDictItem('videoSizes')">添加</el-button>
                   </div>
                 </div>
               </el-card>
@@ -586,6 +684,129 @@
           </div>
         </div>
 
+        <!-- Video Generation Advanced Custom Config (Only when purpose is 'video') -->
+        <div v-if="mappingForm.purpose === 'video'" style="border-top: 1px dashed #27272a; margin-top: 16px; padding-top: 16px">
+          <h4 style="margin: 0 0 12px 0; color: #fff; font-size: 13px; font-weight: 600">视频生成高级配置</h4>
+          
+          <el-form-item label="配置方式">
+            <el-radio-group v-model="mappingFormConfigType" size="small">
+              <el-radio-button label="template">使用公共模板</el-radio-button>
+              <el-radio-button label="custom">手动自定义配置</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+
+          <!-- Choice A: Use shared configuration template -->
+          <div v-if="mappingFormConfigType === 'template'">
+            <el-form-item label="绑定公共配置模板" required>
+              <el-select
+                v-model="mappingForm.videoConfigId"
+                placeholder="请选择配置模板"
+                style="width: 100%"
+                clearable
+              >
+                <el-option
+                  v-for="cfg in videoConfigs"
+                  :key="cfg.id"
+                  :label="`${cfg.label} (${cfg.id})`"
+                  :value="cfg.id"
+                />
+              </el-select>
+              <div style="font-size: 11px; color: #71717a; margin-top: 4px">
+                选择已有的公共配置模板，让该模型继承该配置。如果下拉框为空，请先在“视频配置模板”子页签中创建。
+              </div>
+            </el-form-item>
+          </div>
+
+          <!-- Choice B: Manual Customization -->
+          <div v-else>
+            <el-row :gutter="16">
+              <el-col :span="24">
+                <el-form-item label="可选分辨率/比例列表 (Sizes)">
+                  <el-select
+                    v-model="mappingForm.sizes"
+                    multiple
+                    filterable
+                    allow-create
+                    default-first-option
+                    placeholder="选择预设或直接输入新增，如 16x9"
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="item in (dictionaries.videoSizes && dictionaries.videoSizes.length ? dictionaries.videoSizes : PRESET_VIDEO_SIZES)"
+                      :key="item"
+                      :label="item"
+                      :value="item"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="默认分辨率/比例">
+                  <el-select
+                    v-model="mappingForm.defaultSize"
+                    filterable
+                    allow-create
+                    placeholder="选择或输入默认值"
+                    style="width: 100%"
+                    clearable
+                  >
+                    <el-option
+                      v-for="item in mappingForm.sizes"
+                      :key="item"
+                      :label="item"
+                      :value="item"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="参考帧支持">
+                  <el-select v-model="mappingForm.supportReferenceType" style="width: 100%">
+                    <el-option label="不支持参考帧 (none)" value="none" />
+                    <el-option label="仅支持首帧 (first)" value="first" />
+                    <el-option label="支持首帧和尾帧 (first_last)" value="first_last" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="16">
+              <el-col :span="8">
+                <el-form-item label="最小视频时长 (秒)">
+                  <el-input-number
+                    v-model="mappingForm.minSeconds"
+                    :min="1"
+                    placeholder="最小秒数"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="最大视频时长 (秒)">
+                  <el-input-number
+                    v-model="mappingForm.maxSeconds"
+                    :min="mappingForm.minSeconds || 1"
+                    placeholder="最大秒数"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="默认视频时长 (秒)">
+                  <el-input-number
+                    v-model="mappingForm.defaultSeconds"
+                    :min="mappingForm.minSeconds || 1"
+                    :max="mappingForm.maxSeconds || 9999"
+                    placeholder="默认秒数"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </div>
+        </div>
+
         <el-form-item label="备注">
           <el-input
             v-model="mappingForm.notes"
@@ -826,6 +1047,145 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- Video Config Template Dialog -->
+    <el-dialog
+      v-model="videoTemplateModalOpen"
+      :title="editingVideoTemplateId ? '编辑视频配置模板' : '新增视频配置模板'"
+      width="540px"
+      destroy-on-close
+      style="border-radius: 12px; background-color: #141416"
+    >
+      <el-form :model="videoTemplateForm" label-position="top">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="模板 ID (英文标识)" required>
+              <el-input
+                v-model="videoTemplateForm.id"
+                placeholder="如: luma-preset, veo-preset"
+                :disabled="!!editingVideoTemplateId"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="模板显示名称" required>
+              <el-input v-model="videoTemplateForm.label" placeholder="如: Luma 标准配置" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <div style="border-top: 1px dashed #27272a; margin-top: 8px; padding-top: 16px">
+          <el-row :gutter="16">
+            <el-col :span="24">
+              <el-form-item label="可选分辨率/比例列表 (Sizes)">
+                <el-select
+                  v-model="videoTemplateForm.sizes"
+                  multiple
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择预设或直接输入新增，如 16x9"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="item in (dictionaries.videoSizes && dictionaries.videoSizes.length ? dictionaries.videoSizes : PRESET_VIDEO_SIZES)"
+                    :key="item"
+                    :label="item"
+                    :value="item"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="默认分辨率/比例">
+                <el-select
+                  v-model="videoTemplateForm.defaultSize"
+                  filterable
+                  allow-create
+                  placeholder="选择或输入默认值"
+                  style="width: 100%"
+                  clearable
+                >
+                  <el-option
+                    v-for="item in videoTemplateForm.sizes"
+                    :key="item"
+                    :label="item"
+                    :value="item"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="参考帧支持">
+                <el-select v-model="videoTemplateForm.supportReferenceType" style="width: 100%">
+                  <el-option label="不支持参考帧 (none)" value="none" />
+                  <el-option label="仅支持首帧 (first)" value="first" />
+                  <el-option label="支持首帧和尾帧 (first_last)" value="first_last" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="16">
+            <el-col :span="8">
+              <el-form-item label="最小视频时长 (秒)">
+                <el-input-number
+                  v-model="videoTemplateForm.minSeconds"
+                  :min="1"
+                  placeholder="最小秒数"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="最大视频时长 (秒)">
+                <el-input-number
+                  v-model="videoTemplateForm.maxSeconds"
+                  :min="videoTemplateForm.minSeconds || 1"
+                  placeholder="最大秒数"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="默认视频时长 (秒)">
+                <el-input-number
+                  v-model="videoTemplateForm.defaultSeconds"
+                  :min="videoTemplateForm.minSeconds || 1"
+                  :max="videoTemplateForm.maxSeconds || 9999"
+                  placeholder="默认秒数"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
+        <el-form-item label="备注说明 (Notes)">
+          <el-input
+            v-model="videoTemplateForm.notes"
+            type="textarea"
+            :rows="2"
+            placeholder="输入此视频配置模板的描述或说明..."
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div
+          style="
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            border-top: 1px solid #27272a;
+            padding-top: 16px;
+          "
+        >
+          <el-button @click="closeVideoTemplateModal">取消</el-button>
+          <el-button type="primary" @click="saveVideoTemplate">保存</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -841,16 +1201,19 @@ import {
   type ModelType,
   type ModelMapping,
   type ImageConfig,
+  type VideoConfig,
 } from "../utils/api";
 
 const props = defineProps<{
   mappings: ModelMapping[];
   imageConfigs: ImageConfig[];
+  videoConfigs: VideoConfig[];
   channels: Channel[];
   dictionaries: {
     sizes: string[];
     aspectRatios: string[];
     qualities: string[];
+    videoSizes?: string[];
   };
   mappingsLoading: boolean;
 }>();
@@ -859,31 +1222,36 @@ const emit = defineEmits<{
   (e: "refresh-mappings"): void;
 }>();
 
-const modelsSubTab = defineModel<"mappings" | "templates" | "dictionaries">("modelsSubTab", { default: "mappings" });
+const modelsSubTab = defineModel<"mappings" | "templates" | "videoTemplates" | "dictionaries">("modelsSubTab", { default: "mappings" });
 
 const modelSearchQuery = ref("");
 const mappingToggling = ref<Record<string, boolean>>({});
 
 const mappingModalOpen = ref(false);
 const templateModalOpen = ref(false);
+const videoTemplateModalOpen = ref(false);
 const editingMappingId = ref<string | null>(null);
 const editingTemplateId = ref<string | null>(null);
+const editingVideoTemplateId = ref<string | null>(null);
 
 // Configuration Dictionaries State
 const localDict = ref<{
   sizes: string[];
   aspectRatios: string[];
   qualities: string[];
+  videoSizes: string[];
 }>({
   sizes: [],
   aspectRatios: [],
   qualities: [],
+  videoSizes: [],
 });
 
 const newDictItemInput = ref({
   sizes: "",
   aspectRatios: "",
   qualities: "",
+  videoSizes: "",
 });
 const savingDict = ref(false);
 
@@ -895,13 +1263,14 @@ watch(
         sizes: [...(newVal.sizes || [])],
         aspectRatios: [...(newVal.aspectRatios || [])],
         qualities: [...(newVal.qualities || [])],
+        videoSizes: [...(newVal.videoSizes || [])],
       };
     }
   },
   { immediate: true, deep: true }
 );
 
-function addDictItem(type: 'sizes' | 'aspectRatios' | 'qualities') {
+function addDictItem(type: 'sizes' | 'aspectRatios' | 'qualities' | 'videoSizes') {
   const val = newDictItemInput.value[type].trim();
   if (!val) return;
   if (!localDict.value[type].includes(val)) {
@@ -910,7 +1279,7 @@ function addDictItem(type: 'sizes' | 'aspectRatios' | 'qualities') {
   newDictItemInput.value[type] = "";
 }
 
-function removeDictItem(type: 'sizes' | 'aspectRatios' | 'qualities', val: string) {
+function removeDictItem(type: 'sizes' | 'aspectRatios' | 'qualities' | 'videoSizes', val: string) {
   localDict.value[type] = localDict.value[type].filter((item) => item !== val);
 }
 
@@ -920,6 +1289,7 @@ async function saveDictionaries() {
     await updateModelConfig({
       mappings: props.mappings,
       imageConfigs: props.imageConfigs,
+      videoConfigs: props.videoConfigs,
       dictionaries: localDict.value,
     });
     ElMessage.success("配置字典已成功保存！");
@@ -930,6 +1300,8 @@ async function saveDictionaries() {
     savingDict.value = false;
   }
 }
+
+const PRESET_VIDEO_SIZES = ["16x9", "9x16", "1x1", "4x3", "3x4", "21x9"];
 
 const emptyMappingForm = () => ({
   id: "",
@@ -950,6 +1322,11 @@ const emptyMappingForm = () => ({
   defaultQuality: "",
   qualityMode: "quality",
   imageConfigId: "",
+  videoConfigId: "",
+  minSeconds: undefined as number | undefined,
+  maxSeconds: undefined as number | undefined,
+  defaultSeconds: undefined as number | undefined,
+  supportReferenceType: "first",
 });
 
 const emptyTemplateForm = () => ({
@@ -966,8 +1343,21 @@ const emptyTemplateForm = () => ({
   maxGenerationCount: 1 as number | undefined,
 });
 
+const emptyVideoTemplateForm = () => ({
+  id: "",
+  label: "",
+  sizes: [] as string[],
+  minSeconds: undefined as number | undefined,
+  maxSeconds: undefined as number | undefined,
+  defaultSize: "",
+  defaultSeconds: undefined as number | undefined,
+  supportReferenceType: "first",
+  notes: "",
+});
+
 const mappingForm = ref(emptyMappingForm());
 const templateForm = ref(emptyTemplateForm());
+const videoTemplateForm = ref(emptyVideoTemplateForm());
 const mappingFormConfigType = ref<"template" | "custom">("template");
 
 const loadingUpstreamModels = ref(false);
@@ -1009,12 +1399,13 @@ function getPurposeTagType(purpose: string) {
 function openMappingModal(item?: ModelMapping) {
   editingMappingId.value = item?.id || null;
   if (item) {
-    const hasInline = Array.isArray(item.sizes) || Array.isArray(item.qualities) || Array.isArray(item.aspectRatios) || typeof item.maxReferenceImages === 'number';
-    mappingFormConfigType.value = item.imageConfigId ? 'template' : (hasInline ? 'custom' : 'template');
+    const hasInline = Array.isArray(item.sizes) || Array.isArray(item.qualities) || Array.isArray(item.aspectRatios) || typeof item.maxReferenceImages === 'number' || item.minSeconds !== undefined || item.maxSeconds !== undefined || item.defaultSeconds !== undefined || item.supportReferenceType;
+    mappingFormConfigType.value = (item.imageConfigId || item.videoConfigId) ? 'template' : (hasInline ? 'custom' : 'template');
     
     mappingForm.value = {
       ...item,
       imageConfigId: item.imageConfigId || "",
+      videoConfigId: item.videoConfigId || "",
       notes: item.notes || "",
       brandInitial: item.brandInitial || "",
       brandColor: item.brandColor || "",
@@ -1026,6 +1417,10 @@ function openMappingModal(item?: ModelMapping) {
       defaultSize: item.defaultSize || "",
       defaultQuality: item.defaultQuality || "",
       qualityMode: item.qualityMode || "quality",
+      minSeconds: item.minSeconds,
+      maxSeconds: item.maxSeconds,
+      defaultSeconds: item.defaultSeconds,
+      supportReferenceType: item.supportReferenceType || "first",
     };
   } else {
     mappingFormConfigType.value = 'template';
@@ -1065,9 +1460,31 @@ function closeTemplateModal() {
   templateModalOpen.value = false;
 }
 
+function openVideoTemplateModal(item?: VideoConfig) {
+  editingVideoTemplateId.value = item?.id || null;
+  videoTemplateForm.value = item
+    ? {
+        ...item,
+        sizes: Array.isArray(item.sizes) ? [...item.sizes] : [],
+        minSeconds: item.minSeconds,
+        maxSeconds: item.maxSeconds,
+        defaultSize: item.defaultSize || "",
+        defaultSeconds: item.defaultSeconds,
+        supportReferenceType: item.supportReferenceType || "first",
+        notes: item.notes || "",
+      }
+    : emptyVideoTemplateForm();
+  videoTemplateModalOpen.value = true;
+}
+
+function closeVideoTemplateModal() {
+  videoTemplateModalOpen.value = false;
+}
+
 defineExpose({
   openMappingModal,
   openTemplateModal,
+  openVideoTemplateModal,
 });
 
 async function onChannelChange(channelId: string) {
@@ -1190,6 +1607,31 @@ async function saveMapping() {
         next.qualityMode = mappingForm.value.qualityMode.trim();
       }
     }
+  } else if (next.purpose === "video") {
+    if (mappingFormConfigType.value === "template") {
+      next.videoConfigId = mappingForm.value.videoConfigId || undefined;
+    } else {
+      next.videoConfigId = undefined;
+      
+      if (mappingForm.value.sizes && mappingForm.value.sizes.length > 0) {
+        next.sizes = mappingForm.value.sizes;
+      }
+      if (mappingForm.value.minSeconds !== undefined) {
+        next.minSeconds = mappingForm.value.minSeconds;
+      }
+      if (mappingForm.value.maxSeconds !== undefined) {
+        next.maxSeconds = mappingForm.value.maxSeconds;
+      }
+      if (mappingForm.value.defaultSeconds !== undefined) {
+        next.defaultSeconds = mappingForm.value.defaultSeconds;
+      }
+      if (mappingForm.value.defaultSize?.trim()) {
+        next.defaultSize = mappingForm.value.defaultSize.trim();
+      }
+      if (mappingForm.value.supportReferenceType?.trim()) {
+        next.supportReferenceType = mappingForm.value.supportReferenceType.trim();
+      }
+    }
   }
 
   try {
@@ -1200,6 +1642,7 @@ async function saveMapping() {
     await updateModelConfig({
       mappings: current,
       imageConfigs: props.imageConfigs,
+      videoConfigs: props.videoConfigs,
       dictionaries: props.dictionaries,
     });
     ElMessage.success("模型映射已保存");
@@ -1218,6 +1661,7 @@ async function toggleMappingEnabled(item: ModelMapping) {
     await updateModelConfig({
       mappings: props.mappings,
       imageConfigs: props.imageConfigs,
+      videoConfigs: props.videoConfigs,
       dictionaries: props.dictionaries,
     });
     ElMessage.success(item.enabled ? "映射已启用" : "映射已禁用");
@@ -1235,6 +1679,7 @@ function confirmDeleteMapping(item: ModelMapping) {
   updateModelConfig({
     mappings: nextMappings,
     imageConfigs: props.imageConfigs,
+    videoConfigs: props.videoConfigs,
     dictionaries: props.dictionaries,
   })
     .then(() => {
@@ -1283,6 +1728,7 @@ async function saveTemplate() {
     await updateModelConfig({
       mappings: props.mappings,
       imageConfigs: current,
+      videoConfigs: props.videoConfigs,
       dictionaries: props.dictionaries,
     });
     ElMessage.success("配置模板已保存");
@@ -1298,10 +1744,74 @@ function confirmDeleteTemplate(item: ImageConfig) {
   updateModelConfig({
     mappings: props.mappings,
     imageConfigs: nextConfigs,
+    videoConfigs: props.videoConfigs,
     dictionaries: props.dictionaries,
   })
     .then(() => {
       ElMessage.success("配置模板已删除");
+      emit("refresh-mappings");
+    })
+    .catch((err) => {
+      ElMessage.error("删除失败: " + (err.message || "未知错误"));
+    });
+}
+
+async function saveVideoTemplate() {
+  if (!videoTemplateForm.value.id.trim() || !videoTemplateForm.value.label.trim()) {
+    ElMessage.warning("请填写必填项");
+    return;
+  }
+  
+  const next: VideoConfig = {
+    id: videoTemplateForm.value.id.trim(),
+    label: videoTemplateForm.value.label.trim(),
+    sizes: videoTemplateForm.value.sizes,
+    minSeconds: videoTemplateForm.value.minSeconds,
+    maxSeconds: videoTemplateForm.value.maxSeconds,
+    defaultSize: videoTemplateForm.value.defaultSize?.trim() || undefined,
+    defaultSeconds: videoTemplateForm.value.defaultSeconds,
+    supportReferenceType: videoTemplateForm.value.supportReferenceType?.trim() || "first",
+    notes: videoTemplateForm.value.notes?.trim() || undefined,
+  };
+
+  const newTemplateIdLower = next.id.toLowerCase();
+  const isDuplicateTemplateId = props.videoConfigs.some(
+    (c) => c.id.toLowerCase() === newTemplateIdLower && c.id !== editingVideoTemplateId.value
+  );
+  if (isDuplicateTemplateId) {
+    ElMessage.warning(`视频模板 ID "${next.id}" 已存在，请使用其他 ID`);
+    return;
+  }
+
+  try {
+    const current = [
+      ...props.videoConfigs.filter((item) => item.id !== editingVideoTemplateId.value),
+      next,
+    ];
+    await updateModelConfig({
+      mappings: props.mappings,
+      imageConfigs: props.imageConfigs,
+      videoConfigs: current,
+      dictionaries: props.dictionaries,
+    });
+    ElMessage.success("视频配置模板已保存");
+    videoTemplateModalOpen.value = false;
+    emit("refresh-mappings");
+  } catch (err: any) {
+    ElMessage.error("保存失败: " + (err.message || "未知错误"));
+  }
+}
+
+function confirmDeleteVideoTemplate(item: VideoConfig) {
+  const nextConfigs = props.videoConfigs.filter((c) => c.id !== item.id);
+  updateModelConfig({
+    mappings: props.mappings,
+    imageConfigs: props.imageConfigs,
+    videoConfigs: nextConfigs,
+    dictionaries: props.dictionaries,
+  })
+    .then(() => {
+      ElMessage.success("视频配置模板已删除");
       emit("refresh-mappings");
     })
     .catch((err) => {

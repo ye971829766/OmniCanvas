@@ -1489,10 +1489,34 @@ export class AiService {
     originUrl: string,
   ) {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-    const model = this.getSelectedModel(body?.model, "veo_3_1_fast_vip");
-    const seconds =
-      typeof body?.seconds === "string" ? body.seconds.trim() : "8";
-    const size = typeof body?.size === "string" ? body.size.trim() : "16x9";
+
+    // Resolve fallback model dynamically from mappings
+    const mappings =
+      await this.modelConfigService.getEnabledMappingsByPurpose("video");
+    const defaultModelFallback = mappings[0]?.id || "veo_3_1_fast_vip";
+    const model = this.getSelectedModel(body?.model, defaultModelFallback);
+
+    // Resolve fallback size & seconds dynamically from resolved model options
+    const opts = await this.getVideoModelOptions(model);
+    
+    // Parse seconds and clamp to range
+    let reqSeconds = typeof body?.seconds === "string" ? parseFloat(body.seconds) : NaN;
+    if (isNaN(reqSeconds)) {
+      reqSeconds = typeof (body as any)?.seconds === "number" ? (body as any).seconds : NaN;
+    }
+    const minSeconds = opts.minSeconds ?? 5;
+    const maxSeconds = opts.maxSeconds ?? 10;
+    const defaultSeconds = opts.defaults?.seconds ?? minSeconds;
+    
+    const secondsNum = isNaN(reqSeconds)
+      ? defaultSeconds
+      : Math.max(minSeconds, Math.min(maxSeconds, reqSeconds));
+    const seconds = String(secondsNum);
+
+    const size =
+      typeof body?.size === "string" && body.size.trim()
+        ? body.size.trim()
+        : opts.defaults?.size || "16x9";
     const watermark =
       typeof body?.watermark === "string" ? body.watermark.trim() : "false";
 
@@ -1531,6 +1555,24 @@ export class AiService {
             type: mimeType,
           });
           upstreamForm.append("input_reference", file as any, file.name);
+        }
+      }
+
+      if (
+        typeof body?.input_tail_reference === "string" &&
+        body.input_tail_reference.startsWith("data:")
+      ) {
+        const base64Str = body.input_tail_reference;
+        const matches = base64Str.match(/^data:(image\/\w+);base64,(.+)$/);
+        if (matches && matches[2]) {
+          const mimeType = matches[1]!;
+          const base64Data = matches[2]!;
+          const buffer = Buffer.from(base64Data, "base64");
+          const extension = mimeType.split("/")[1] || "png";
+          const file = new File([buffer], `input_tail_reference.${extension}`, {
+            type: mimeType,
+          });
+          upstreamForm.append("input_tail_reference", file as any, file.name);
         }
       }
 
@@ -1721,100 +1763,92 @@ export class AiService {
       { label: "9:16 竖屏", value: "9x16" },
       { label: "1:1 方形", value: "1x1" },
     ];
-    let seconds = [
-      { label: "5 秒", value: "5" },
-      { label: "8 秒", value: "8" },
-      { label: "10 秒", value: "10" },
-    ];
+    let minSeconds = 5;
+    let maxSeconds = 10;
     let defaultSize = "16x9";
-    let defaultSeconds = "5";
+    let defaultSeconds = 5;
+    let supportReferenceType = "first"; // Default is first frame only
 
-    if (normalized.includes("veo")) {
-      sizes = [
-        { label: "16:9 横屏", value: "16x9" },
-        { label: "9:16 竖屏", value: "9x16" },
-        { label: "1:1 方形", value: "1x1" },
-      ];
-      seconds = [
-        { label: "5 秒", value: "5" },
-        { label: "8 秒", value: "8" },
-      ];
-      defaultSize = "16x9";
-      defaultSeconds = "8";
-    } else if (normalized.includes("luma")) {
-      sizes = [
-        { label: "16:9 横屏", value: "16x9" },
-        { label: "9:16 竖屏", value: "9x16" },
-        { label: "1:1 方形", value: "1x1" },
-        { label: "4:3 画幅", value: "4x3" },
-        { label: "3:4 竖屏", value: "3x4" },
-        { label: "21:9 宽屏", value: "21x9" },
-      ];
-      seconds = [
-        { label: "5 秒", value: "5" },
-        { label: "10 秒", value: "10" },
-      ];
-      defaultSize = "16x9";
-      defaultSeconds = "5";
-    } else if (normalized.includes("kling")) {
-      sizes = [
-        { label: "16:9 横屏", value: "16x9" },
-        { label: "9:16 竖屏", value: "9x16" },
-        { label: "1:1 方形", value: "1x1" },
-        { label: "4:3 画幅", value: "4x3" },
-        { label: "3:4 竖屏", value: "3x4" },
-      ];
-      seconds = [
-        { label: "5 秒", value: "5" },
-        { label: "10 秒", value: "10" },
-      ];
-      defaultSize = "16x9";
-      defaultSeconds = "5";
-    } else if (
-      normalized.includes("runway") ||
-      normalized.includes("gen3") ||
-      normalized.includes("gen-3")
-    ) {
-      sizes = [
-        { label: "16:9 横屏", value: "16x9" },
-        { label: "9:16 竖屏", value: "9x16" },
-      ];
-      seconds = [
-        { label: "5 秒", value: "5" },
-        { label: "10 秒", value: "10" },
-      ];
-      defaultSize = "16x9";
-      defaultSeconds = "5";
-    } else if (
-      normalized.includes("minimax") ||
-      normalized.includes("hailuo")
-    ) {
-      sizes = [{ label: "16:9 横屏", value: "16x9" }];
-      seconds = [{ label: "6 秒", value: "6" }];
-      defaultSize = "16x9";
-      defaultSeconds = "6";
-    } else if (normalized.includes("cogvideo")) {
-      sizes = [
-        { label: "16:9 横屏", value: "16x9" },
-        { label: "9:16 竖屏", value: "9x16" },
-        { label: "1:1 方形", value: "1x1" },
-      ];
-      seconds = [
-        { label: "5 秒", value: "5" },
-        { label: "10 秒", value: "10" },
-      ];
-      defaultSize = "16x9";
-      defaultSeconds = "5";
+    const configState = await this.modelConfigService.getConfig();
+    let configSource: {
+      sizes?: string[];
+      minSeconds?: number;
+      maxSeconds?: number;
+      defaultSize?: string;
+      defaultSeconds?: number;
+      supportReferenceType?: string;
+    } | null = null;
+
+    if (mapping) {
+      if (mapping.videoConfigId) {
+        const found = configState.videoConfigs?.find(
+          (c) => c.id === mapping.videoConfigId,
+        );
+        if (found) {
+          configSource = found;
+        }
+      }
+      if (!configSource) {
+        const hasCustomConfig =
+          (mapping.sizes && mapping.sizes.length > 0) ||
+          mapping.minSeconds !== undefined ||
+          mapping.maxSeconds !== undefined ||
+          mapping.supportReferenceType;
+        if (hasCustomConfig) {
+          configSource = mapping;
+        }
+      }
+    }
+
+    const getFriendlySizeLabel = (val: string) => {
+      const normalizedKey = val.toLowerCase().replace(":", "x");
+      const mappingTable: Record<string, string> = {
+        "16x9": "16:9 横屏",
+        "9x16": "9:16 竖屏",
+        "1x1": "1:1 方形",
+        "4x3": "4:3 画幅",
+        "3x4": "3:4 竖屏",
+        "21x9": "21:9 宽屏",
+      };
+      return mappingTable[normalizedKey] || val.replace("x", ":");
+    };
+
+    if (configSource) {
+      if (configSource.sizes && configSource.sizes.length > 0) {
+        sizes = configSource.sizes.map((s) => ({
+          label: getFriendlySizeLabel(s),
+          value: s,
+        }));
+        defaultSize =
+          configSource.defaultSize || configSource.sizes[0] || "16x9";
+      }
+      if (configSource.minSeconds !== undefined) {
+        minSeconds = configSource.minSeconds;
+      }
+      if (configSource.maxSeconds !== undefined) {
+        maxSeconds = configSource.maxSeconds;
+      }
+      if (configSource.defaultSeconds !== undefined) {
+        defaultSeconds = configSource.defaultSeconds;
+      } else {
+        // Clamp fallback defaultSeconds within new min/max
+        defaultSeconds = Math.max(minSeconds, Math.min(maxSeconds, defaultSeconds));
+      }
+      if (configSource.supportReferenceType) {
+        supportReferenceType = configSource.supportReferenceType;
+      }
     }
 
     return {
       model,
       sizes,
-      seconds,
+      minSeconds,
+      maxSeconds,
       defaults: {
         size: defaultSize,
         seconds: defaultSeconds,
       },
+      supportReferenceType,
     };
   }
 

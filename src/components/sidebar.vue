@@ -285,6 +285,29 @@
         </Button>
       </div>
     </Popover>
+
+    <!-- Rename Dialog -->
+    <Dialog
+      v-model:visible="renameDialogVisible"
+      modal
+      header="重命名工作区"
+      :style="{ width: '25rem' }"
+    >
+      <div class="flex flex-col gap-2 pt-2">
+        <label for="newWorkspaceName" class="text-sm font-semibold text-[var(--p-text-muted-color)]">请输入新工作空间名称:</label>
+        <InputText
+          id="newWorkspaceName"
+          v-model="newWorkspaceName"
+          class="w-full"
+          autocomplete="off"
+          @keydown.enter="submitRename"
+        />
+      </div>
+      <template #footer>
+        <Button label="取消" text severity="secondary" @click="renameDialogVisible = false" />
+        <Button label="确定" @click="submitRename" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -362,6 +385,10 @@ const searchQuery = ref("");
 const showSearch = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
 
+// Rename state
+const renameDialogVisible = ref(false);
+const newWorkspaceName = ref("");
+
 const toggleSearch = () => {
   if (collapsed.value) {
     collapsed.value = false;
@@ -433,16 +460,40 @@ const createNewWorkspace = async () => {
   }
 };
 
-const renameWorkspace = async () => {
+const renameWorkspace = () => {
   if (!selectedWorkspace.value) return;
   menuPopoverRef.value?.hide();
-  const name = prompt("请输入新工作空间名称:", selectedWorkspace.value.name);
-  if (name === null) return;
-  const workspaceName = name.trim() || "未命名工作区";
+  newWorkspaceName.value = selectedWorkspace.value.name;
+  renameDialogVisible.value = true;
+  nextTick(() => {
+    const inputEl = document.getElementById("newWorkspaceName");
+    if (inputEl) {
+      (inputEl as HTMLInputElement).focus();
+      (inputEl as HTMLInputElement).select();
+    }
+  });
+};
+
+const submitRename = async () => {
+  if (!selectedWorkspace.value) return;
+  const name = newWorkspaceName.value.trim() || "未命名工作区";
   try {
-    await updateWorkspace(selectedWorkspace.value.id, workspaceName);
+    await updateWorkspace(selectedWorkspace.value.id, name);
     await loadWorkspaces();
+    renameDialogVisible.value = false;
+    toast.add({
+      severity: "success",
+      summary: "重命名成功",
+      detail: `工作空间已重命名为 "${name}"`,
+      life: 3000,
+    });
   } catch (err) {
+    toast.add({
+      severity: "error",
+      summary: "重命名失败",
+      detail: "更新工作空间名称失败，请重试。",
+      life: 3000,
+    });
     console.error("Failed to rename workspace:", err);
   }
 };

@@ -48,6 +48,8 @@ export interface GenerateVideoJsonRequest {
   watermark?: string;
   /** Base64 data-URL image used as input reference for video generation. */
   input_reference?: string;
+  /** Base64 data-URL image used as tail frame input reference for video generation. */
+  input_tail_reference?: string;
 }
 
 export interface GenerateImageResponse {
@@ -116,13 +118,15 @@ export interface ImageModelOptionsResponse {
 export interface VideoModelOptionsResponse {
   model: string;
   sizes: { label: string; value: string }[];
-  seconds: { label: string; value: string }[];
+  minSeconds: number;
+  maxSeconds: number;
   defaults: {
     size: string;
-    seconds: string;
+    seconds: number;
   };
   notes?: string[];
   source?: string;
   sourceUrls?: string[];
+  supportReferenceType?: string;
 }
 

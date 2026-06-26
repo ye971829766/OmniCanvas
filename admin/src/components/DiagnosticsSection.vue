@@ -400,6 +400,11 @@ interface ModelMapping {
   defaultQuality?: string;
   qualityMode?: string;
   imageConfigId?: string;
+  videoConfigId?: string;
+  minSeconds?: number;
+  maxSeconds?: number;
+  defaultSeconds?: number;
+  supportReferenceType?: string;
 }
 
 const props = defineProps<{

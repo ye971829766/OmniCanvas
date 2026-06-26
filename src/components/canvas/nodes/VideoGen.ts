@@ -103,9 +103,9 @@ export class VideoGen extends Box {
   ) {
     super(data);
     this._prompt = data.prompt || "";
-    this._model = data.model || "veo_3_1_fast_vip";
-    this._seconds = data.seconds || "8";
-    this._size = data.size || "16x9";
+    this._model = data.model || "";
+    this._seconds = data.seconds || "";
+    this._size = data.size || "";
     this._generationStatus = data.generationStatus || "idle";
     this._errorMessage = data.errorMessage || "";
     this._taskId = data.taskId || "";

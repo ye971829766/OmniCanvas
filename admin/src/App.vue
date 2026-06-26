@@ -147,7 +147,14 @@
               type="primary"
               @click="openTemplateModal"
             >
-              <el-icon style="margin-right: 4px"><Plus /></el-icon>新增配置模板
+              <el-icon style="margin-right: 4px"><Plus /></el-icon>新增图像模板
+            </el-button>
+            <el-button
+              v-else-if="modelsSubTab === 'videoTemplates'"
+              type="primary"
+              @click="openVideoTemplateModal"
+            >
+              <el-icon style="margin-right: 4px"><Plus /></el-icon>新增视频模板
             </el-button>
           </template>
           <el-button
@@ -177,6 +184,7 @@
           :channels="channels"
           :mappings="mappings"
           :imageConfigs="imageConfigs"
+          :videoConfigs="videoConfigs"
           :ping-results="pingResults"
         />
 
@@ -196,6 +204,7 @@
           v-model:modelsSubTab="modelsSubTab"
           :mappings="mappings"
           :image-configs="imageConfigs"
+          :video-configs="videoConfigs"
           :channels="channels"
           :dictionaries="dictionaries"
           :mappings-loading="mappingsLoading"
@@ -228,6 +237,7 @@ import {
   type Channel,
   type ModelMapping,
   type ImageConfig,
+  type VideoConfig,
 } from "./utils/api";
 
 import DashboardSection from "./components/DashboardSection.vue";
@@ -237,19 +247,22 @@ import DiagnosticsSection from "./components/DiagnosticsSection.vue";
 import AgentSection from "./components/AgentSection.vue";
 
 const activeTab = ref<"dashboard" | "channels" | "models" | "agent" | "diagnostics">("dashboard");
-const modelsSubTab = ref<"mappings" | "templates">("mappings");
+const modelsSubTab = ref<"mappings" | "templates" | "videoTemplates" | "dictionaries">("mappings");
 
 const channels = ref<Channel[]>([]);
 const mappings = ref<ModelMapping[]>([]);
 const imageConfigs = ref<ImageConfig[]>([]);
+const videoConfigs = ref<VideoConfig[]>([]);
 const dictionaries = ref<{
   sizes: string[];
   aspectRatios: string[];
   qualities: string[];
+  videoSizes: string[];
 }>({
   sizes: [],
   aspectRatios: [],
   qualities: [],
+  videoSizes: [],
 });
 const loading = ref(false);
 const mappingsLoading = ref(false);
@@ -278,6 +291,10 @@ function openTemplateModal() {
   modelsRef.value?.openTemplateModal();
 }
 
+function openVideoTemplateModal() {
+  modelsRef.value?.openVideoTemplateModal();
+}
+
 async function loadChannels() {
   loading.value = true;
   try {
@@ -296,8 +313,14 @@ async function loadMappings() {
     const cfg = await getModelConfig();
     mappings.value = (cfg.mappings || []) as ModelMapping[];
     imageConfigs.value = (cfg.imageConfigs || []) as ImageConfig[];
+    videoConfigs.value = (cfg.videoConfigs || []) as VideoConfig[];
     if (cfg.dictionaries) {
-      dictionaries.value = cfg.dictionaries;
+      dictionaries.value = {
+        sizes: cfg.dictionaries.sizes || [],
+        aspectRatios: cfg.dictionaries.aspectRatios || [],
+        qualities: cfg.dictionaries.qualities || [],
+        videoSizes: cfg.dictionaries.videoSizes || [],
+      };
     }
   } catch (err) {
     console.error(err);

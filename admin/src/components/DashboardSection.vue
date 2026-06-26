@@ -34,9 +34,9 @@
         <el-card class="dashboard-stat-card" shadow="hover">
           <div style="display: flex; justify-content: space-between; align-items: center">
             <div>
-              <span style="font-size: 12px; color: #a1a1aa; font-weight: 500">配置模板</span>
+              <span style="font-size: 12px; color: #a1a1aa; font-weight: 500">配置模板 (图像/视频)</span>
               <h2 style="margin: 8px 0 0 0; font-size: 28px; font-weight: 700; color: #fff">
-                {{ imageConfigs.length }}
+                {{ imageConfigs.length }} <span style="font-size: 16px; color: #71717a">/ {{ videoConfigs?.length || 0 }}</span>
               </h2>
             </div>
             <el-icon class="dashboard-stat-icon" style="color: #f59e0b"><Setting /></el-icon>
@@ -165,12 +165,13 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import type { Channel, ModelMapping, ImageConfig, ModelType } from "../utils/api";
+import type { Channel, ModelMapping, ImageConfig, VideoConfig, ModelType } from "../utils/api";
 
 const props = defineProps<{
   channels: Channel[];
   mappings: ModelMapping[];
   imageConfigs: ImageConfig[];
+  videoConfigs?: VideoConfig[];
   pingResults: Record<string, { success: boolean; latency?: number; error?: string }>;
 }>();
 

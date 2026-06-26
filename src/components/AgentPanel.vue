@@ -11,6 +11,7 @@ import {
 import { useAgent } from "@/composables/useAgent";
 import { Button } from "primevue";
 import { gsap } from "gsap";
+import { useToast } from "primevue/usetoast";
 
 import AgentHeader from "./agent/AgentHeader.vue";
 import AgentMessages from "./agent/AgentMessages.vue";
@@ -44,6 +45,7 @@ const collapsed = computed({
   get: () => props.collapsed,
   set: (val) => emit("update:collapsed", val),
 });
+const toast = useToast();
 const input = ref("");
 const scrollRef = ref<any>(null);
 const userScrolledUp = ref(false);
@@ -187,7 +189,12 @@ const currentStatusText = computed(() => {
 
 function enableNotification() {
   if (!("Notification" in window)) {
-    alert("您的浏览器不支持系统通知。");
+    toast.add({
+      severity: "warn",
+      summary: "不支持通知",
+      detail: "您的浏览器不支持系统通知。",
+      life: 3000,
+    });
     return;
   }
   Notification.requestPermission().then((permission) => {
@@ -199,7 +206,12 @@ function enableNotification() {
         body: "当 Agent 任务完成时，您将会收到通知气泡！",
       });
     } else {
-      alert("系统通知权限已被拒绝，请在浏览器设置中允许通知以启用该功能。");
+      toast.add({
+        severity: "error",
+        summary: "权限被拒绝",
+        detail: "系统通知权限已被拒绝，请在浏览器设置中允许通知以启用该功能。",
+        life: 5000,
+      });
     }
   });
 }

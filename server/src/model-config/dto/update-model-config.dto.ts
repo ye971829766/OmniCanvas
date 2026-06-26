@@ -10,11 +10,16 @@ export class UpdateModelConfigDto {
   imageConfigs?: unknown[];
 
   @IsOptional()
+  @IsArray()
+  videoConfigs?: unknown[];
+
+  @IsOptional()
   @IsObject()
   dictionaries?: {
     sizes?: string[];
     aspectRatios?: string[];
     qualities?: string[];
+    videoSizes?: string[];
   };
 
   @IsOptional()

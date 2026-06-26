@@ -47,6 +47,11 @@ export interface ModelMapping {
   defaultQuality?: string;
   qualityMode?: string;
   imageConfigId?: string;
+  videoConfigId?: string;
+  minSeconds?: number;
+  maxSeconds?: number;
+  defaultSeconds?: number;
+  supportReferenceType?: string;
 }
 
 export interface ImageConfig {
@@ -63,13 +68,27 @@ export interface ImageConfig {
   maxGenerationCount?: number;
 }
 
+export interface VideoConfig {
+  id: string;
+  label: string;
+  sizes?: string[];
+  minSeconds?: number;
+  maxSeconds?: number;
+  defaultSize?: string;
+  defaultSeconds?: number;
+  supportReferenceType?: string;
+  notes?: string;
+}
+
 export interface ModelConfigState {
   mappings: ModelMapping[];
   imageConfigs?: ImageConfig[];
+  videoConfigs?: VideoConfig[];
   dictionaries?: {
     sizes: string[];
     aspectRatios: string[];
     qualities: string[];
+    videoSizes?: string[];
   };
   agentConfig?: {
     systemPrompt: string;

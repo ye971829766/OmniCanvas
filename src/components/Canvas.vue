@@ -97,6 +97,7 @@
 <script setup lang="ts">
 import { ref, useTemplateRef, watch, toRef } from "vue";
 import logoImg from "@/assets/logo.jpg";
+import { useToast } from "primevue/usetoast";
 
 const props = defineProps<{
   agentPanelCollapsed: boolean;
@@ -126,6 +127,7 @@ import {
 import { Image } from "leafer-ui";
 
 const canvasRef = useTemplateRef("canvasRef");
+const toast = useToast();
 
 // State for bottom toolbar controls
 const hue = ref(45);
@@ -295,11 +297,21 @@ const onSubmitLink = async (url: string) => {
         video.onerror = reject;
       });
     } else {
-      alert("不支持的媒体链接格式，请提供图片（PNG/JPG/WEBP）或视频（MP4/WEBM）的直链。");
+      toast.add({
+        severity: "error",
+        summary: "格式错误",
+        detail: "不支持的媒体链接格式，请提供图片（PNG/JPG/WEBP）或视频（MP4/WEBM）的直链。",
+        life: 3000,
+      });
     }
   } catch (err: any) {
     console.error("Failed to load link:", err);
-    alert("加载链接失败，请确认链接有效且支持跨域访问。");
+    toast.add({
+      severity: "error",
+      summary: "加载失败",
+      detail: "加载链接失败，请确认链接有效且支持跨域访问。",
+      life: 3000,
+    });
   }
 };
 
@@ -437,7 +449,12 @@ const onUploadFile = async (file: File) => {
     }
   } catch (error) {
     console.error("Failed to upload video:", error);
-    alert("Upload failed. Please make sure the backend server is running.");
+    toast.add({
+      severity: "error",
+      summary: "上传失败",
+      detail: "Upload failed. Please make sure the backend server is running.",
+      life: 3000,
+    });
   }
 };
 
