@@ -1,5 +1,5 @@
 <template>
-  <div style="display: flex; flex-direction: column; gap: 20px;">
+  <div style="display: flex; flex-direction: column; gap: 20px">
     <el-card
       style="
         background-color: #141416;
@@ -8,7 +8,13 @@
       "
     >
       <template #header>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
           <span
             style="
               font-size: 14px;
@@ -29,7 +35,8 @@
               @click="resetToDefaultPrompt"
               :disabled="saving || loading"
             >
-              <el-icon style="margin-right: 4px"><Refresh /></el-icon>恢复默认提示词
+              <el-icon style="margin-right: 4px"><Refresh /></el-icon
+              >恢复默认提示词
             </el-button>
             <el-button
               type="primary"
@@ -43,14 +50,28 @@
         </div>
       </template>
 
-      <div v-loading="loading" element-loading-background="rgba(20, 20, 22, 0.8)">
+      <div
+        v-loading="loading"
+        element-loading-background="rgba(20, 20, 22, 0.8)"
+      >
         <el-form label-position="top">
           <!-- Model Selection -->
           <el-form-item label="Agent 驱动模型 (chatModel)" required>
             <template #label>
-              <span style="color: #a1a1aa; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+              <span
+                style="
+                  color: #a1a1aa;
+                  font-weight: 600;
+                  display: flex;
+                  align-items: center;
+                  gap: 4px;
+                "
+              >
                 Agent 驱动模型 (chatModel)
-                <el-tooltip content="选择已配置的聊天映射模型，或直接输入未映射的上游模型 ID（支持回车创建）" placement="top">
+                <el-tooltip
+                  content="选择已配置的聊天映射模型，或直接输入未映射的上游模型 ID（支持回车创建）"
+                  placement="top"
+                >
                   <el-icon style="cursor: help"><InfoFilled /></el-icon>
                 </el-tooltip>
               </span>
@@ -71,16 +92,32 @@
               />
             </el-select>
             <p style="margin: 6px 0 0 0; font-size: 12px; color: #71717a">
-              该模型需对应一个处于启用状态的上游聊天渠道（purpose 为 chat）。如未包含，Agent 在运行时将报错。
+              该模型需对应一个处于启用状态的上游聊天渠道（purpose 为
+              chat）。如未包含，Agent 在运行时将报错。
             </p>
           </el-form-item>
 
           <!-- Vision Model Selection -->
-          <el-form-item label="Agent 视觉自查模型 (visionModel)" required style="margin-top: 16px;">
+          <el-form-item
+            label="Agent 视觉自查模型 (visionModel)"
+            required
+            style="margin-top: 16px"
+          >
             <template #label>
-              <span style="color: #a1a1aa; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+              <span
+                style="
+                  color: #a1a1aa;
+                  font-weight: 600;
+                  display: flex;
+                  align-items: center;
+                  gap: 4px;
+                "
+              >
                 Agent 视觉自查模型 (visionModel)
-                <el-tooltip content="选择已配置的用于 MCoT 视觉分析的聊天映射模型（需要支持 Multimodal 多模态输入），或直接输入未映射的上游模型 ID" placement="top">
+                <el-tooltip
+                  content="选择已配置的用于 MCoT 视觉分析的聊天映射模型（需要支持 Multimodal 多模态输入），或直接输入未映射的上游模型 ID"
+                  placement="top"
+                >
                   <el-icon style="cursor: help"><InfoFilled /></el-icon>
                 </el-tooltip>
               </span>
@@ -101,16 +138,29 @@
               />
             </el-select>
             <p style="margin: 6px 0 0 0; font-size: 12px; color: #71717a">
-              该模型用于设计生成后的截图自查（Multimodal Chain of Thought）。请确保所选模型具有多模态视觉能力（如 gpt-4o, gemini-3.5-flash）。
+              该模型用于设计生成后的截图自查（Multimodal Chain of
+              Thought）。请确保所选模型具有多模态视觉能力（如 gpt-4o,
+              gemini-3.5-flash）。
             </p>
           </el-form-item>
 
           <!-- Monospace System Prompt -->
-          <el-form-item required style="margin-top: 24px;">
+          <el-form-item required style="margin-top: 24px">
             <template #label>
-              <span style="color: #a1a1aa; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+              <span
+                style="
+                  color: #a1a1aa;
+                  font-weight: 600;
+                  display: flex;
+                  align-items: center;
+                  gap: 4px;
+                "
+              >
                 系统级提示词 (SYSTEM_PROMPT)
-                <el-tooltip content="定义 Agent 的核心职能、画布工具调用协议以及质量规则指令" placement="top">
+                <el-tooltip
+                  content="定义 Agent 的核心职能、画布工具调用协议以及质量规则指令"
+                  placement="top"
+                >
                   <el-icon style="cursor: help"><InfoFilled /></el-icon>
                 </el-tooltip>
               </span>
@@ -192,8 +242,8 @@ const rawState = ref<ModelConfigState | null>(null);
 
 const agentConfig = ref({
   systemPrompt: "",
-  chatModel: "gpt-4o-mini",
-  visionModel: "gpt-4o",
+  chatModel: "",
+  visionModel: "",
 });
 
 const chatModelMappings = computed(() => {
@@ -208,14 +258,15 @@ async function loadConfig() {
     if (config.agentConfig) {
       agentConfig.value = {
         systemPrompt: config.agentConfig.systemPrompt || DEFAULT_SYSTEM_PROMPT,
-        chatModel: config.agentConfig.chatModel || "gpt-4o-mini",
-        visionModel: config.agentConfig.visionModel || "gpt-4o",
+        chatModel: config.agentConfig.chatModel || "",
+        visionModel: config.agentConfig.visionModel || "",
       };
+      console.log(agentConfig);
     } else {
       agentConfig.value = {
         systemPrompt: DEFAULT_SYSTEM_PROMPT,
-        chatModel: "gpt-4o-mini",
-        visionModel: "gpt-4o",
+        chatModel: "",
+        visionModel: "",
       };
     }
   } catch (err) {
@@ -272,7 +323,7 @@ function resetToDefaultPrompt() {
       cancelButtonText: "取消",
       type: "warning",
       boxType: "confirm",
-    }
+    },
   )
     .then(() => {
       agentConfig.value.systemPrompt = DEFAULT_SYSTEM_PROMPT;

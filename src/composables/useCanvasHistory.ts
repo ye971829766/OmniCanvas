@@ -37,6 +37,15 @@ const tagClassMap: Record<string, any> = {
 // ── 稳定节点 ID ────────────────────────────────────────────────────────────────
 let _nextId = 1;
 
+/** 检查数据是否为残留的裁剪框图层（用于自愈被污染的旧数据） */
+function isLeftoverCropOverlay(data: any): boolean {
+  if (data.tag !== "Group" || !Array.isArray(data.children)) return false;
+  if (data.children.length !== 13) return false;
+  const strokeMatches = data.children.filter((c: any) => c.stroke === "#10b981").length;
+  const fillMatches = data.children.filter((c: any) => c.fill === "rgba(0,0,0,0.6)").length;
+  return fillMatches === 4 && strokeMatches === 9;
+}
+
 /** 为节点分配一个跨 undo/redo 稳定的 ID */
 function ensureHistoryId(node: any): string {
   if (!node.__historyId) {
@@ -130,7 +139,14 @@ export function useCanvasHistory(
       data.lockRatio = true;
       delete data.children;
     } else if (node.children && node.children.length > 0) {
-      data.children = node.children.map((c: any) => serializeNode(c));
+      data.children = node.children
+        .filter(
+          (c: any) =>
+            c.tag !== "SimulateElement" &&
+            c.__tag !== "SimulateElement" &&
+            !c.isCropOverlay
+        )
+        .map((c: any) => serializeNode(c));
     }
     return data;
   };
@@ -243,7 +259,10 @@ export function useCanvasHistory(
     }
 
     const currentChildren: any[] = app.tree.children.filter(
-      (c: any) => c.tag !== "SimulateElement" && c.__tag !== "SimulateElement",
+      (c: any) =>
+        c.tag !== "SimulateElement" &&
+        c.__tag !== "SimulateElement" &&
+        !c.isCropOverlay,
     );
 
     // 构建当前节点索引
@@ -299,7 +318,12 @@ export function useCanvasHistory(
 
     // 第三步：检查顺序是否需要调整
     const currentOrder = app.tree.children
-      .filter((c: any) => c.tag !== "SimulateElement" && c.__tag !== "SimulateElement")
+      .filter(
+        (c: any) =>
+          c.tag !== "SimulateElement" &&
+          c.__tag !== "SimulateElement" &&
+          !c.isCropOverlay,
+      )
       .map((c: any) => c.__historyId);
     const targetOrder = finalChildren.map((c: any) => c.__historyId);
 
@@ -351,7 +375,8 @@ export function useCanvasHistory(
         .filter(
           (child: any) =>
             child.tag !== "SimulateElement" &&
-            child.__tag !== "SimulateElement",
+            child.__tag !== "SimulateElement" &&
+            !child.isCropOverlay,
         )
         .map((child: any) => serializeNode(child));
       await updateWorkspaceCanvas(String(targetId), childrenData);
@@ -384,6 +409,7 @@ export function useCanvasHistory(
         app.tree.children.forEach((child: any) => cleanUpSingleNode(child));
         app.tree.clear();
         dataList.forEach((data: any) => {
+          if (isLeftoverCropOverlay(data)) return;
           const child = deserializeNode(data);
           if (child) {
             ensureHistoryIdDeep(child);
@@ -397,7 +423,8 @@ export function useCanvasHistory(
           .filter(
             (child: any) =>
               child.tag !== "SimulateElement" &&
-              child.__tag !== "SimulateElement",
+              child.__tag !== "SimulateElement" &&
+              !child.isCropOverlay,
           )
           .map((child: any) => serializeNode(child));
         history.push({ serialized, selectedHistoryIds: [] });
@@ -441,7 +468,11 @@ export function useCanvasHistory(
 
     // 为所有节点确保有 historyId
     app.tree.children.forEach((child: any) => {
-      if (child.tag !== "SimulateElement" && child.__tag !== "SimulateElement") {
+      if (
+        child.tag !== "SimulateElement" &&
+        child.__tag !== "SimulateElement" &&
+        !child.isCropOverlay
+      ) {
         ensureHistoryIdDeep(child);
       }
     });
@@ -460,7 +491,9 @@ export function useCanvasHistory(
     const serialized = app.tree.children
       .filter(
         (child: any) =>
-          child.tag !== "SimulateElement" && child.__tag !== "SimulateElement",
+          child.tag !== "SimulateElement" &&
+          child.__tag !== "SimulateElement" &&
+          !child.isCropOverlay,
       )
       .map((child: any) => serializeNode(child));
     history.push({ serialized, selectedHistoryIds });

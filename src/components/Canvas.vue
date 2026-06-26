@@ -31,7 +31,11 @@
           : '-translate-y-full pb-3',
       ]"
       :style="toolbarStyle"
-      @change="(payload: any) => { if (!payload?.skipHistory) recordHistoryDebounced(); }"
+      @change="
+        (payload: any) => {
+          if (!payload?.skipHistory) recordHistoryDebounced();
+        }
+      "
       @action="handleToolbarAction"
     />
 
@@ -52,6 +56,52 @@
       :canvas-app="canvasApp"
       :record-history-debounced="recordHistoryDebounced"
     />
+
+    <!-- Canvas-based Crop Toolbar -->
+    <div
+      v-if="isCropping"
+      class="absolute transform -translate-x-1/2 z-50 pointer-events-auto bg-neutral-900/95 backdrop-blur-md border border-neutral-700/80 rounded-full px-4 py-2 flex items-center gap-3 shadow-2xl"
+      :style="cropToolbarStyle"
+    >
+      <span
+        class="text-xs text-neutral-300 font-medium whitespace-nowrap flex items-center gap-1.5 select-none"
+      >
+        <i class="pi pi-clone text-primary-500"></i>
+        裁剪模式
+      </span>
+      <div class="h-4 w-1px bg-neutral-700"></div>
+
+      <Select
+        v-model="cropRatio"
+        :options="cropRatios"
+        optionLabel="label"
+        optionValue="value"
+        class="text-xs custom-select-style font-medium"
+        style="height: 28px; line-height: 28px"
+        @change="applyRatioPreset"
+      />
+
+      <div class="h-4 w-1px bg-neutral-700"></div>
+
+      <Button
+        icon="pi pi-check"
+        severity="success"
+        rounded
+        size="small"
+        class="w-7 h-7 flex items-center justify-center p-0 cursor-pointer"
+        title="确定 (Enter)"
+        @click="confirmCanvasCrop"
+      />
+      <Button
+        icon="pi pi-times"
+        severity="secondary"
+        rounded
+        size="small"
+        class="w-7 h-7 flex items-center justify-center p-0 cursor-pointer"
+        title="取消 (Esc)"
+        @click="cancelCanvasCrop"
+      />
+    </div>
 
     <div class="absolute right-4 top-4 z-40 flex items-center gap-3">
       <ZoomController
@@ -95,7 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, useTemplateRef, watch, toRef } from "vue";
+import { ref, useTemplateRef, watch, toRef, onMounted, onUnmounted } from "vue";
 import logoImg from "@/assets/logo.jpg";
 import { useToast } from "primevue/usetoast";
 
@@ -113,12 +163,10 @@ import ElementInfoLabel from "@/components/canvas/floatToolbar/ElementInfoLabel.
 import ViboardToolbar from "@/components/ViboardToolbar.vue";
 import { VideoNode } from "@/components/canvas/nodes/VideoNode";
 import { useCanvas } from "@/composables/useCanvas";
-import {
-  uploadImage,
-  uploadVideo,
-} from "@/utils/api";
+import { uploadImage, uploadVideo } from "@/utils/api";
 import LayerPanel from "@/components/canvas/LayerPanel.vue";
 import ZoomController from "@/components/canvas/ZoomController.vue";
+import { useCanvasCrop } from "@/composables/useCanvasCrop";
 import {
   getNonOverlappingCoordinates,
   isImageFile,
@@ -157,6 +205,17 @@ const {
   fontFamily,
   toRef(props, "activeWorkspaceId"),
 );
+
+const {
+  isCropping,
+  cropRatio,
+  cropToolbarStyle,
+  ratios: cropRatios,
+  startCanvasCrop,
+  confirmCanvasCrop,
+  cancelCanvasCrop,
+  applyRatioPreset,
+} = useCanvasCrop(canvasApp, selectTarget, recordHistoryDebounced, toast);
 
 watch(activeTool, (newTool) => {
   if (newTool === "image-gen") {
@@ -197,15 +256,17 @@ const onFontFamilyChange = (newFamily: string) => {
 };
 
 const onSubmitLink = async (url: string) => {
-  if (!url || typeof url !== 'string') return;
+  if (!url || typeof url !== "string") return;
   const trimmed = url.trim();
   const app = canvasApp.value;
   if (!app || !app.tree) return;
 
   try {
-    const isImg = trimmed.match(/\.(jpeg|jpg|gif|png|webp)/i) || trimmed.startsWith('data:image/');
+    const isImg =
+      trimmed.match(/\.(jpeg|jpg|gif|png|webp)/i) ||
+      trimmed.startsWith("data:image/");
     const isVid = trimmed.match(/\.(mp4|webm|ogg|mov)/i);
-    
+
     if (isImg) {
       const img = new window.Image();
       img.src = trimmed;
@@ -213,9 +274,11 @@ const onSubmitLink = async (url: string) => {
         img.onload = () => {
           const naturalWidth = img.naturalWidth || 400;
           const naturalHeight = img.naturalHeight || 300;
-          
+
           const existingBounds = Array.from(app.tree.children || [])
-            .filter((child: any) => child.x !== undefined && child.y !== undefined)
+            .filter(
+              (child: any) => child.x !== undefined && child.y !== undefined,
+            )
             .map((child: any) => ({
               x: child.x,
               y: child.y,
@@ -241,7 +304,7 @@ const onSubmitLink = async (url: string) => {
           });
           app.tree.add(image);
           recordHistoryDebounced();
-          
+
           setTimeout(() => {
             (app.tree as any).zoom(image, 100, undefined, 0.8);
           }, 100);
@@ -257,9 +320,11 @@ const onSubmitLink = async (url: string) => {
         video.onloadedmetadata = () => {
           const naturalWidth = video.videoWidth || 480;
           const naturalHeight = video.videoHeight || 270;
-          
+
           const existingBounds = Array.from(app.tree.children || [])
-            .filter((child: any) => child.x !== undefined && child.y !== undefined)
+            .filter(
+              (child: any) => child.x !== undefined && child.y !== undefined,
+            )
             .map((child: any) => ({
               x: child.x,
               y: child.y,
@@ -283,16 +348,18 @@ const onSubmitLink = async (url: string) => {
             videoUrl: trimmed,
             thumbnailUrl: trimmed,
             editable: true,
-          }).then(videoNode => {
-            if (videoNode) {
-              app.tree.add(videoNode);
-              recordHistoryDebounced();
-              setTimeout(() => {
-                (app.tree as any).zoom(videoNode, 100, undefined, 0.8);
-              }, 100);
-            }
-            resolve();
-          }).catch(reject);
+          })
+            .then((videoNode) => {
+              if (videoNode) {
+                app.tree.add(videoNode);
+                recordHistoryDebounced();
+                setTimeout(() => {
+                  (app.tree as any).zoom(videoNode, 100, undefined, 0.8);
+                }, 100);
+              }
+              resolve();
+            })
+            .catch(reject);
         };
         video.onerror = reject;
       });
@@ -300,7 +367,8 @@ const onSubmitLink = async (url: string) => {
       toast.add({
         severity: "error",
         summary: "格式错误",
-        detail: "不支持的媒体链接格式，请提供图片（PNG/JPG/WEBP）或视频（MP4/WEBM）的直链。",
+        detail:
+          "不支持的媒体链接格式，请提供图片（PNG/JPG/WEBP）或视频（MP4/WEBM）的直链。",
         life: 3000,
       });
     }
@@ -331,8 +399,12 @@ const onUploadFile = async (file: File) => {
             const naturalHeight = img.naturalHeight;
 
             // 获取画布上所有元素的边界框
-            const existingBounds = Array.from(canvasApp.value!.tree.children || [])
-              .filter((child: any) => child.x !== undefined && child.y !== undefined)
+            const existingBounds = Array.from(
+              canvasApp.value!.tree.children || [],
+            )
+              .filter(
+                (child: any) => child.x !== undefined && child.y !== undefined,
+              )
               .map((child: any) => ({
                 x: child.x,
                 y: child.y,
@@ -395,8 +467,12 @@ const onUploadFile = async (file: File) => {
             const naturalHeight = video.videoHeight;
 
             // 获取画布上所有元素的边界框
-            const existingBounds = Array.from(canvasApp.value!.tree.children || [])
-              .filter((child: any) => child.x !== undefined && child.y !== undefined)
+            const existingBounds = Array.from(
+              canvasApp.value!.tree.children || [],
+            )
+              .filter(
+                (child: any) => child.x !== undefined && child.y !== undefined,
+              )
               .map((child: any) => ({
                 x: child.x,
                 y: child.y,
@@ -494,8 +570,32 @@ const handleToolbarAction = ({ action }: { action: string }) => {
           });
       }
     }
+  } else if (action === "crop") {
+    if (selectTarget.value && selectTarget.value.tag === "Image") {
+      startCanvasCrop();
+    }
   }
 };
+
+const handleCropKeyDown = (e: KeyboardEvent) => {
+  if (!isCropping.value) return;
+
+  if (e.key === "Enter") {
+    e.preventDefault();
+    confirmCanvasCrop();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    cancelCanvasCrop();
+  }
+};
+
+onMounted(() => {
+  window.addEventListener("keydown", handleCropKeyDown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", handleCropKeyDown);
+});
 
 defineExpose({
   canvasApp,
@@ -504,6 +604,31 @@ defineExpose({
 </script>
 
 <style>
+/* Custom Select style overrides for Crop Toolbar */
+.custom-select-style {
+  border-radius: 9999px !important;
+  color: #f3f4f6 !important;
+  box-shadow: none !important;
+  display: flex !important;
+  align-items: center !important;
+  padding: 0 8px 0 12px !important;
+  transition: all 0.2s ease !important;
+}
+
+.custom-select-style :deep(.p-select-label) {
+  padding: 0 4px 0 0 !important;
+  font-size: 11px !important;
+  color: #e5e7eb !important;
+  font-weight: 500 !important;
+  display: flex !important;
+  align-items: center !important;
+}
+.custom-select-style :deep(.p-select-dropdown) {
+  width: 1rem !important;
+  height: 1rem !important;
+  color: #9ca3af !important;
+}
+
 /* Global CSS variables & layout */
 :root {
   --blue-bg: var(--p-primary-100, var(--p-surface-100));

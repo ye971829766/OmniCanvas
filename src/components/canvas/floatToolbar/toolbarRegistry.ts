@@ -1,4 +1,4 @@
-import { Download, Lock, LockOpen, Group, Ungroup } from "lucide-vue-next";
+import { Download, Lock, LockOpen, Group, Ungroup, Crop } from "lucide-vue-next";
 import RadiusTool from "./custom/RadiusTool.vue";
 import FillTool from "./custom/FillTool.vue";
 import BorderTool from "./custom/BorderTool.vue";
@@ -229,6 +229,15 @@ const multipleSelectTools: ToolbarItem[] = [
 ];
 const imageTools: ToolbarItem[] = [
   ...sizeTools,
+  {
+    type: "divider",
+  },
+  {
+    type: "button",
+    action: "crop",
+    icon: Crop,
+    label: "裁剪",
+  },
   {
     type: "divider",
   },

@@ -27,6 +27,7 @@ declare module 'vue' {
     FloatToolbar: typeof import('./components/canvas/floatToolbar/index.vue')['default']
     FontFamilyTool: typeof import('./components/canvas/floatToolbar/custom/FontFamilyTool.vue')['default']
     FontSizeTool: typeof import('./components/canvas/floatToolbar/custom/FontSizeTool.vue')['default']
+    ImageCropper: typeof import('./components/canvas/ImageCropper.vue')['default']
     ImageGenCard: typeof import('./components/canvas/floatToolbar/custom/ImageGenCard.vue')['default']
     ImageGenTool: typeof import('./components/canvas/floatToolbar/custom/ImageGenTool.vue')['default']
     InputNumber: typeof import('primevue/inputnumber')['default']
