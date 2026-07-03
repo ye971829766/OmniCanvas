@@ -9,9 +9,9 @@ import {
   toRef,
 } from "vue";
 import { useAgent } from "@/composables/useAgent";
-import { Button } from "primevue";
 import { gsap } from "gsap";
-import { useToast } from "primevue/usetoast";
+
+
 
 import AgentHeader from "./agent/AgentHeader.vue";
 import AgentMessages from "./agent/AgentMessages.vue";
@@ -21,8 +21,10 @@ const props = defineProps<{
   canvasApp: Ref<any> | any;
   recordHistory?: () => void;
   collapsed: boolean;
-  workspaceId: string | number | null;
+  onAgentPlace?: (node: any) => void;
+  workspaceId?: string | number;
 }>();
+
 
 const emit = defineEmits<{
   (e: "update:collapsed", val: boolean): void;
@@ -34,37 +36,35 @@ watch(
   (v) => (canvasAppRef.value = v),
 );
 
-const { messages, running, send, stop, reset, nodeStates, zoomToNode } =
-  useAgent(
-    canvasAppRef as any,
-    props.recordHistory,
-    toRef(props, "workspaceId"),
-  );
+const {
+  messages,
+  running,
+  loadingHistory,
+  send,
+  retryLastMessage,
+  stop,
+  reset,
+  nodeStates,
+  zoomToNode,
+} = useAgent(
+  canvasAppRef as any,
+  props.recordHistory,
+  toRef(props, "workspaceId") as any,
+  props.onAgentPlace as any,
+);
 
 const collapsed = computed({
   get: () => props.collapsed,
   set: (val) => emit("update:collapsed", val),
 });
-const toast = useToast();
 const input = ref("");
+
 const scrollRef = ref<any>(null);
 const userScrolledUp = ref(false);
-const isScrollingToBottom = ref(false);
 
 function onScroll() {
-  if (scrollRef.value && !isScrollingToBottom.value) {
-    userScrolledUp.value = scrollRef.value.isUserScrolledUp();
-  }
-}
-
-function scrollToBottomForce() {
   if (scrollRef.value) {
-    isScrollingToBottom.value = true;
-    userScrolledUp.value = false;
-    scrollRef.value.scrollToBottom();
-    setTimeout(() => {
-      isScrollingToBottom.value = false;
-    }, 400);
+    userScrolledUp.value = scrollRef.value.isUserScrolledUp();
   }
 }
 
@@ -76,36 +76,53 @@ function handleReset() {
 }
 
 const containerRef = ref<HTMLElement | null>(null);
+const isVisible = ref(!props.collapsed);
+
+// Refs for content animation
+const headerRef = ref<HTMLElement | null>(null);
+const messagesRef = ref<HTMLElement | null>(null);
+const bottomRef = ref<HTMLElement | null>(null);
 
 onMounted(() => {
   if (collapsed.value) {
-    gsap.set(containerRef.value, {
-      // width: 0,
-      x: 400,
-      borderLeftWidth: 0,
-    });
+    gsap.set(containerRef.value, { x: 380, opacity: 0 });
+    isVisible.value = false;
   }
 });
 
 watch(collapsed, (isCollapsed) => {
   if (isCollapsed) {
+    // Smooth exit animation first, hide display after animation finishes
     gsap.to(containerRef.value, {
-      // width: 0,
-      x: 400,
-      borderLeftWidth: 0,
-      duration: 0.35,
-      ease: "power2.inOut",
+      x: 380,
+      opacity: 0,
+      duration: 0.22,
+      ease: "power2.in",
+      onComplete: () => {
+        isVisible.value = false;
+      },
     });
   } else {
-    gsap.to(containerRef.value, {
-      // width: 400,
-      x: 0,
-      borderLeftWidth: 1,
-      duration: 0.25,
-      ease: "power2.inOut",
-    });
+    // Show display first, then slide & fade enter
+    isVisible.value = true;
+    gsap.fromTo(
+      containerRef.value,
+      { x: 380, opacity: 0 },
+      {
+        x: 0,
+        opacity: 1,
+        duration: 0.28,
+        ease: "power3.out",
+      },
+    );
+    gsap.fromTo(
+      [headerRef.value, messagesRef.value, bottomRef.value],
+      { opacity: 0, y: 4 },
+      { opacity: 1, y: 0, duration: 0.22, ease: "power2.out", delay: 0.05 }
+    );
   }
 });
+
 
 // Active timer and active status calculations
 let timerInterval: any = null;
@@ -116,7 +133,7 @@ const notificationEnabled = ref(false);
 watch(running, (newRunning) => {
   if (newRunning) {
     elapsedTime.value = 0;
-    showNotificationBanner.value = !notificationEnabled.value; // Only show banner if notification is not yet enabled
+    showNotificationBanner.value = !notificationEnabled.value;
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
       elapsedTime.value++;
@@ -127,12 +144,10 @@ watch(running, (newRunning) => {
       timerInterval = null;
     }
     showNotificationBanner.value = false;
-    
     // Trigger real system notification if enabled
     if (notificationEnabled.value && Notification.permission === "granted") {
       new Notification("AgentsBoard 设计任务已完成", {
-        body: `AI 助手已经完成了设计！总共耗时 ${formattedElapsedTime.value}。`,
-        icon: "/favicon.ico",
+        body: "您的 AI 设计已成功放置到画布！",
       });
     }
   }
@@ -142,79 +157,9 @@ onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
 });
 
-const formattedElapsedTime = computed(() => {
-  const m = Math.floor(elapsedTime.value / 60);
-  const s = elapsedTime.value % 60;
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-});
 
-const TOOL_LABELS: Record<string, string> = {
-  set_frame: "设置画板",
-  generate_image: "生成图片",
-  generate_video: "生成视频",
-  add_text: "添加文字",
-  add_rect: "添加图形",
-  update_node: "调整元素",
-  remove_node: "删除元素",
-  query_canvas: "读取画布",
-  collect_inspiration: "收集灵感",
-  auto_layout: "自动布局",
-  align_nodes: "对齐元素",
-  distribute_nodes: "分布元素",
-  set_brand: "设置品牌",
-  apply_palette: "应用配色",
-  verify_design: "视觉质检",
-  plan_design: "规划任务",
-  export_node_image: "截取画面",
-  analyze_design: "视觉分析",
-  review_and_adjust: "布局检查",
-  focus_node: "聚焦元素",
-  add_frame: "添加画板",
-};
 
-function toolLabel(name: string) {
-  return TOOL_LABELS[name] ?? name;
-}
 
-const currentStatusText = computed(() => {
-  if (!running.value) return "";
-  const lastMsg = messages.value[messages.value.length - 1];
-  if (lastMsg && lastMsg.role === "assistant") {
-    const activeTool = lastMsg.tools.find((t) => !t.done);
-    if (activeTool) return toolLabel(activeTool.name);
-    return "思考中";
-  }
-  return "思考中";
-});
-
-function enableNotification() {
-  if (!("Notification" in window)) {
-    toast.add({
-      severity: "warn",
-      summary: "不支持通知",
-      detail: "您的浏览器不支持系统通知。",
-      life: 3000,
-    });
-    return;
-  }
-  Notification.requestPermission().then((permission) => {
-    if (permission === "granted") {
-      notificationEnabled.value = true;
-      showNotificationBanner.value = false;
-      // Show confirmation notification
-      new Notification("通知已开启", {
-        body: "当 Agent 任务完成时，您将会收到通知气泡！",
-      });
-    } else {
-      toast.add({
-        severity: "error",
-        summary: "权限被拒绝",
-        detail: "系统通知权限已被拒绝，请在浏览器设置中允许通知以启用该功能。",
-        life: 5000,
-      });
-    }
-  });
-}
 
 const suggestions = [
   "生成一张可爱的橘猫照片",
@@ -226,7 +171,7 @@ const suggestions = [
 async function submit(payload?: { text: string; attachments: string[] }) {
   const text = payload?.text ?? input.value;
   const files = payload?.attachments ?? [];
-  if ((!text.trim() && files.length === 0) || running.value) return;
+  if (!text.trim() && files.length === 0) return;
   input.value = "";
   await send(text, files);
 }
@@ -238,61 +183,41 @@ function useSuggestion(s: string) {
 </script>
 
 <template>
-  <div ref="containerRef" class="agent-panel shrink-0" style="width: 400px">
-    <div class="flex flex-col h-full justify-start">
+  <div
+    ref="containerRef"
+    class="agent-panel w-[380px]"
+    :style="{ display: isVisible ? 'flex' : 'none' }"
+  >
+
+    <div class="flex-1 flex flex-col min-h-0">
       <!-- Header -->
-      <AgentHeader
-        :messages-count="messages.length"
-        @reset="handleReset"
-        @collapse="collapsed = true"
-      />
+      <div ref="headerRef" class="panel-header-row">
+        <AgentHeader
+          :messages-count="messages.length"
+          @reset="handleReset"
+          @collapse="collapsed = true"
+        />
+      </div>
 
       <!-- Messages -->
-      <AgentMessages
-        ref="scrollRef"
-        :messages="messages"
-        :node-states="nodeStates"
-        :suggestions="suggestions"
-        @use-suggestion="useSuggestion"
-        @zoom-to-node="zoomToNode"
-        @scroll="onScroll"
-      />
+      <div ref="messagesRef" class="flex-1 min-h-0 flex flex-col">
+        <AgentMessages
+          ref="scrollRef"
+          :messages="messages"
+          :node-states="nodeStates"
+          :suggestions="suggestions"
+          :loading="loadingHistory"
+          :running="running"
+          :elapsed-time="elapsedTime"
+          @use-suggestion="useSuggestion"
+          @zoom-to-node="zoomToNode"
+          @scroll="onScroll"
+          @retry="retryLastMessage"
+        />
+      </div>
 
       <!-- Bottom Layout Group -->
-      <div class="agent-panel-bottom">
-        <!-- Floating Scroll-to-bottom Button -->
-        <Transition name="fade">
-          <Button
-            severity="secondary"
-            raised
-            v-if="userScrolledUp"
-            class="scroll-to-bottom-btn"
-            @click="scrollToBottomForce"
-            :icon="'pi pi-angle-down'"
-            rounded
-          >
-          </Button>
-        </Transition>
-
-        <!-- Notification Banner -->
-        <div
-          v-if="showNotificationBanner && running"
-          class="notification-banner"
-        >
-          <span class="notification-text">完成后通知我</span>
-          <div class="notification-actions">
-            <button class="notification-btn-enable" @click="enableNotification">开启</button>
-            <button class="notification-btn-close" @click="showNotificationBanner = false">×</button>
-          </div>
-        </div>
-
-        <!-- Bottom Status Bar -->
-        <div v-if="running" class="agent-status-bar">
-          <span class="status-dot" />
-          <span class="status-text">{{ currentStatusText }}</span>
-          <span class="status-timer">{{ formattedElapsedTime }}</span>
-        </div>
-
+      <div ref="bottomRef" class="agent-panel-bottom">
         <!-- Input Wrap -->
         <AgentInput
           v-model="input"
@@ -319,6 +244,13 @@ function useSuggestion(s: string) {
   overflow: hidden;
   z-index: 99;
 }
+
+.panel-header-row {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 
 .agent-panel-bottom {
   position: relative;
@@ -381,40 +313,139 @@ function useSuggestion(s: string) {
   padding: 0;
 }
 
+/* ── B3: Status Bar ────────────────────────────────────────────── */
 .agent-status-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 14px;
+  padding: 8px 14px 12px;
   font-size: var(--text-sm);
-  color: var(--p-text-muted-color, #6b7280);
+  background: rgba(250, 250, 250, 0.95);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  overflow: hidden;
 }
 
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--p-primary-color, #6d28d9);
+.status-icon {
+  display: flex;
+  align-items: center;
+  color: #10b981;
   flex-shrink: 0;
-  animation: dot-pulse 1.6s ease-in-out infinite;
 }
 
-@keyframes dot-pulse {
-  0%, 100% { opacity: 0.4; transform: scale(0.85); }
-  50% { opacity: 1; transform: scale(1); }
+.icon-spin {
+  animation: icon-spin 3s linear infinite;
+}
+.icon-spin-slow {
+  animation:
+    icon-spin 4s linear infinite,
+    sparkle-scale 2s ease-in-out infinite;
+}
+.icon-pulse {
+  animation: sparkle-scale 1.5s ease-in-out infinite;
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes sparkle-scale {
+  0%,
+  100% {
+    transform: scale(0.88);
+  }
+  50% {
+    transform: scale(1.12);
+  }
 }
 
 .status-text {
   flex: 1;
-  font-weight: 400;
-  color: var(--p-text-muted-color, #6b7280);
+  font-weight: 500;
+  font-size: 13px;
+  color: #3f3f46;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-timer {
-  font-family: var(--font-family-mono, monospace);
-  font-size: var(--text-xs);
-  color: var(--p-text-muted-color, #9ca3af);
-  font-weight: 400;
+  font-family: var(--font-family-mono, "JetBrains Mono", "SF Mono", monospace);
+  font-size: 11px;
+  color: #a1a1aa;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* Flowing progress bar pinned to bottom of status bar */
+.status-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #10b981 25%,
+    #34d399 50%,
+    #10b981 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: progress-flow 2s linear infinite;
+}
+
+@keyframes progress-flow {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+/* Text slide-swap transition */
+.text-swap-enter-active {
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+.text-swap-leave-active {
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
+.text-swap-enter-from {
+  opacity: 0;
+  transform: translateY(5px);
+}
+.text-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
+}
+
+/* Status bar mount/unmount */
+.status-bar-enter-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+.status-bar-leave-active {
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+.status-bar-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.status-bar-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 /* Transitions */

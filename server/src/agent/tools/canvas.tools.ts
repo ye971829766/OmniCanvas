@@ -137,41 +137,69 @@ export const addRectTool: AgentTool = {
 export const updateNodeTool: AgentTool = {
   name: 'update_node',
   description:
-    'Update an existing canvas node by refId: move, resize, restyle text, etc. ' +
-    'Use the refId returned by a previous tool.',
+    'Update an existing canvas node by refId — move, resize, restyle, rotate, ' +
+    'apply shadows, change opacity, or adjust z-index. ' +
+    'Use the refId returned by a previous tool or from query_canvas.',
   parameters: {
     type: 'object',
     properties: {
-      refId: { type: 'string' },
+      refId: { type: 'string', description: 'The refId of the node to update.' },
+      // Position & Size
       x: { type: 'number' },
       y: { type: 'number' },
       width: { type: 'number' },
       height: { type: 'number' },
-      text: { type: 'string' },
-      fill: { type: 'string' },
+      // Transforms
+      rotation: { type: 'number', description: 'Rotation in degrees (clockwise, 0-360).' },
+      scaleX: { type: 'number', description: 'Horizontal scale (1=100%, 2=200%, 0.5=50%).' },
+      scaleY: { type: 'number', description: 'Vertical scale.' },
+      skewX: { type: 'number', description: 'Horizontal skew in degrees.' },
+      skewY: { type: 'number', description: 'Vertical skew in degrees.' },
+      // Appearance
+      fill: { type: 'string', description: 'Fill color (CSS color string).' },
+      opacity: { type: 'number', description: '0-1.' },
+      zIndex: { type: 'number', description: 'Stacking order. Higher = on top of other elements.' },
+      cornerRadius: { type: 'number' },
+      stroke: { type: 'string' },
+      strokeWidth: { type: 'number' },
+      // Text-specific
+      text: { type: 'string', description: 'New text content (text nodes only).' },
       fontSize: { type: 'number' },
       fontFamily: { type: 'string' },
       fontWeight: { type: 'string', enum: ['normal', 'bold', 'light'] },
       textAlign: { type: 'string', enum: ['left', 'center', 'right'] },
-      lineHeight: { type: 'number', description: 'Plain number only, e.g. 1.2 or 44. Do not pass an object.' },
-      letterSpacing: { type: 'number', description: 'Plain number only. Do not pass an object.' },
-      opacity: { type: 'number', description: 'Plain number from 0 to 1.' },
-      cornerRadius: { type: 'number' },
-      stroke: { type: 'string' },
-      strokeWidth: { type: 'number' },
-      flow: { type: 'string', enum: ['x', 'y'], description: 'Optional flow layout direction.' },
-      flowAlign: { type: 'string', enum: ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'], description: 'Alignment of child elements inside the flow container.' },
-      flowWrap: { type: 'boolean', description: 'Whether elements wrap to the next line/column.' },
-      gap: { type: 'number', description: 'Gap spacing between elements in pixels.' },
-      padding: { type: 'number', description: 'Padding spacing inside the frame container.' },
+      lineHeight: { type: 'number', description: 'e.g. 1.5 or 44. Plain number only.' },
+      letterSpacing: { type: 'number', description: 'Plain number only.' },
+      // Layout
+      flow: { type: 'string', enum: ['x', 'y'] },
+      flowAlign: {
+        type: 'string',
+        enum: ['top-left','top','top-right','left','center','right','bottom-left','bottom','bottom-right'],
+      },
+      flowWrap: { type: 'boolean' },
+      gap: { type: 'number' },
+      padding: { type: 'number' },
+      // Gradient
       gradient: {
         type: 'object',
         properties: {
           from: { type: 'string' },
           to: { type: 'string' },
-          direction: { type: 'number' },
+          direction: { type: 'number', description: 'Angle in degrees. 0=left-to-right, 90=top-to-bottom.' },
         },
         required: ['from', 'to', 'direction'],
+      },
+      // Shadow
+      shadow: {
+        type: 'object',
+        description: 'Drop shadow. Set to null to remove.',
+        properties: {
+          x: { type: 'number', description: 'Horizontal offset in pixels.' },
+          y: { type: 'number', description: 'Vertical offset in pixels.' },
+          blur: { type: 'number', description: 'Blur radius in pixels.' },
+          color: { type: 'string', description: 'Shadow color (supports alpha, e.g. "rgba(0,0,0,0.3)").' },
+        },
+        required: ['x', 'y', 'blur', 'color'],
       },
     },
     required: ['refId'],
@@ -183,7 +211,7 @@ export const updateNodeTool: AgentTool = {
       return {
         output: {
           refId,
-          error: 'Node not found. Call query_canvas first and use one of the returned refIds.',
+          error: 'Node not found. Call query_canvas first to get valid refIds.',
         },
       };
     }
@@ -408,5 +436,100 @@ export const addFrameTool: AgentTool = {
     ctx.sink.canvas({ op: 'add_node', node });
     upsertCanvasNode(ctx, refId, node);
     return { output: { refId, note: 'New frame artboard created.' } };
+  },
+};
+
+// ── NEW TOOLS FOR FULL LEAFER CONTROL ────────────────────────────────────────
+
+/**
+ * add_group — Create a Group node that can contain and batch-transform children.
+ * Groups don't have fixed width/height; they auto-size to their children.
+ * Use groups when you need to rotate, scale, or move multiple elements as one.
+ */
+export const addGroupTool: AgentTool = {
+  name: 'add_group',
+  description:
+    'Create a Group container. Groups let you rotate, scale, or move multiple ' +
+    'elements together. Children placed inside the group use coordinates relative ' +
+    'to the group\'s own (x, y) origin. Returns a refId to use as parentId.',
+  parameters: {
+    type: 'object',
+    properties: {
+      x: { type: 'number', description: 'X position of the group on the canvas.' },
+      y: { type: 'number', description: 'Y position of the group on the canvas.' },
+      rotation: { type: 'number', description: 'Rotation in degrees (clockwise, 0-360).' },
+      scaleX: { type: 'number', description: 'Horizontal scale factor (1 = 100%).' },
+      scaleY: { type: 'number', description: 'Vertical scale factor (1 = 100%).' },
+      opacity: { type: 'number', description: 'Opacity 0-1.' },
+      parentId: { type: 'string', description: 'Nest inside another frame or group.' },
+      zIndex: { type: 'number', description: 'Stacking order (higher = on top).' },
+    },
+  },
+  async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
+    const refId = ctx.newRefId('grp');
+    const node: any = {
+      refId,
+      type: 'group' as const,
+      x: input.x ?? 0,
+      y: input.y ?? 0,
+      rotation: input.rotation,
+      scaleX: input.scaleX,
+      scaleY: input.scaleY,
+      opacity: input.opacity,
+      parentId: input.parentId,
+      zIndex: input.zIndex,
+    };
+    ctx.sink.canvas({ op: 'add_node', node });
+    upsertCanvasNode(ctx, refId, node);
+    return { output: { refId, note: 'Group created. Use refId as parentId for child elements.' } };
+  },
+};
+
+/**
+ * add_image — Place an image from a URL onto the canvas.
+ * Use this to embed reference images, logos, icons, or stock photos.
+ * For AI-generated images, use generate_image instead.
+ */
+export const addImageTool: AgentTool = {
+  name: 'add_image',
+  description:
+    'Place an image from a URL onto the canvas. Supports http/https URLs and ' +
+    'data URIs. Use this for existing images, logos, icons, or reference photos. ' +
+    'For AI-generated images, use generate_image instead.',
+  parameters: {
+    type: 'object',
+    properties: {
+      url: { type: 'string', description: 'Image URL (http/https) or data URI.' },
+      x: { type: 'number' },
+      y: { type: 'number' },
+      width: { type: 'number', description: 'Display width in pixels.' },
+      height: { type: 'number', description: 'Display height in pixels.' },
+      cornerRadius: { type: 'number', description: 'Border radius in pixels.' },
+      opacity: { type: 'number', description: '0-1.' },
+      rotation: { type: 'number', description: 'Rotation in degrees.' },
+      parentId: { type: 'string' },
+      zIndex: { type: 'number' },
+    },
+    required: ['url', 'width', 'height'],
+  },
+  async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
+    const refId = ctx.newRefId('img');
+    const node: any = {
+      refId,
+      type: 'image' as const,
+      url: input.url,
+      x: input.x ?? 0,
+      y: input.y ?? 0,
+      width: input.width,
+      height: input.height,
+      cornerRadius: input.cornerRadius,
+      opacity: input.opacity,
+      rotation: input.rotation,
+      parentId: input.parentId,
+      zIndex: input.zIndex,
+    };
+    ctx.sink.canvas({ op: 'add_node', node });
+    upsertCanvasNode(ctx, refId, node);
+    return { output: { refId, note: 'Image placed on canvas.' } };
   },
 };

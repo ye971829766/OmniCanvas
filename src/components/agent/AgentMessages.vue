@@ -1,47 +1,57 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import {
   IncremarkContent,
   AutoScrollContainer,
   type UseIncremarkOptions,
 } from '@incremark/vue';
 import ToolActivity from './ToolActivity.vue';
+import ToolCallCard from './ToolCallCard.vue';
+import ToolCallGroup from './ToolCallGroup.vue';
 import OptionPreviewCard from './OptionPreviewCard.vue';
 import { Image } from 'primevue';
 import plotTwistAvatar from '@/assets/plot_twist_avatar.jpg';
 import logoImg from '@/assets/logo.jpg';
+import type { ChatMessage, ToolCallItem } from '@/composables/useAgent';
+import { stripInternalToolErrors } from '@/composables/useAgent';
 
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  streaming?: boolean;
-  tools: Array<{
-    id: string;
-    name: string;
-    done: boolean;
-    input?: any;
-    output?: any;
-  }>;
-  images?: string[];
-}
-
-defineProps<{
+const props = defineProps<{
   messages: ChatMessage[];
   nodeStates: Record<string, any>;
   suggestions: string[];
+  loading?: boolean;
+  running?: boolean;
+  elapsedTime?: number;
 }>();
+
+const formattedTimer = computed(() => {
+  const time = props.elapsedTime ?? 0;
+  const m = Math.floor(time / 60);
+  const s = time % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+});
+
 
 const emit = defineEmits<{
   (e: 'useSuggestion', s: string): void;
   (e: 'zoomToNode', refId: string): void;
   (e: 'scroll'): void;
+  (e: 'retry'): void;
 }>();
 
 const scrollRef = ref<any>(null);
+const userScrolledUp = ref(false);
 
 function scrollToBottom() {
   scrollRef.value?.scrollToBottom();
+  userScrolledUp.value = false;
+}
+
+function handleScroll() {
+  if (scrollRef.value) {
+    userScrolledUp.value = scrollRef.value.isUserScrolledUp() ?? false;
+  }
+  emit('scroll');
 }
 
 function isUserScrolledUp() {
@@ -60,9 +70,119 @@ const getIncremarkOptions = (streaming: boolean): UseIncremarkOptions => ({
     enabled: streaming,
     charsPerTick: [1, 3],
     tickInterval: 30,
-    effect: 'fade-in',
+    effect: 'none',
   },
 });
+
+
+interface ToolRenderBlock {
+  type: 'single' | 'group';
+  tool?: ToolCallItem;
+  tools?: ToolCallItem[];
+  id: string;
+}
+
+function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
+  if (!tools || !tools.length) return [];
+
+  const STANDALONE_TOOLS = new Set([
+    'generate_image',
+    'generate_video',
+    'collect_inspiration',
+  ]);
+
+  const blocks: ToolRenderBlock[] = [];
+  let currentGroup: ToolCallItem[] = [];
+
+  const flushGroup = () => {
+    if (currentGroup.length > 0) {
+      // Find active tool or primary tool
+      const activeTool = currentGroup.find((t) => !t.done) || currentGroup[0];
+      const isGroupDone = currentGroup.every((t) => t.done);
+
+      // Render as a single clean action badge (e.g. "排版设计") instead of "使用了 X 个工具"
+      blocks.push({
+        type: 'single',
+        tool: {
+          id: activeTool.id,
+          name: activeTool.name,
+          done: isGroupDone,
+          input: activeTool.input,
+          output: activeTool.output,
+        },
+        id: `blk_layout_${activeTool.id}`,
+      });
+      currentGroup = [];
+    }
+  };
+
+  for (const tool of tools) {
+    if (STANDALONE_TOOLS.has(tool.name)) {
+      flushGroup();
+      blocks.push({
+        type: 'single',
+        tool,
+        id: tool.id,
+      });
+    } else {
+      currentGroup.push(tool);
+    }
+  }
+  return blocks;
+}
+
+function filterBlocks(blocks: any[]): any[] {
+  if (!blocks || !blocks.length) return [];
+  const result: any[] = [];
+  let hasLayoutBadge = false;
+
+  for (const blk of blocks) {
+    if (blk.type === 'text') {
+      result.push(blk);
+    } else if (blk.type === 'tools' && blk.tools && blk.tools.length > 0) {
+      const isPureLayout = blk.tools.every((t: any) =>
+        ['add_text', 'set_frame', 'add_rect', 'add_frame', 'update_node', 'remove_node'].includes(t.name)
+      );
+
+      if (isPureLayout) {
+        if (!hasLayoutBadge) {
+          result.push(blk);
+          hasLayoutBadge = true;
+        }
+      } else {
+        result.push(blk);
+      }
+    }
+  }
+
+  return result;
+}
+
+function isLastStreamingTextPart(
+  blk: any,
+  blocks: any[],
+  partIdx: number,
+  parts: ParsedMessagePart[],
+  isStreaming: boolean
+): boolean {
+  if (!isStreaming || !blocks || !blocks.length) return false;
+  const textBlocks = blocks.filter((b) => b.type === 'text' && b.text);
+  if (!textBlocks.length) return false;
+  if (textBlocks[textBlocks.length - 1].id !== blk.id) return false;
+
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].type === 'text') {
+      return i === partIdx;
+    }
+  }
+  return false;
+}
+
+
+
+
+
+
 
 interface ParsedMessagePart {
   type: 'text' | 'grid' | 'image_ref';
@@ -101,16 +221,6 @@ function parseMessageText(text: string): ParsedMessagePart[] {
   return parts.length > 0 ? parts : [{ type: 'text', content: text }];
 }
 
-function stripInternalToolErrors(text: string) {
-  return text
-    .replace(
-      /\n{0,2}\s*⚠️\s+[a-z_]+:\s+(?:Parameter\s+"[^"]+"\s+must be[^\n]*|Missing required parameter[^\n]*|Tool\s+[a-z_]+\s+timed out[^\n]*)/g,
-      '',
-    )
-    .replace(/\n{3,}/g, '\n\n')
-    .trimStart();
-}
-
 function parseUserText(text: string) {
   if (!text) return [];
   const regex = /(@\w+)/g;
@@ -132,139 +242,274 @@ function parseUserText(text: string) {
   }
   return parts.length > 0 ? parts : [{ type: 'text', content: text }];
 }
+
+function copyText(txt: string) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(txt);
+  }
+}
 </script>
 
 <template>
-  <AutoScrollContainer
-    ref="scrollRef"
-    class="agent-messages"
-    :threshold="60"
-    behavior="smooth"
-    @scroll="emit('scroll')"
-  >
-    <!-- Empty state -->
-    <div v-if="messages.length === 0" class="agent-empty">
-      <div class="agent-empty-logo">
-        <img :src="logoImg" alt="PlotTwist" class="agent-empty-logo-img" />
-      </div>
-      <p class="empty-title">告诉我你想设计什么</p>
-      <p class="empty-sub">描述想法，我来生成图像、视频和排版</p>
-      <div class="agent-suggestions">
-        <button
-          v-for="s in suggestions"
-          :key="s"
-          class="agent-chip"
-          @click="emit('useSuggestion', s)"
-        >
-          {{ s }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Conversation -->
-    <template v-for="m in messages" :key="m.id">
-      <!-- user -->
-      <div v-if="m.role === 'user'" class="flex flex-col items-end w-full">
-        <div class="agent-bubble-user">
-          <template v-for="(part, pidx) in parseUserText(m.text)" :key="pidx">
-            <span v-if="part.type === 'mention'" class="mention-chip-msg">{{
-              part.content
-            }}</span>
-            <template v-else>{{ part.content }}</template>
-          </template>
+  <div class="agent-messages-container relative flex-1 flex flex-col min-h-0">
+    <AutoScrollContainer
+      ref="scrollRef"
+      class="agent-messages"
+      :threshold="60"
+      behavior="smooth"
+      @scroll="handleScroll"
+    >
+      <!-- Loading history skeleton -->
+      <div v-if="props.loading" class="agent-loading-history">
+        <div class="loading-skeleton" v-for="i in 3" :key="i">
+          <div class="skeleton-avatar" />
+          <div class="skeleton-lines">
+            <div class="skeleton-line" :style="{ width: `${60 + i * 10}%` }" />
+            <div class="skeleton-line short" :style="{ width: `${30 + i * 8}%` }" />
+          </div>
         </div>
-        <!-- user attachments grid -->
-        <div
-          v-if="m.images && m.images.length > 0"
-          class="user-attached-images"
-        >
-          <div
-            v-for="(img, iidx) in m.images"
-            :key="iidx"
-            class="user-image-wrapper"
+      </div>
+
+      <!-- Empty state -->
+      <div v-else-if="messages.length === 0" class="agent-empty">
+        <div class="ambient-blob blob-1" aria-hidden="true" />
+        <div class="ambient-blob blob-2" aria-hidden="true" />
+        <div class="ambient-blob blob-3" aria-hidden="true" />
+        <div class="agent-empty-logo">
+          <img :src="logoImg" alt="PlotTwist" class="agent-empty-logo-img float-logo" />
+        </div>
+        <p class="empty-title">告诉我你想设计什么</p>
+        <p class="empty-sub">描述想法，我来生成图像、视频和排版</p>
+        <div class="agent-suggestions">
+          <button
+            v-for="s in suggestions"
+            :key="s"
+            class="agent-chip"
+            @click="emit('useSuggestion', s)"
           >
-            <Image class="user-image" :src="img" alt="Image" preview />
-          </div>
+            <span class="chip-text">{{ s }}</span>
+            <span class="chip-arrow" aria-hidden="true">→</span>
+          </button>
         </div>
       </div>
 
-      <!-- assistant -->
-      <div v-else class="flex flex-col gap-2">
-        <div class="flex items-start gap-2">
-          <img
-            class="agent-avatar shrink-0 mt-1"
-            :src="plotTwistAvatar"
-            alt="PlotTwist"
-          />
-          <div class="flex-1 min-w-0">
-            <div v-if="m.text" class="agent-bubble-ai">
-              <template
-                v-for="(part, idx) in parseMessageText(m.text)"
-                :key="idx"
-              >
-                <IncremarkContent
-                  v-if="
-                    part.type === 'text' && typeof part.content === 'string'
-                  "
-                  class="incremark markdown-body"
-                  :class="{ streaming: m.streaming }"
-                  :content="part.content"
-                  :is-finished="!m.streaming"
-                  :incremark-options="getIncremarkOptions(!!m.streaming)"
-                />
-                <div v-else-if="part.type === 'grid'" class="inspiration-grid">
-                  <div
-                    v-for="(url, uidx) in part.content"
-                    :key="uidx"
-                    class="inspiration-item"
-                  >
-                    <img :src="url" class="inspiration-img" />
-                  </div>
-                </div>
-                <OptionPreviewCard
-                  v-else-if="part.type === 'image_ref' && part.refId"
-                  :refId="part.refId"
-                  :state="nodeStates[part.refId]"
-                  @zoom="emit('zoomToNode', $event)"
-                />
+      <!-- Conversation -->
+      <template v-for="m in messages" :key="m.id">
+        <!-- user -->
+        <div v-if="m.role === 'user'" class="flex flex-col items-end w-full group relative">
+          <div class="agent-bubble-user-wrap relative">
+            <div class="agent-bubble-user">
+              <template v-for="(part, pidx) in parseUserText(m.text)" :key="pidx">
+                <span v-if="part.type === 'mention'" class="mention-chip-msg">{{
+                  part.content
+                }}</span>
+                <template v-else>{{ part.content }}</template>
               </template>
             </div>
+            <!-- Copy button on hover -->
+            <button class="msg-copy-btn user-copy-btn" @click="copyText(m.text)" title="复制">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </div>
+          <!-- user attachments grid -->
+          <div
+            v-if="m.images && m.images.length > 0"
+            class="user-attached-images"
+          >
             <div
-              v-else-if="m.streaming && m.tools.length === 0"
-              class="agent-typing"
+              v-for="(img, iidx) in m.images"
+              :key="iidx"
+              class="user-image-wrapper"
+              style="width:72px;height:72px"
             >
-              <span /><span /><span />
-            </div>
-            <div v-else-if="!m.streaming && !m.tools.length" class="msg-failed">
-              出了点问题，请重试
-            </div>
-
-            <ToolActivity
-              v-if="m.tools.length"
-              :tools="m.tools"
-              :streaming="m.streaming"
-              :message-text="m.text"
-              :node-states="nodeStates"
-              @zoom="emit('zoomToNode', $event)"
-            />
-
-            <!-- Auto-show generated media cards that are not inline in the message text -->
-            <div v-if="m.tools && m.tools.length" class="flex flex-col gap-2 mt-1">
-              <template v-for="tool in m.tools" :key="tool.id">
-                <OptionPreviewCard
-                  v-if="(tool.name === 'generate_image' || tool.name === 'generate_video') && tool.output?.refId && nodeStates[tool.output.refId] && !(m.text || '').includes(`[@image:#${tool.output.refId}]`)"
-                  :refId="tool.output.refId"
-                  :state="nodeStates[tool.output.refId]"
-                  @zoom="emit('zoomToNode', $event)"
-                />
-              </template>
+              <Image class="user-image" :src="img" alt="Image" preview />
             </div>
           </div>
         </div>
-      </div>
-    </template>
-  </AutoScrollContainer>
+
+        <!-- assistant -->
+        <div v-else class="flex flex-col gap-2">
+          <div class="flex items-start gap-2.5">
+            <div class="avatar-ring shrink-0 mt-0.5" :class="{ 'is-streaming': m.streaming }">
+              <img
+                class="agent-avatar"
+                :src="plotTwistAvatar"
+                alt="PlotTwist"
+              />
+            </div>
+            <div class="flex-1 min-w-0">
+              <!-- Inline thinking indicator right next to avatar when AI is actively thinking -->
+              <div v-if="m.streaming && (!m.text || !m.text.trim() || m.tools?.some(t => !t.done))" class="inline-thinking-header">
+                <span class="gemini-sparkle-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M12 2C12 7.5 7.5 12 2 12C7.5 12 12 16.5 12 22C12 16.5 16.5 12 22 12C16.5 12 12 7.5 12 2Z"/>
+                  </svg>
+                </span>
+                <span class="thinking-label">思考中</span>
+                <span class="thinking-timer">{{ formattedTimer }}</span>
+              </div>
+
+
+
+              <!-- Interleaved Blocks Rendering (Text -> Tool -> Text -> Tool) -->
+              <div v-if="m.blocks && m.blocks.length" class="flex flex-col gap-1.5">
+
+                <template v-for="blk in filterBlocks(m.blocks)" :key="blk.id">
+
+                  <!-- Text Block -->
+                  <div v-if="blk.type === 'text' && blk.text" class="agent-bubble-ai">
+                    <template
+                      v-for="(part, idx) in parseMessageText(blk.text)"
+                      :key="idx"
+                    >
+                      <IncremarkContent
+                        v-if="
+                          part.type === 'text' && typeof part.content === 'string'
+                        "
+                        class="incremark markdown-body"
+                        :class="{ streaming: isLastStreamingTextPart(blk, m.blocks, idx, parseMessageText(blk.text), !!m.streaming) }"
+                        :content="part.content"
+
+
+                        :is-finished="!m.streaming"
+                        :incremark-options="getIncremarkOptions(!!m.streaming)"
+                      />
+                      <div v-else-if="part.type === 'grid'" class="inspiration-grid">
+                        <div
+                          v-for="(url, uidx) in part.content"
+                          :key="uidx"
+                          class="inspiration-item"
+                        >
+                          <img :src="url" class="inspiration-img" />
+                        </div>
+                      </div>
+                      <!-- Interactive Image Ref Tag -->
+                      <button
+                        v-else-if="part.type === 'image_ref' && part.refId"
+                        class="inline-image-tag-btn"
+                        @click="emit('zoomToNode', part.refId)"
+                      >
+                        {{ part.content }}
+                      </button>
+                    </template>
+                  </div>
+
+                  <!-- Tools Block -->
+                  <div v-else-if="blk.type === 'tools' && blk.tools && blk.tools.length" class="tool-cards">
+                    <template v-for="block in groupTools(blk.tools)" :key="block.id">
+                      <ToolCallGroup
+                        v-if="block.type === 'group' && block.tools"
+                        :tools="block.tools"
+                      />
+                      <ToolCallCard
+                        v-else-if="block.type === 'single' && block.tool"
+                        :tool="block.tool"
+                      />
+                    </template>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Legacy Fallback -->
+              <div v-else-if="m.text" class="agent-bubble-ai">
+                <template
+                  v-for="(part, idx) in parseMessageText(m.text)"
+                  :key="idx"
+                >
+                  <IncremarkContent
+                    v-if="
+                      part.type === 'text' && typeof part.content === 'string'
+                    "
+                    class="incremark markdown-body"
+                    :class="{ streaming: m.streaming }"
+                    :content="part.content"
+                    :is-finished="!m.streaming"
+                    :incremark-options="getIncremarkOptions(!!m.streaming)"
+                  />
+                  <div v-else-if="part.type === 'grid'" class="inspiration-grid">
+                    <div
+                      v-for="(url, uidx) in part.content"
+                      :key="uidx"
+                      class="inspiration-item"
+                    >
+                      <img :src="url" class="inspiration-img" />
+                    </div>
+                  </div>
+                  <!-- Interactive Image Ref Tag -->
+                  <button
+                    v-else-if="part.type === 'image_ref' && part.refId"
+                    class="inline-image-tag-btn"
+                    @click="emit('zoomToNode', part.refId)"
+                  >
+                    {{ part.content }}
+                  </button>
+                </template>
+              </div>
+
+              <!-- Structured Error Card (Reference Image 5 style) -->
+              <div v-if="m.error" class="structured-error-card mt-2">
+                <div class="error-card-header">
+                  <span class="error-card-title">糟糕！请求未能完成</span>
+                </div>
+                <p class="error-card-desc">{{ m.error }}</p>
+                <div class="error-card-actions">
+                  <button class="error-retry-btn" @click="emit('retry')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                      <polyline points="23 4 23 10 17 10"></polyline>
+                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>
+                    <span>重试</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Fallback active-tool status line -->
+              <ToolActivity
+                v-if="!m.tools.length"
+                :tools="m.tools"
+                :streaming="m.streaming"
+                :message-text="m.text"
+                :node-states="nodeStates"
+                @zoom="emit('zoomToNode', $event)"
+              />
+
+              <!-- Generated media cards -->
+              <div v-if="m.tools && m.tools.length" class="flex flex-col gap-2 mt-2">
+                <template v-for="tool in m.tools" :key="tool.id">
+                  <OptionPreviewCard
+                    v-if="(tool.name === 'generate_image' || tool.name === 'generate_video') && tool.output?.refId && nodeStates[tool.output.refId]"
+                    :refId="tool.output.refId"
+                    :state="nodeStates[tool.output.refId]"
+                    @zoom="emit('zoomToNode', $event)"
+                  />
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </AutoScrollContainer>
+
+    <!-- Floating Scroll-to-Bottom Button (Reference Image 1/2 style) -->
+    <Transition name="fade">
+      <button
+        v-if="userScrolledUp"
+        class="floating-scroll-bottom-btn"
+        @click="scrollToBottom"
+        title="滚动到最新消息"
+        aria-label="滚动到底部"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+    </Transition>
+  </div>
 </template>
+
 
 <style scoped>
 .agent-messages {
@@ -274,6 +519,52 @@ function parseUserText(text: string) {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.agent-loading-history {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 16px;
+}
+
+.loading-skeleton {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.skeleton-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--p-surface-200, #e4e4e7);
+  flex-shrink: 0;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--p-surface-200, #e4e4e7);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-line.short {
+  height: 10px;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
 }
 
 .agent-empty {
@@ -301,25 +592,81 @@ function parseUserText(text: string) {
   display: block;
 }
 
+/* Gentle float for empty-state logo */
+.float-logo {
+  animation: logo-float 3s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes logo-float {
+  0%, 100% { transform: translateY(0);   }
+  50%       { transform: translateY(-4px); }
+}
+
+/* ── E2: Ambient background blobs ────────────────────────────────── */
+.ambient-blob {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.025;
+  filter: blur(32px);
+  animation: blob-drift 8s ease-in-out infinite;
+}
+
+.blob-1 {
+  width: 120px; height: 120px;
+  background: #7c3aed;
+  top: 10%; left: 15%;
+  animation-delay: 0s;
+  animation-duration: 9s;
+}
+
+.blob-2 {
+  width: 80px; height: 80px;
+  background: #10b981;
+  top: 60%; right: 20%;
+  animation-delay: -3s;
+  animation-duration: 7s;
+}
+
+.blob-3 {
+  width: 100px; height: 100px;
+  background: #f59e0b;
+  bottom: 15%; left: 35%;
+  animation-delay: -5s;
+  animation-duration: 11s;
+}
+
+@keyframes blob-drift {
+  0%, 100% { transform: translate(0, 0)      scale(1);    }
+  33%       { transform: translate(12px, -8px) scale(1.08); }
+  66%       { transform: translate(-8px, 6px) scale(0.94); }
+}
+
+/* Dark mode: blobs slightly more visible */
+:global(.p-dark) .ambient-blob {
+  opacity: 0.045;
+}
+
 .empty-title {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 600;
-  color: var(--p-text-color, #111);
-  margin-top: 14px;
+  color: var(--p-text-color, #18181b);
+  margin: 12px 0 4px;
 }
 
 .empty-sub {
   font-size: var(--text-sm);
-  color: var(--p-text-muted-color, #9ca3af);
-  margin-top: 4px;
-  line-height: 1.5;
+  color: var(--p-text-muted-color, #71717a);
+  margin: 0 0 18px;
 }
 
 .agent-suggestions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  padding: 0 8px;
 }
 
 .agent-chip {
@@ -327,45 +674,113 @@ function parseUserText(text: string) {
   border-radius: 10px;
   border: 1px solid var(--p-surface-200, #e5e7eb);
   background: transparent;
-  color: var(--p-text-color, #111);
+  color: var(--p-text-color, #18181b);
   font-size: var(--text-sm);
   line-height: 1.4;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
 .agent-chip:hover {
-  background: var(--p-surface-50, #f9fafb);
-  border-color: var(--p-surface-300, #d1d5db);
+  background: var(--p-surface-50, #fafafa);
+  border-color: var(--p-surface-300, #d4d4d8);
+  transform: translateY(-2px);
+}
+
+.chip-text {
+  flex: 1;
+}
+
+.chip-arrow {
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  color: var(--p-text-muted-color, #71717a);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.agent-chip:hover .chip-arrow {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .agent-bubble-user {
   max-width: 88%;
   padding: 10px 14px;
   border-radius: 18px 18px 4px 18px;
-  background: #f0f0f1;
-  color: var(--p-text-color, #0f172a);
+  background: #f4f4f5;
+  color: #18181b;
   font-size: var(--text-base);
-  line-height: 1.55;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  animation: msg-enter-user 0.28s cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+@keyframes msg-enter-user {
+  from { opacity: 0; transform: scale(0.93) translateX(10px); }
+  to   { opacity: 1; transform: scale(1)    translateX(0);    }
 }
 
 .agent-bubble-ai {
   max-width: 100%;
   padding: 0;
   background: transparent;
-  color: #0f172a;
   font-size: var(--text-base);
-  line-height: 1.65;
+  line-height: 1.7;
   word-break: break-word;
+  animation: msg-enter-ai 0.3s cubic-bezier(0, 0, 0.2, 1) both;
 }
+
+@keyframes msg-enter-ai {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* ── ChatGPT-style Pulsing Streaming Dot (Inline at text tail) ────── */
+.incremark {
+  position: relative;
+}
+
+.incremark.streaming :deep(.markdown-body > *:last-child)::after {
+  content: '';
+  display: inline-block;
+  width: 7.5px;
+  height: 7.5px;
+  border-radius: 50%;
+  background: var(--p-text-color, #18181b);
+  margin-left: 4px;
+  vertical-align: 1px;
+  transform-origin: center;
+  animation: chatgpt-dot-pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+
+@keyframes chatgpt-dot-pulse {
+  0%, 100% {
+    transform: scale(0.5);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+
+
 
 .markdown-body {
   font-size: var(--text-base);
   line-height: 1.65;
-  color: var(--p-text-color, #0f172a);
+  color: var(--p-text-color, #18181b);
 }
 
 .markdown-body :deep(p) {
@@ -392,41 +807,349 @@ function parseUserText(text: string) {
   font-weight: 660;
 }
 
+/* ── Markdown Tables ────────────────────────────────────────────── */
+.markdown-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  display: table;
+}
+
+.markdown-body :deep(thead) {
+  background: var(--p-surface-100, #f4f4f5);
+}
+
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  padding: 7px 11px;
+  border: 1px solid var(--p-surface-200, #e4e4e7);
+  text-align: left;
+  word-break: break-word;
+}
+
+.markdown-body :deep(th) {
+  font-weight: 650;
+  color: var(--p-text-color, #18181b);
+  background: var(--p-surface-100, #f4f4f5);
+}
+
+.markdown-body :deep(tr:nth-child(even)) {
+  background: var(--p-surface-50, #fafafa);
+}
+
+/* ── Headings ────────────────────────────────────────────────────── */
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4),
+.markdown-body :deep(h5),
+.markdown-body :deep(h6) {
+  font-weight: 700;
+  color: var(--p-text-color, #18181b);
+  margin: 12px 0 6px;
+  line-height: 1.35;
+}
+
+.markdown-body :deep(h1) { font-size: 1.25em; border-bottom: 1px solid var(--p-surface-200, #e4e4e7); padding-bottom: 4px; }
+.markdown-body :deep(h2) { font-size: 1.15em; }
+.markdown-body :deep(h3) { font-size: 1.05em; }
+.markdown-body :deep(h4) { font-size: 1em; }
+
+/* ── Code & Pre ──────────────────────────────────────────────────── */
+.markdown-body :deep(code) {
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.88em;
+  background: var(--p-surface-100, #f4f4f5);
+  color: #7c3aed;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.markdown-body :deep(pre) {
+  background: #18181b;
+  color: #f4f4f5;
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.markdown-body :deep(pre code) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* ── Blockquote & HR ─────────────────────────────────────────────── */
+.markdown-body :deep(blockquote) {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid #10b981;
+  color: var(--p-text-muted-color, #71717a);
+  background: var(--p-surface-50, #fafafa);
+  border-radius: 0 6px 6px 0;
+}
+
+.markdown-body :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--p-surface-200, #e4e4e7);
+  margin: 12px 0;
+}
+
 .agent-avatar {
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-  margin-top: 2px;
+  display: block;
 }
 
-.agent-typing {
+/* Pulse ring wrapper around AI avatar */
+.avatar-ring {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+
+/* ── Interactive Inline Image Tag Button ([@image:#1]) ──────────────── */
+.inline-image-tag-btn {
   display: inline-flex;
-  gap: 4px;
-  padding: 8px 0;
+  align-items: center;
+  gap: 3px;
+  background: var(--p-surface-100, #f4f4f5);
+  border: 1px solid var(--p-surface-200, #e4e4e7);
+  color: #10b981;
+  font-family: var(--font-family-mono, monospace);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin: 0 3px;
+  vertical-align: baseline;
+  transition: all 0.15s ease;
 }
 
-.agent-typing span {
-  width: 5px;
-  height: 5px;
+.inline-image-tag-btn:hover {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
+  transform: translateY(-1px);
+}
+
+
+/* ── Structured Error Card (Reference Image 5 style) ────────────────── */
+.structured-error-card {
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: #fef2f2;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 8px 0;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.05);
+}
+
+:global(.p-dark) .structured-error-card {
+  background: rgba(40, 16, 16, 0.6);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.error-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.error-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #18181b;
+}
+
+:global(.p-dark) .error-card-title {
+  color: #f4f4f5;
+}
+
+.error-card-desc {
+  font-size: 12px;
+  color: #71717a;
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+:global(.p-dark) .error-card-desc {
+  color: #a1a1aa;
+}
+
+.error-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.error-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 0;
+  transition: opacity 0.15s ease;
+}
+
+.error-retry-btn:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* ── Floating Scroll to Bottom Button ────────────────────────────── */
+.floating-scroll-bottom-btn {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  background: var(--p-text-muted-color, #9ca3af);
-  animation: agent-blink 1.2s infinite both;
+  background: var(--p-surface-0, #ffffff);
+  border: 1px solid var(--p-surface-200, #e4e4e7);
+  color: var(--p-text-color, #18181b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+  transition: all 0.2s ease;
 }
 
-.agent-typing span:nth-child(2) {
-  animation-delay: 0.2s;
+.floating-scroll-bottom-btn:hover {
+  background: var(--p-surface-100, #f4f4f5);
+  transform: translateX(-50%) scale(1.1);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
 }
 
-.agent-typing span:nth-child(3) {
-  animation-delay: 0.4s;
+/* Copy Button on User Messages */
+.agent-bubble-user-wrap {
+  display: flex;
+  align-items: center;
 }
 
-@keyframes agent-blink {
-  0%, 80%, 100% { opacity: 0.3; }
-  40% { opacity: 1; }
+.msg-copy-btn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background: transparent;
+  border: none;
+  color: var(--p-text-muted-color, #a1a1aa);
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 4px;
 }
+
+.agent-bubble-user-wrap:hover .msg-copy-btn {
+  opacity: 1;
+}
+
+.msg-copy-btn:hover {
+  color: var(--p-text-color, #18181b);
+}
+
+/* ── AI inline thinking indicator (Right next to Avatar, Gemini/ChatGPT Style) ── */
+.inline-thinking-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0 6px;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--p-text-muted-color, #71717a);
+  user-select: none;
+  margin-bottom: 4px;
+}
+
+.gemini-sparkle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--p-text-color, #18181b);
+  animation: gemini-spin-pulse 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  flex-shrink: 0;
+}
+
+@keyframes gemini-spin-pulse {
+  0% {
+    transform: rotate(0deg) scale(0.9);
+    opacity: 0.7;
+  }
+  50% {
+    transform: rotate(180deg) scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(360deg) scale(0.9);
+    opacity: 0.7;
+  }
+}
+
+.thinking-label {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.15px;
+  color: var(--p-text-color, #18181b);
+}
+
+.thinking-timer {
+  font-family: var(--font-family-mono, monospace);
+  font-size: 12px;
+  color: #71717a;
+}
+
+
+
+.thinking-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 0 4px;
+  min-height: 28px;
+}
+
+.thinking-sparkle {
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+
+
+@keyframes sparkle-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes sparkle-pulse {
+  0%, 100% { transform: rotate(0deg)   scale(0.9); }
+  50%       { transform: rotate(180deg) scale(1.1); }
+}
+
+.thinking-text {
+  font-size: var(--text-sm);
+  color: var(--p-text-muted-color, #71717a);
+  font-weight: 500;
+}
+
 
 .inspiration-grid {
   display: grid;
@@ -495,6 +1218,15 @@ function parseUserText(text: string) {
   padding: 2px 0;
 }
 
+/* ── Tool call cards container ───────────────────────────────────── */
+.tool-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 3px;
+  margin-bottom: 3px;
+}
+
 .mention-chip-msg {
   background: var(--p-primary-50, #f5f3ff);
   color: var(--p-primary-color, #6d28d9);
@@ -544,5 +1276,122 @@ function parseUserText(text: string) {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DARK MODE OVERRIDES  (.p-dark selector mirrors PrimeVue convention)
+   ═══════════════════════════════════════════════════════════════════ */
+
+:global(.p-dark) .agent-bubble-user {
+  background: #27272a;
+  color: #fafafa;
+}
+
+:global(.p-dark) .agent-bubble-ai,
+:global(.p-dark) .markdown-body {
+  color: #e4e4e7;
+}
+
+:global(.p-dark) .markdown-body :deep(strong) {
+  color: #fafafa;
+}
+
+:global(.p-dark) .markdown-body :deep(th) {
+  background: #27272a;
+  color: #fafafa;
+}
+
+:global(.p-dark) .markdown-body :deep(th),
+:global(.p-dark) .markdown-body :deep(td) {
+  border-color: #27272a;
+}
+
+:global(.p-dark) .markdown-body :deep(tr:nth-child(even)) {
+  background: #18181b;
+}
+
+:global(.p-dark) .markdown-body :deep(code) {
+  background: #27272a;
+  color: #c4b5fd;
+}
+
+:global(.p-dark) .markdown-body :deep(blockquote) {
+  background: #18181b;
+  color: #a1a1aa;
+}
+
+:global(.p-dark) .markdown-body :deep(hr) {
+  border-top-color: #27272a;
+}
+
+:global(.p-dark) .empty-title {
+  color: #fafafa;
+}
+
+:global(.p-dark) .empty-sub {
+  color: #a1a1aa;
+}
+
+:global(.p-dark) .agent-chip {
+  border-color: #27272a;
+  color: #d4d4d8;
+}
+
+:global(.p-dark) .agent-chip:hover {
+  background: #1f1f23;
+  border-color: #3f3f46;
+}
+
+:global(.p-dark) .chip-arrow {
+  color: #71717a;
+}
+
+:global(.p-dark) .thinking-sparkle {
+  color: #a78bfa;
+}
+
+:global(.p-dark) .thinking-text {
+  color: #a1a1aa;
+}
+
+
+:global(.p-dark) .inline-thinking-header {
+  background: transparent;
+  border: none;
+  color: #a1a1aa;
+}
+
+:global(.p-dark) .gemini-sparkle-icon,
+:global(.p-dark) .thinking-label {
+  color: #f4f4f5;
+}
+
+
+:global(.p-dark) .incremark.streaming :deep(.markdown-body > *:last-child)::after {
+  background: #f4f4f5;
+}
+
+
+
+
+
+
+:global(.p-dark) .user-image-wrapper {
+  border-color: #27272a;
+  background: #18181b;
+}
+
+:global(.p-dark) .agent-empty-logo {
+  box-shadow: 0 0 32px rgba(124, 58, 237, 0.12), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+:global(.p-dark) .mention-chip-msg {
+  background: rgba(124, 58, 237, 0.12);
+  color: #a78bfa;
+  border-color: rgba(124, 58, 237, 0.25);
+}
+
+:global(.p-dark) .msg-failed {
+  color: #71717a;
 }
 </style>

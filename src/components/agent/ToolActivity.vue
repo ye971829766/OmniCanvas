@@ -1,17 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
-
-type ToolCall = {
-  id: string;
-  name: string;
-  done: boolean;
-  input?: any;
-  output?: any;
-};
+import { getToolActiveLabel, getToolDoneLabel } from "./tool-labels";
+import type { ToolCallItem } from "@/composables/useAgent";
 
 const props = withDefaults(
   defineProps<{
-    tools: ToolCall[];
+    tools: ToolCallItem[];
     streaming?: boolean;
     messageText?: string;
     nodeStates?: Record<string, any>;
@@ -51,18 +45,26 @@ const displayText = computed(() => {
   const tool = activeTool.value;
   if (!tool) return "正在理解需求…";
 
-  const label = !tool.done ? activeCopy(tool.name) : doneCopy(tool.name);
+  const label = !tool.done ? getToolActiveLabel(tool.name) : getToolDoneLabel(tool.name);
   const detail = summarizeInput(tool);
 
   if (detail) return `${label}  ·  ${detail}`;
   return label;
 });
 
-function isHiddenAfterDone(tool: ToolCall) {
+function isImageTool(name: string) {
+  return name === 'generate_image' || name === 'collect_inspiration';
+}
+
+function isLayoutTool(name: string) {
+  return name === 'auto_layout' || name === 'align_nodes' || name === 'set_frame' || name === 'distribute_nodes';
+}
+
+function isHiddenAfterDone(tool: ToolCallItem) {
   return tool.done && !props.streaming && !isImportantTool(tool);
 }
 
-function isImportantTool(tool: ToolCall) {
+function isImportantTool(tool: ToolCallItem) {
   return (
     tool.name === "generate_image" ||
     tool.name === "generate_video" ||
@@ -70,43 +72,8 @@ function isImportantTool(tool: ToolCall) {
   );
 }
 
-function activeCopy(name: string) {
-  const copy: Record<string, string> = {
-    set_frame: "正在设置画布",
-    add_text: "正在排入文字",
-    add_rect: "正在添加图形",
-    update_node: "正在微调元素",
-    remove_node: "正在清理元素",
-    query_canvas: "正在读取画布",
-    collect_inspiration: "正在收集灵感",
-    generate_image: "正在生成图片",
-    generate_video: "正在生成视频",
-    auto_layout: "正在调整布局",
-    align_nodes: "正在对齐元素",
-    distribute_nodes: "正在调整间距",
-    set_brand: "正在应用品牌",
-    apply_palette: "正在调整配色",
-    add_frame: "正在添加画板",
-    export_node_image: "正在截取画面",
-    analyze_design: "正在分析设计",
-    verify_design: "正在验证质量",
-    plan_design: "正在规划任务",
-    review_and_adjust: "正在检查布局",
-    focus_node: "正在聚焦元素",
-  };
-  return copy[name] ?? "正在处理画布";
-}
 
-function doneCopy(name: string) {
-  const copy: Record<string, string> = {
-    collect_inspiration: "灵感收集完成",
-    generate_image: "图片生成已启动",
-    generate_video: "视频生成已启动",
-  };
-  return copy[name] ?? "思考中";
-}
-
-function summarizeInput(tool: ToolCall) {
+function summarizeInput(tool: ToolCallItem) {
   const input = tool.input || {};
   if (tool.name === "set_frame" && (input.width || input.height)) {
     return `${input.width || "-"} × ${input.height || "-"}`;
@@ -140,20 +107,62 @@ function truncate(value: unknown, maxLength: number) {
 <template>
   <Transition name="activity">
     <div v-if="shouldShow && activeTool" class="tool-activity" role="status">
+      <!-- Tool icon (left) -->
+      <span class="activity-icon" :class="{ spinning: streaming }">
+        <svg v-if="isImageTool(activeTool.name)" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <rect x="2" y="2" width="12" height="12" rx="2" />
+          <circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none" />
+          <path d="M14 10 L11 7 L7 11" />
+        </svg>
+        <svg v-else-if="isLayoutTool(activeTool.name)" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <rect x="2" y="2" width="5" height="5" rx="1" />
+          <rect x="9" y="2" width="5" height="5" rx="1" />
+          <rect x="2" y="9" width="5" height="5" rx="1" />
+          <rect x="9" y="9" width="5" height="5" rx="1" />
+        </svg>
+        <svg v-else viewBox="0 0 16 16" fill="currentColor" width="13" height="13">
+          <path d="M8 1.5 L9.1 6.3 L14 7.5 L9.1 8.7 L8 13.5 L6.9 8.7 L2 7.5 L6.9 6.3 Z"/>
+        </svg>
+      </span>
+
+      <!-- Tool text -->
       <span :class="['activity-text', { shimmer: streaming }]">
         {{ displayText }}
       </span>
+
+      <!-- Progress bar (streaming only) -->
+      <div v-if="streaming" class="activity-progress"></div>
     </div>
   </Transition>
 </template>
 
 <style scoped>
 .tool-activity {
+  position: relative;
   display: flex;
   align-items: center;
+  gap: 7px;
   margin: 4px 0 2px;
-  padding: 6px 2px;
-  min-height: 28px;
+  padding: 6px 2px 10px; /* extra bottom for progress bar */
+  min-height: 32px;
+}
+
+/* Tool-type icon */
+.activity-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #10b981;
+  opacity: 0.9;
+}
+
+.activity-icon.spinning {
+  animation: tool-spin 3s linear infinite;
+}
+
+@keyframes tool-spin {
+  to { transform: rotate(360deg); }
 }
 
 .activity-text {
@@ -162,45 +171,73 @@ function truncate(value: unknown, maxLength: number) {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+  color: #71717a;
 }
 
-/* Skeleton shimmer effect for active (loading) state */
+/* Skeleton shimmer on active text */
 .activity-text.shimmer {
-  color: transparent;
+  color: var(--p-text-muted-color, #71717a);
+  font-weight: 500;
+}
+
+
+/* Flowing gradient progress bar at the bottom */
+.activity-progress {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  overflow: hidden;
   background: linear-gradient(
     90deg,
-    var(--p-text-muted-color, #64748b) 0%,
-    var(--p-text-muted-color, #64748b) 30%,
-    var(--p-surface-300, #cbd5e1) 50%,
-    var(--p-text-muted-color, #64748b) 70%,
-    var(--p-text-muted-color, #64748b) 100%
+    transparent 0%,
+    #10b981 30%,
+    #34d399 50%,
+    #10b981 70%,
+    transparent 100%
   );
-  background-size: 250% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  animation: shimmer 2s ease-in-out infinite;
+  background-size: 200% 100%;
+  animation: progress-flow 2s ease-in-out infinite;
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: 120% 0;
-  }
-  100% {
-    background-position: -120% 0;
-  }
+
+@keyframes progress-flow {
+  0%   { background-position:  120% 0; }
+  100% { background-position: -120% 0; }
 }
 
 /* Transition */
 .activity-enter-active,
 .activity-leave-active {
-  transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
 .activity-enter-from,
 .activity-leave-to {
   opacity: 0;
   transform: translateY(3px);
+}
+
+/* Dark mode */
+:global(.p-dark) .activity-icon {
+  color: #a78bfa;
+}
+
+:global(.p-dark) .activity-text {
+  color: #a1a1aa;
+}
+
+:global(.p-dark) .activity-progress {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #a78bfa 30%,
+    #c4b5fd 50%,
+    #a78bfa 70%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
 }
 </style>

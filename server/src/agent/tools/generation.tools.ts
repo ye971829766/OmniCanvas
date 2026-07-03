@@ -1,5 +1,8 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
 import { upsertCanvasNode } from '../canvas-state';
+import { exportNodeImageTool } from './canvas.tools';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /** Helper to resolve tool-input refImages (refIds or URLs) to base64 Data URLs */
 async function resolveRefImagesToBase64(refImages: string[] | undefined, ctx: ToolContext): Promise<string[]> {
@@ -16,6 +19,23 @@ async function resolveRefImagesToBase64(refImages: string[] | undefined, ctx: To
 
     // 2. Search canvasState for a node with matching refId
     const node = ctx.canvasState.find((n: any) => n.refId === ref);
+
+    // Enhancement 1: If canvas node exists but has no image URL (e.g. Rect, Frame, Text, Group),
+    // dynamically export it as a base64 image using exportNodeImageTool
+    if (node && !node.url) {
+      try {
+        console.log(`Node ${ref} has no image URL. Exporting dynamically...`);
+        const exportResult = await exportNodeImageTool.execute({ refId: ref, waitForGeneration: false }, ctx);
+        const output = exportResult.output as any;
+        if (output && output.image) {
+          base64List.push(output.image);
+          continue;
+        }
+      } catch (exportErr) {
+        console.error(`Failed to export non-image reference node ${ref}:`, exportErr);
+      }
+    }
+
     let imageUrl = ref; // fallback: treat ref as URL itself
     if (node) {
       if (node.tag === 'Image' && node.url) {
@@ -31,6 +51,57 @@ async function resolveRefImagesToBase64(refImages: string[] | undefined, ctx: To
       continue;
     }
 
+    // Enhancement 2: Check if we can resolve it locally on the filesystem first,
+    // avoiding HTTP request mismatches or self-fetching routing errors.
+    let resolvedLocally = false;
+    let localPath: string | null = null;
+    
+    const isLocalUrl = imageUrl.startsWith(ctx.origin) || 
+                       imageUrl.startsWith('http://localhost') || 
+                       imageUrl.startsWith('http://127.0.0.1');
+
+    if (isLocalUrl) {
+      const match = imageUrl.match(/\/files\/([^/]+)$/);
+      if (match) {
+        localPath = path.join(process.cwd(), 'files', match[1]);
+      }
+    } else if (imageUrl.startsWith('files/')) {
+      localPath = path.join(process.cwd(), imageUrl);
+    } else if (imageUrl.startsWith('/files/')) {
+      localPath = path.join(process.cwd(), imageUrl.slice(1));
+    }
+
+    if (localPath) {
+      try {
+        let finalPath = localPath;
+        let exists = fs.existsSync(finalPath);
+        
+        if (!exists) {
+          // Fallback check if process.cwd() is the project root instead of the server directory
+          const altPath = localPath.replace(/[\\/]files[\\/]/, '/server/files/');
+          if (fs.existsSync(altPath)) {
+            finalPath = altPath;
+            exists = true;
+          }
+        }
+        
+        if (exists) {
+          const buffer = fs.readFileSync(finalPath);
+          const ext = path.extname(finalPath).slice(1) || 'png';
+          const contentType = ext === 'jpeg' || ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+          const base64Str = buffer.toString('base64');
+          base64List.push(`data:${contentType};base64,${base64Str}`);
+          resolvedLocally = true;
+          console.log(`Successfully resolved image locally: ${finalPath}`);
+        }
+      } catch (localErr) {
+        console.error(`Error reading local image file ${localPath}:`, localErr);
+      }
+    }
+
+    if (resolvedLocally) continue;
+
+    // Fallback: fetch over HTTP
     try {
       let finalUrl = imageUrl;
       if (imageUrl.startsWith('/')) {
@@ -39,6 +110,7 @@ async function resolveRefImagesToBase64(refImages: string[] | undefined, ctx: To
         finalUrl = `${ctx.origin}/${imageUrl}`;
       }
 
+      console.log(`Fetching reference image from URL: ${finalUrl}`);
       const res = await fetch(finalUrl);
       if (!res.ok) {
         throw new Error(`Failed to fetch image: HTTP ${res.status}`);
@@ -48,7 +120,7 @@ async function resolveRefImagesToBase64(refImages: string[] | undefined, ctx: To
       const base64Str = Buffer.from(buffer).toString('base64');
       base64List.push(`data:${contentType};base64,${base64Str}`);
     } catch (err: any) {
-      console.error(`Failed to resolve reference image ${ref}:`, err);
+      console.error(`Failed to resolve reference image ${ref} via fetch:`, err);
     }
   }
 

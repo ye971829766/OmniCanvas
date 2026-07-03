@@ -1,5 +1,5 @@
 import { ref, watch, type Ref, reactive } from "vue";
-import { Text, Rect, Frame } from "leafer-ui";
+import { Text, Rect, Frame, Group, Image } from "leafer-ui";
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/utils";
@@ -17,15 +17,33 @@ import { getAgentHistory, deleteAgentSession, stopAgent } from "@/utils/api";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 const AGENT_BASE_URL = `${API_BASE_URL}`;
 
+export interface ToolCallItem {
+  id: string;
+  name: string;
+  done: boolean;
+  input?: any;
+  output?: any;
+}
+
+export type MessageBlock =
+  | { id: string; type: "text"; text: string }
+  | { id: string; type: "tools"; tools: ToolCallItem[] };
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   /** streamed reasoning / final text */
   text: string;
   /** tool calls shown as chips under the bubble */
-  tools: { id: string; name: string; done: boolean; input?: any; output?: any }[];
+  tools: ToolCallItem[];
+  /** chronological stream blocks */
+  blocks?: MessageBlock[];
   streaming: boolean;
   images?: string[];
+  /** Optional error text when message encountered error */
+  error?: string;
+  /** Optional timestamp string e.g. Jun 15, 2026 */
+  timestamp?: string;
 }
 
 type CanvasNodeSpec = {
@@ -55,7 +73,13 @@ type CanvasNodeSpec = {
   stroke?: string;
   strokeWidth?: number;
   gradient?: { from: string; to: string; direction: number };
+  rotation?: number;
+  scaleX?: number;
+  scaleY?: number;
+  zIndex?: number;
+  url?: string;
 };
+
 
 type CanvasOp =
   | { op: "add_node"; node: CanvasNodeSpec }
@@ -89,7 +113,7 @@ function isInternalToolError(message: unknown) {
   );
 }
 
-function stripInternalToolErrors(text: string) {
+export function stripInternalToolErrors(text: string) {
   return text
     .replace(
       /\n{0,2}\s*⚠️\s+[a-z_]+:\s+(?:Parameter\s+"[^"]+"\s+must be[^\n]*|Missing required parameter[^\n]*|Tool\s+[a-z_]+\s+timed out[^\n]*)/g,
@@ -161,11 +185,20 @@ function parseHistoryMessage(
         });
       }
     }
+    const blocks: MessageBlock[] = [];
+    if (tools.length > 0) {
+      if (text) blocks.push({ id: `${id}-txt`, type: "text", text });
+      blocks.push({ id: `${id}-tls`, type: "tools", tools });
+    } else if (text) {
+      blocks.push({ id: `${id}-txt`, type: "text", text });
+    }
+
     return {
       id,
       role: "assistant",
       text,
       tools,
+      blocks,
       streaming: false,
     };
   }
@@ -177,9 +210,12 @@ export function useAgent(
   canvasApp: Ref<any>,
   recordHistory?: () => void,
   activeWorkspaceIdRef?: Ref<string | number | null>,
+  /** Called after each agent-placed node so the background can show a ripple */
+  onAgentPlace?: (worldX: number, worldY: number) => void,
 ) {
   const messages = ref<ChatMessage[]>([]);
   const running = ref(false);
+  const loadingHistory = ref(false);
   // Use a fixed sessionId stored in localStorage, independent of workspaceId
   const getOrCreateSessionId = () => {
     const stored = localStorage.getItem('agent_session_id');
@@ -263,6 +299,7 @@ export function useAgent(
   // Load history once on mount
   const loadHistory = async () => {
     if (!sessionId.value) return;
+    loadingHistory.value = true;
     try {
       messages.value = []; // Clear current history before loading the new one
       const rawHistory = await getAgentHistory(sessionId.value);
@@ -292,6 +329,8 @@ export function useAgent(
       }
     } catch (err) {
       console.error("Failed to load agent chat history:", err);
+    } finally {
+      loadingHistory.value = false;
     }
   };
 
@@ -537,11 +576,37 @@ export function useAgent(
             padding: (n as any).padding,
             editable: true,
           });
-          nodeStates.value[n.refId] = {
-            refId: n.refId,
-            type: "frame",
-            status: "done",
-          };
+          nodeStates.value[n.refId] = { refId: n.refId, type: "frame", status: "done" };
+
+        } else if (n.type === "group") {
+          // Group: a transparent container — no fill, auto-sizes to children
+          leaferNode = new Group({
+            x,
+            y,
+            rotation: n.rotation,
+            scaleX: n.scaleX,
+            scaleY: n.scaleY,
+            opacity: n.opacity,
+            zIndex: n.zIndex,
+            editable: true,
+          });
+          nodeStates.value[n.refId] = { refId: n.refId, type: "group", status: "done" };
+
+        } else if (n.type === "image") {
+          // Static image from URL
+          leaferNode = new Image({
+            x,
+            y,
+            width: n.width ?? 400,
+            height: n.height ?? 300,
+            url: n.url ?? "",
+            cornerRadius: n.cornerRadius,
+            opacity: n.opacity,
+            rotation: n.rotation,
+            zIndex: n.zIndex,
+            editable: true,
+          });
+          nodeStates.value[n.refId] = { refId: n.refId, type: "image", status: "done", url: n.url };
         }
 
         if (leaferNode) {
@@ -563,6 +628,9 @@ export function useAgent(
           } else {
             app.tree.add(leaferNode);
           }
+
+          // Notify caller so it can play a background ripple at the drop point
+          onAgentPlace?.(x, y);
 
           if (n.type === "image_gen" || n.type === "video_gen" || n.type === "frame") {
             setTimeout(() => {
@@ -659,36 +727,85 @@ export function useAgent(
 
   /** Handle one decoded AgentEvent from the SSE stream. */
   function handleEvent(ev: any, assistant: ChatMessage) {
+    if (!assistant.blocks) {
+      assistant.blocks = [];
+    }
+    const blocks = assistant.blocks;
+
     switch (ev.type) {
-      case "thinking":
-        assistant.text += ev.text;
+      case "thinking": {
+        const chunk = ev.text || "";
+        assistant.text += chunk;
+
+        const lastBlock = blocks[blocks.length - 1];
+        if (lastBlock && lastBlock.type === "text") {
+          lastBlock.text += chunk;
+        } else {
+          blocks.push({
+            id: `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            type: "text",
+            text: chunk,
+          });
+        }
         break;
+      }
       case "progress":
-        // tool progress — shown in ToolActivity, not in chat text
         break;
-      case "tool_call":
-        assistant.tools.push({
+      case "tool_call": {
+        const toolItem: ToolCallItem = {
           id: ev.id,
           name: ev.tool,
           done: false,
           input: ev.input,
-        });
+        };
+        assistant.tools.push(toolItem);
+
+        const lastBlock = blocks[blocks.length - 1];
+        if (lastBlock && lastBlock.type === "tools") {
+          lastBlock.tools.push(toolItem);
+        } else {
+          blocks.push({
+            id: `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            type: "tools",
+            tools: [toolItem],
+          });
+        }
         break;
+      }
       case "tool_result": {
         const chip = assistant.tools.find((t) => t.id === ev.id);
         if (chip) {
           chip.done = true;
           chip.output = ev.output;
         }
+        for (const blk of blocks) {
+          if (blk.type === "tools") {
+            const item = blk.tools.find((t) => t.id === ev.id);
+            if (item) {
+              item.done = true;
+              item.output = ev.output;
+            }
+          }
+        }
         break;
       }
       case "canvas_op":
         applyCanvasOp(ev.op as CanvasOp);
         break;
-      case "final":
-        // backend sends the full final text; prefer it if we streamed nothing
-        if (!assistant.text.trim()) assistant.text = stripInternalToolErrors(ev.text ?? "");
+      case "final": {
+        const finalText = stripInternalToolErrors(ev.text ?? "");
+        if (!assistant.text.trim()) {
+          assistant.text = finalText;
+        }
+        if (!blocks.some((b) => b.type === "text" && b.text.trim())) {
+          blocks.unshift({
+            id: `blk_final_${Date.now()}`,
+            type: "text",
+            text: finalText,
+          });
+        }
         break;
+      }
       case "error": {
         if (!isInternalToolError(ev.message)) {
           const raw = String(ev.message ?? "");
@@ -699,12 +816,8 @@ export function useAgent(
                 ? "模型未返回内容，请检查渠道配置或稍后重试"
                 : raw.includes("API_KEY") || raw.includes("Unauthorized") || raw.includes("401")
                   ? "API Key 无效，请检查渠道配置"
-                  : raw || "请求失败，请稍后重试";
-          if (!assistant.text.trim()) {
-            assistant.text = `⚠️ ${friendly}`;
-          } else {
-            assistant.text += `\n\n⚠️ ${friendly}`;
-          }
+                  : raw || "服务发生异常，请稍后再试。";
+          assistant.error = friendly;
         }
         break;
       }
@@ -747,7 +860,7 @@ export function useAgent(
         base.parentId = parentNode.refId;
       }
 
-      // 按类型附加关键属性
+      // Serialize all relevant Leafer properties per node type
       if (tag === "Text") {
         base.text = node.text;
         base.fontSize = node.fontSize;
@@ -757,8 +870,11 @@ export function useAgent(
         base.textAlign = node.textAlign;
         base.lineHeight = node.lineHeight;
         base.letterSpacing = node.letterSpacing;
+        base.stroke = node.stroke;
+        base.strokeWidth = node.strokeWidth;
       } else if (tag === "Image") {
         base.url = node.url;
+        base.cornerRadius = node.cornerRadius;
       } else if (tag === "ImageGen") {
         base.prompt = node.prompt;
         base.model = node.model;
@@ -781,8 +897,11 @@ export function useAgent(
         base.fill = node.fill;
         base.cornerRadius = node.cornerRadius;
         base.stroke = node.stroke;
+        base.strokeWidth = node.strokeWidth;
+        if (node.shadow) base.shadow = node.shadow;
       } else if (tag === "Ellipse" || tag === "Polygon" || tag === "Star") {
         base.fill = node.fill;
+        base.stroke = node.stroke;
       } else if (tag === "Frame") {
         base.fill = node.fill;
         base.flow = node.flow;
@@ -791,12 +910,17 @@ export function useAgent(
         base.gap = node.gap;
         base.padding = node.padding;
         base.type = "frame";
+      } else if (tag === "Group") {
+        base.type = "group";
       }
 
-      if (node.opacity !== undefined && node.opacity !== 1) {
-        base.opacity = node.opacity;
-      }
+      // Common visual props — always include when non-default
+      if (node.opacity !== undefined && node.opacity !== 1) base.opacity = node.opacity;
       if (node.rotation) base.rotation = node.rotation;
+      if (node.scaleX !== undefined && node.scaleX !== 1) base.scaleX = node.scaleX;
+      if (node.scaleY !== undefined && node.scaleY !== 1) base.scaleY = node.scaleY;
+      if (node.zIndex) base.zIndex = node.zIndex;
+      if (node.shadow && tag !== "Rect") base.shadow = node.shadow; // Rect handled above
 
       serializedList.push(base);
 
@@ -933,10 +1057,31 @@ export function useAgent(
     }
   }
 
+  function retryLastMessage() {
+    if (running.value) return;
+    // Find the last user message
+    const lastUserMsgIndex = [...messages.value].reverse().findIndex((m) => m.role === "user");
+    if (lastUserMsgIndex !== -1) {
+      const realIndex = messages.value.length - 1 - lastUserMsgIndex;
+      const lastUserMsg = messages.value[realIndex];
+      // Remove any assistant message following it
+      if (messages.value.length > realIndex + 1) {
+        messages.value.splice(realIndex + 1);
+      }
+      const textToSend = lastUserMsg.text;
+      const imagesToSend = lastUserMsg.images;
+      // Remove user message so send() can re-append cleanly
+      messages.value.splice(realIndex, 1);
+      send(textToSend, imagesToSend);
+    }
+  }
+
   return {
     messages,
     running,
+    loadingHistory,
     send,
+    retryLastMessage,
     stop,
     reset,
     sessionId,
@@ -944,3 +1089,4 @@ export function useAgent(
     zoomToNode,
   };
 }
+

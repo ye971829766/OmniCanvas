@@ -6,7 +6,7 @@ export function useCanvasCrop(
   canvasApp: Ref<any>,
   selectTarget: Ref<any>,
   recordHistoryDebounced: () => void,
-  toast: any
+  _toast: any,
 ) {
   const isCropping = ref(false);
   const cropRatio = ref("free");
@@ -27,7 +27,7 @@ export function useCanvasCrop(
   let leftDim: Rect;
   let rightDim: Rect;
   let cropBorder: Rect;
-  
+
   let nwHandle: Rect;
   let nHandle: Rect;
   let neHandle: Rect;
@@ -42,20 +42,20 @@ export function useCanvasCrop(
     { label: "1:1 正方形", value: "1" },
     { label: "16:9 宽屏", value: "1.7777777777777777" },
     { label: "4:3 标清", value: "1.3333333333333333" },
-    { label: "3:2 画幅", value: "1.5" }
+    { label: "3:2 画幅", value: "1.5" },
   ];
 
   const updateCropToolbarPosition = () => {
     if (!cropBorder || !isCropping.value) return;
     const bounds = cropBorder.worldBoxBounds;
     if (!bounds) return;
-    
+
     // Position toolbar 45px above crop box
     const top = bounds.y - 45;
     const left = bounds.x + bounds.width / 2;
     cropToolbarStyle.value = {
       left: `${left}px`,
-      top: `${top}px`
+      top: `${top}px`,
     };
   };
 
@@ -64,6 +64,24 @@ export function useCanvasCrop(
     const W = imageNode.width;
     const H = imageNode.height;
 
+    // Calculate world scale of the crop group to keep handles/stroke width consistent in screen pixels
+    const localX = { x: 1, y: 0 };
+    cropGroup.localToWorld(localX, undefined, true);
+    const worldScaleX = Math.sqrt(localX.x * localX.x + localX.y * localX.y) || 1;
+
+    const localY = { x: 0, y: 1 };
+    cropGroup.localToWorld(localY, undefined, true);
+    const worldScaleY = Math.sqrt(localY.x * localY.x + localY.y * localY.y) || 1;
+
+    const handleW = 12 / worldScaleX;
+    const handleH = 12 / worldScaleY;
+    const halfW = handleW / 2;
+    const halfH = handleH / 2;
+
+    const strokeWidth = 2 / worldScaleX;
+    const cornerRadius = 2 / worldScaleX;
+    const borderStrokeWidth = 2.5 / worldScaleX;
+
     // Overlays
     topDim.set({ x: 0, y: 0, width: W, height: cy });
     bottomDim.set({ x: 0, y: cy + ch, width: W, height: H - (cy + ch) });
@@ -71,20 +89,24 @@ export function useCanvasCrop(
     rightDim.set({ x: cx + cw, y: cy, width: W - (cx + cw), height: ch });
 
     // Border
-    cropBorder.set({ x: cx, y: cy, width: cw, height: ch });
+    cropBorder.set({ x: cx, y: cy, width: cw, height: ch, strokeWidth: borderStrokeWidth });
 
     // Handles
-    const size = 12;
-    const half = size / 2;
+    const handleAttrs = {
+      width: handleW,
+      height: handleH,
+      strokeWidth,
+      cornerRadius,
+    };
 
-    nwHandle.set({ x: cx - half, y: cy - half });
-    nHandle.set({ x: cx + cw / 2 - half, y: cy - half });
-    neHandle.set({ x: cx + cw - half, y: cy - half });
-    eHandle.set({ x: cx + cw - half, y: cy + ch / 2 - half });
-    seHandle.set({ x: cx + cw - half, y: cy + ch - half });
-    sHandle.set({ x: cx + cw / 2 - half, y: cy + ch - half });
-    swHandle.set({ x: cx - half, y: cy + ch - half });
-    wHandle.set({ x: cx - half, y: cy + ch / 2 - half });
+    nwHandle.set({ ...handleAttrs, x: cx - halfW, y: cy - halfH });
+    nHandle.set({ ...handleAttrs, x: cx + cw / 2 - halfW, y: cy - halfH });
+    neHandle.set({ ...handleAttrs, x: cx + cw - halfW, y: cy - halfH });
+    eHandle.set({ ...handleAttrs, x: cx + cw - halfW, y: cy + ch / 2 - halfH });
+    seHandle.set({ ...handleAttrs, x: cx + cw - halfW, y: cy + ch - halfH });
+    sHandle.set({ ...handleAttrs, x: cx + cw / 2 - halfW, y: cy + ch - halfH });
+    swHandle.set({ ...handleAttrs, x: cx - halfW, y: cy + ch - halfH });
+    wHandle.set({ ...handleAttrs, x: cx - halfW, y: cy + ch / 2 - halfH });
 
     // Toggle handles visibility based on ratio lock
     const isFree = cropRatio.value === "free";
@@ -103,8 +125,8 @@ export function useCanvasCrop(
       dx: number,
       dy: number,
       startLocalPos: { x: number; y: number },
-      startBox: { cx: number; cy: number; cw: number; ch: number }
-    ) => void
+      startBox: { cx: number; cy: number; cw: number; ch: number },
+    ) => void,
   ) => {
     let startLocalPos = { x: 0, y: 0 };
     let startBox = { cx: 0, cy: 0, cw: 0, ch: 0 };
@@ -156,20 +178,20 @@ export function useCanvasCrop(
       rotation: imageNode.rotation,
       skewX: imageNode.skewX,
       skewY: imageNode.skewY,
-      zIndex: 99999
+      zIndex: 99999,
     });
     // Explicitly set flags to bypass history tracking and state persistence
     Object.defineProperty(cropGroup, "__tag", {
       value: "SimulateElement",
       writable: true,
       configurable: true,
-      enumerable: true
+      enumerable: true,
     });
     Object.defineProperty(cropGroup, "tag", {
       value: "SimulateElement",
       writable: true,
       configurable: true,
-      enumerable: true
+      enumerable: true,
     });
     (cropGroup as any).isCropOverlay = true;
 
@@ -184,7 +206,7 @@ export function useCanvasCrop(
       strokeWidth: 2.5,
       fill: "rgba(255,255,255,0.01)",
       cursor: "move",
-      draggable: true
+      draggable: true,
     });
 
     const createHandle = (cursorStyle: string) => {
@@ -196,7 +218,7 @@ export function useCanvasCrop(
         strokeWidth: 2,
         cornerRadius: 2,
         cursor: cursorStyle,
-        draggable: true
+        draggable: true,
       });
     };
 
@@ -253,8 +275,14 @@ export function useCanvasCrop(
         cw = newW;
         ch = newH;
       } else {
-        cw = Math.max(minSize, Math.min(start.cw + dx, imageNode.width - start.cx));
-        ch = Math.max(minSize, Math.min(start.ch + dy, imageNode.height - start.cy));
+        cw = Math.max(
+          minSize,
+          Math.min(start.cw + dx, imageNode.width - start.cx),
+        );
+        ch = Math.max(
+          minSize,
+          Math.min(start.ch + dy, imageNode.height - start.cy),
+        );
       }
     });
 
@@ -315,7 +343,10 @@ export function useCanvasCrop(
         cw = newW;
         ch = newH;
       } else {
-        cw = Math.max(minSize, Math.min(start.cw + dx, imageNode.width - start.cx));
+        cw = Math.max(
+          minSize,
+          Math.min(start.cw + dx, imageNode.width - start.cx),
+        );
         let newH = Math.max(minSize, start.ch - dy);
         let proposedY = start.cy + (start.ch - newH);
         if (proposedY < 0) {
@@ -354,7 +385,10 @@ export function useCanvasCrop(
         }
         cx = proposedX;
         cw = newW;
-        ch = Math.max(minSize, Math.min(start.ch + dy, imageNode.height - start.cy));
+        ch = Math.max(
+          minSize,
+          Math.min(start.ch + dy, imageNode.height - start.cy),
+        );
       }
     });
 
@@ -370,11 +404,17 @@ export function useCanvasCrop(
     });
 
     registerDrag(sHandle, (_, dy, __, start) => {
-      ch = Math.max(minSize, Math.min(start.ch + dy, imageNode.height - start.cy));
+      ch = Math.max(
+        minSize,
+        Math.min(start.ch + dy, imageNode.height - start.cy),
+      );
     });
 
     registerDrag(eHandle, (dx, _, __, start) => {
-      cw = Math.max(minSize, Math.min(start.cw + dx, imageNode.width - start.cx));
+      cw = Math.max(
+        minSize,
+        Math.min(start.cw + dx, imageNode.width - start.cx),
+      );
     });
 
     registerDrag(wHandle, (dx, _, __, start) => {
@@ -388,9 +428,9 @@ export function useCanvasCrop(
       cw = newW;
     });
 
-    // Listen to move/zoom/pan events on the canvas to update floating toolbar position dynamically
-    app.tree.on(MoveEvent.MOVE, updateCropToolbarPosition);
-    app.tree.on(ZoomEvent.ZOOM, updateCropToolbarPosition);
+    // Listen to move/zoom/pan events on the canvas to update floating toolbar position and handle scales dynamically
+    app.tree.on(MoveEvent.MOVE, updateCropUI);
+    app.tree.on(ZoomEvent.ZOOM, updateCropUI);
 
     updateCropUI();
   };
@@ -438,8 +478,8 @@ export function useCanvasCrop(
     const app = canvasApp.value;
     if (app) {
       app.editor.hittable = true;
-      app.tree.off(MoveEvent.MOVE, updateCropToolbarPosition);
-      app.tree.off(ZoomEvent.ZOOM, updateCropToolbarPosition);
+      app.tree.off(MoveEvent.MOVE, updateCropUI);
+      app.tree.off(ZoomEvent.ZOOM, updateCropUI);
     }
     if (cropGroup) {
       cropGroup.destroy();
@@ -459,11 +499,11 @@ export function useCanvasCrop(
 
   const confirmCanvasCrop = async () => {
     if (cw <= 0 || ch <= 0 || !imageNode) return;
-    
+
     // Save references before cleaning up overlay
     const target = imageNode;
     const app = canvasApp.value;
-    
+
     const imgObj = new Image();
     imgObj.crossOrigin = "anonymous";
     imgObj.src = target.url;
@@ -476,12 +516,12 @@ export function useCanvasCrop(
 
     cleanup();
 
-    toast.add({
-      severity: "info",
-      summary: "正在处理",
-      detail: "正在应用裁剪并上传图片...",
-      life: 2000
-    });
+    // toast.add({
+    //   severity: "info",
+    //   summary: "正在处理",
+    //   detail: "正在应用裁剪并上传图片...",
+    //   life: 2000
+    // });
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -508,14 +548,26 @@ export function useCanvasCrop(
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("无法创建 2D 绘图上下文");
 
-      ctx.drawImage(imgObj, origCropX, origCropY, origCropW, origCropH, 0, 0, origCropW, origCropH);
+      ctx.drawImage(
+        imgObj,
+        origCropX,
+        origCropY,
+        origCropW,
+        origCropH,
+        0,
+        0,
+        origCropW,
+        origCropH,
+      );
 
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob((b) => resolve(b), "image/png");
       });
       if (!blob) throw new Error("图片导出 Blob 失败");
 
-      const file = new File([blob], `cropped_${Date.now()}.png`, { type: "image/png" });
+      const file = new File([blob], `cropped_${Date.now()}.png`, {
+        type: "image/png",
+      });
       const response = await uploadImage(file);
 
       // Convert inner space offset (relative to target's top-left) to parent coordinates using innerToWorld
@@ -528,7 +580,7 @@ export function useCanvasCrop(
         y: parentPoint.y,
         width: finalCw,
         height: finalCh,
-        url: response.imageUrl
+        url: response.imageUrl,
       });
 
       recordHistoryDebounced();
@@ -540,20 +592,20 @@ export function useCanvasCrop(
         }, 50);
       }
 
-      toast.add({
-        severity: "success",
-        summary: "裁剪成功",
-        detail: "图片裁剪已应用到画布",
-        life: 3000
-      });
+      // toast.add({
+      //   severity: "success",
+      //   summary: "裁剪成功",
+      //   detail: "图片裁剪已应用到画布",
+      //   life: 3000
+      // });
     } catch (error: any) {
       console.error("图片裁剪失败:", error);
-      toast.add({
-        severity: "error",
-        summary: "裁剪失败",
-        detail: error.message || "裁剪图片时出错，请重试。",
-        life: 4000
-      });
+      // toast.add({
+      //   severity: "error",
+      //   summary: "裁剪失败",
+      //   detail: error.message || "裁剪图片时出错，请重试。",
+      //   life: 4000
+      // });
       if (app && app.editor) {
         app.editor.select(target);
       }
@@ -568,6 +620,6 @@ export function useCanvasCrop(
     startCanvasCrop,
     confirmCanvasCrop,
     cancelCanvasCrop,
-    applyRatioPreset
+    applyRatioPreset,
   };
 }

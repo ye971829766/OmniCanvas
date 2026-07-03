@@ -10,6 +10,8 @@ import {
   focusNodeTool,
   exportNodeImageTool,
   addFrameTool,
+  addGroupTool,
+  addImageTool,
 } from './tools/canvas.tools';
 import { autoLayoutTool, alignNodesTool, distributeNodesTool } from './tools/layout.tools';
 import { setBrandTool, applyPaletteTool } from './tools/style.tools';
@@ -21,23 +23,33 @@ import { planDesignTool } from './tools/plan-design.tools';
 
 /** All design tools the agent can call. */
 export const ALL_TOOLS: AgentTool[] = [
+  // Canvas structure
   setFrameTool,
-  generateImageTool,
-  generateVideoTool,
+  addFrameTool,
+  addGroupTool,
+  // Primitives
   addTextTool,
   addRectTool,
+  addImageTool,
+  // Generation
+  generateImageTool,
+  generateVideoTool,
+  // Mutation
   updateNodeTool,
   removeNodeTool,
-  queryCanvasTool,
+  // Layout
   autoLayoutTool,
   alignNodesTool,
   distributeNodesTool,
+  // Query & navigation
+  queryCanvasTool,
+  focusNodeTool,
+  exportNodeImageTool,
+  // Style
   setBrandTool,
   applyPaletteTool,
   collectInspirationTool,
-  focusNodeTool,
-  exportNodeImageTool,
-  addFrameTool,
+  // Review & QA
   reviewAndAdjustTool,
   analyzeDesignTool,
   verifyDesignTool,

@@ -7,7 +7,6 @@ import Mention from "@tiptap/extension-mention";
 import {
   Plus,
   BookOpen,
-  ChevronDown,
   Lightbulb,
   Square,
   ArrowUp,
@@ -567,11 +566,6 @@ function handleSubmit() {
           <BookOpen :size="14" />
         </button>
 
-        <!-- Agent selector indicator -->
-        <div class="agent-dropdown-selector">
-          <span style="font-size: 11px">Agent</span>
-          <ChevronDown :size="10" class="ml-1 opacity-70" />
-        </div>
       </div>
 
       <div class="toolbar-right">
@@ -620,13 +614,26 @@ function handleSubmit() {
   background: var(--p-surface-0, #fff);
   margin: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow   0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform    0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Focus: lift + glow ring */
+.agent-input-wrap.is-focused {
+  border-color: #18181b;
+  box-shadow:
+    0 0 0 3px rgba(24, 24, 27, 0.07),
+    0 4px 16px rgba(0, 0, 0, 0.07);
+  transform: translateY(-1px);
 }
 
 .agent-input-wrap.is-dragging {
-  border-color: var(--p-primary-color);
-  background: rgba(109, 40, 217, 0.02);
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.03);
   border-style: dashed;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08);
 }
 
 .textarea-container {
@@ -774,28 +781,9 @@ function handleSubmit() {
   background: var(--p-surface-100, #f3f4f6);
 }
 
-.agent-dropdown-selector {
-  display: flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: var(--p-surface-50, #f8fafc);
-  border: 1px solid var(--p-surface-200, #e2e8f0);
-  color: var(--p-text-color, #334155);
-  cursor: pointer;
-  font-weight: 500;
-  font-size: var(--text-xs);
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.agent-dropdown-selector:hover {
-  background: var(--p-surface-100, #f1f5f9);
-}
-
 .toolbar-send-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
@@ -803,27 +791,61 @@ function handleSubmit() {
   align-items: center;
   justify-content: center;
   color: #fff;
-  background: var(--p-primary-color, #6d28d9);
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(109, 40, 217, 0.2);
+  background: #18181b;
+  transition:
+    background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform       0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow      0.2s ease;
+  box-shadow: 0 2px 8px rgba(24, 24, 27, 0.25);
+  overflow: hidden;
 }
 
-.toolbar-send-btn:hover {
-  transform: scale(1.06);
-  box-shadow: 0 4px 12px rgba(109, 40, 217, 0.3);
+.toolbar-send-btn:not(:disabled):hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 14px rgba(24, 24, 27, 0.35);
+}
+
+.toolbar-send-btn:not(:disabled):active {
+  transform: scale(0.88);
+  box-shadow: 0 1px 4px rgba(24, 24, 27, 0.2);
+}
+
+/* Arrow "fly up" on click via CSS animation triggered by :active */
+.toolbar-send-btn:not(:disabled):active :deep(svg) {
+  animation: arrow-fly 0.25s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes arrow-fly {
+  0%   { transform: translateY(0);    opacity: 1; }
+  60%  { transform: translateY(-6px); opacity: 0; }
+  61%  { transform: translateY(6px);  opacity: 0; }
+  100% { transform: translateY(0);    opacity: 1; }
 }
 
 .toolbar-send-btn:disabled {
-  opacity: 0.3;
+  background: #e4e4e7;
+  color: #a1a1aa;
   cursor: not-allowed;
-  transform: none;
   box-shadow: none;
+  transform: none;
 }
 
 .send-stop {
-  background: #ef4444;
+  background: transparent;
+  border: 1.5px solid #ef4444;
+  color: #ef4444;
   border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.2);
+  box-shadow: none;
+  animation: stop-pulse 1.5s ease-in-out infinite;
+}
+
+.send-stop:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
+}
+
+@keyframes stop-pulse {
+  0%, 100% { transform: scale(1);    }
+  50%       { transform: scale(1.06); }
 }
 
 .char-counter {
@@ -1044,5 +1066,57 @@ function handleSubmit() {
 .slide-up-leave-to {
   opacity: 0;
   transform: translateY(4px);
+}
+
+/* ── Dark mode ─────────────────────────────────────────────────── */
+:global(.p-dark) .agent-input-wrap {
+  background: #18181b;
+  border-color: #27272a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+:global(.p-dark) .agent-input-wrap.is-focused {
+  border-color: #d4d4d8;
+  box-shadow:
+    0 0 0 3px rgba(212, 212, 216, 0.08),
+    0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+:global(.p-dark) .agent-input-wrap.is-dragging {
+  border-color: #34d399;
+  background: rgba(52, 211, 153, 0.05);
+}
+
+:global(.p-dark) .toolbar-send-btn:not(:disabled) {
+  background: #fafafa;
+  color: #09090b;
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.12);
+}
+
+:global(.p-dark) .toolbar-send-btn:not(:disabled):hover {
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.2);
+}
+
+:global(.p-dark) .toolbar-send-btn:disabled {
+  background: #27272a;
+  color: #52525b;
+}
+
+:global(.p-dark) .agent-input-toolbar {
+  border-top-color: #27272a;
+}
+
+:global(.p-dark) .mentions-popup {
+  background: #1f1f23;
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+:global(.p-dark) .mention-item.active {
+  background: #27272a;
+}
+
+:global(.p-dark) .mention-item-name {
+  color: #e4e4e7;
 }
 </style>

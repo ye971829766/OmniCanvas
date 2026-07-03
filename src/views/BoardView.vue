@@ -100,6 +100,7 @@ watch(activeWorkspaceId, (newId) => {
       :workspace-id="activeWorkspaceId"
       :canvas-app="canvasRef.canvasApp"
       :record-history="canvasRef.recordHistoryDebounced"
+      :on-agent-place="canvasRef.triggerAgentRipple"
     />
   </div>
 </template>

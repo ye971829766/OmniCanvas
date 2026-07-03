@@ -1,179 +1,241 @@
-# AgentsBoard
+<div align="center">
 
-基于 Leafer UI 的智能白板协作工具，集成 AI Agent 实现自然语言驱动的可视化创作。
+# 🎨 AgentsBoard
+
+**AI-Powered Infinite Canvas for Visual Creation**
+
+An open-source intelligent whiteboard that turns natural language into visual designs through integrated AI agents.
+
+基于 AI Agent 的智能无限画布，通过自然语言驱动可视化创作。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Vue 3](https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vue.js)](https://vuejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+[![Leafer UI](https://img.shields.io/badge/Leafer_UI-2.x-00D4AA)](https://www.leaferjs.com/)
+
+[English](#features) · [中文](#功能特性) · [Getting Started](#getting-started) · [Contributing](CONTRIBUTING.md)
+
+</div>
+
+---
+
+## Features
+
+- 🎨 **Infinite Canvas** — High-performance vector drawing engine powered by Leafer UI
+- 🤖 **AI Agent Integration** — Generate graphics, images, and videos through natural language
+- 📐 **Rich Toolset** — Shapes, text, markers, connectors, crop, and more
+- 🖼️ **AI Generation** — Integrated image and video generation with real-time progress
+- ⚡ **Instant Feedback** — Layer management, undo/redo history, quick editing
+- 🎭 **Multi-Workspace** — Multiple workspaces with automatic state sync
+- 🔌 **Extensible** — Pluggable tool registry and model configuration system
+- 🧠 **Smart Agent** — Context-aware design agent that understands canvas state
 
 ## 功能特性
 
-- 🎨 **无限画布** - 基于 Leafer UI 的高性能矢量绘图引擎
-- 🤖 **AI Agent 集成** - 通过自然语言生成图形、图像和视频
-- 📐 **丰富工具** - 形状、文本、标记、连线等完整绘图工具
-- 🎭 **实时协作** - 多工作空间支持，状态自动同步
-- 🖼️ **AI 生成** - 集成图像和视频生成能力
-- ⚡ **即时响应** - 图层管理、历史记录、快速编辑
+- 🎨 **无限画布** — 基于 Leafer UI 的高性能矢量绘图引擎
+- 🤖 **AI Agent 集成** — 通过自然语言生成图形、图像和视频
+- 📐 **丰富工具** — 形状、文本、标记、连线、裁剪等完整绘图工具
+- 🖼️ **AI 生成** — 集成图像和视频生成，支持实时进度显示
+- ⚡ **即时响应** — 图层管理、撤销/重做历史、快速编辑
+- 🎭 **多工作空间** — 支持多个工作空间，状态自动同步
+- 🔌 **可扩展** — 可插拔的工具注册表和模型配置系统
+- 🧠 **智能 Agent** — 理解画布状态的上下文感知设计 Agent
 
-## 快速开始
+---
 
-### 环境要求
+## Tech Stack
 
-- Node.js >= 18
-- Bun >= 1.0 (推荐) 或 npm/pnpm
+### Frontend
+- **Vue 3** + TypeScript
+- **Vite** — Build tooling
+- **Leafer UI** — Canvas engine
+- **PrimeVue** — UI component library
+- **TipTap** — Rich text editing
+- **UnoCSS** — Atomic CSS
 
-### 安装依赖
+### Backend
+- **Bun** + TypeScript
+- **NestJS** — Server framework
+- **OpenAI API** — LLM and image generation
+- **Google Gemini API** — Alternative AI provider
+- **Yunwu API** — Optional third-party AI gateway (see [configuration](#backend-serverenv))
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) >= 18
+- [Bun](https://bun.sh/) >= 1.0 (recommended for backend) or npm/pnpm
+
+### Installation
 
 ```bash
-# 前端
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/agentsboard.git
+cd agentsboard
+
+# Install frontend dependencies
 npm install
 
-# 后端
+# Install backend dependencies
 cd server
 bun install
 ```
 
-### 配置环境变量
+### Configuration
 
-复制环境变量模板并配置：
+Copy the environment variable templates:
 
 ```bash
-# 前端根目录
+# Frontend (project root)
 cp .env.example .env
 
-# 后端
+# Backend
 cd server
 cp .env.example .env
 ```
 
-编辑 `.env` 文件，配置必要的 API 密钥（详见下方配置说明）。
+Edit each `.env` file to configure your API keys. See the configuration sections below.
 
-### 启动项目
+### Running
 
 ```bash
-# 启动后端服务（终端 1）
+# Terminal 1: Start the backend
 cd server
 bun run dev
 
-# 启动前端开发服务器（终端 2）
+# Terminal 2: Start the frontend dev server
 npm run dev
 ```
 
-访问 http://localhost:5173
+Visit http://localhost:5173
 
-## 环境变量配置
+---
 
-### 前端 (`.env`)
+## Configuration
+
+### Frontend (`.env`)
 
 ```bash
-# API 服务地址
+# Backend API base URL
 VITE_API_BASE_URL=http://localhost:3000
 
-# 可选：其他配置
-# VITE_APP_TITLE=AgentsBoard
+# Application title
+VITE_APP_TITLE=AgentsBoard
+
+# Feature flags
+VITE_ENABLE_IMAGE_GEN=true
+VITE_ENABLE_VIDEO_GEN=true
 ```
 
-### 后端 (`server/.env`)
+### Backend (`server/.env`)
 
-```bash
-# 服务端口
-PORT=3000
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | ✅ | Server port (default: `3000`) |
+| `OPENAI_API_KEY` | ✅ | OpenAI API key |
+| `OPENAI_BASE_URL` | ❌ | Custom OpenAI-compatible endpoint |
+| `GOOGLE_API_KEY` | ❌ | Google Gemini API key |
+| `MAX_FILE_SIZE` | ❌ | Max upload size in bytes (default: 10MB) |
+| `UPLOAD_DIR` | ❌ | Upload directory (default: `./files`) |
+| `CORS_ORIGIN` | ❌ | Allowed CORS origins |
+| `MOCK_AGENT` | ❌ | Bypass LLM calls for development |
+| `MOCK_IMAGE_GENERATION` | ❌ | Use color block placeholders |
+| `MOCK_VIDEO` | ❌ | Use local FFmpeg mock video |
 
-# OpenAI API 配置
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1
+<details>
+<summary><strong>Optional: Yunwu (云雾) API Integration</strong></summary>
 
-# Google Gemini API 配置（可选）
-GOOGLE_API_KEY=your_google_api_key_here
+[Yunwu](https://yunwu.ai) is a third-party AI gateway that provides unified access to multiple model providers. If configured, Yunwu keys take priority over default OpenAI keys.
 
-# 文件上传配置
-MAX_FILE_SIZE=10485760
-UPLOAD_DIR=./files
-```
+| Variable | Purpose |
+|----------|---------|
+| `API_KEY` / `YUNWU_API_KEY` | Unified fallback key |
+| `CHAT_API_KEY` / `YUNWU_CHAT_API_KEY` | LLM chat completions |
+| `IMAGE_API_KEY` / `YUNWU_IMAGE_API_KEY` | Image generation |
+| `YUNWU_VIDEO_API_KEY` | Video generation |
 
-## 项目结构
+</details>
+
+---
+
+## Project Structure
 
 ```
 .
-├── src/                    # 前端源码
-│   ├── components/         # Vue 组件
-│   │   ├── Canvas.vue      # 画布主组件
-│   │   ├── AgentPanel.vue  # AI 助手面板
-│   │   └── toolbar/        # 工具栏组件
-│   ├── composables/        # 组合式函数
-│   │   ├── useCanvas.ts    # 画布逻辑
-│   │   └── useAgent.ts     # Agent 逻辑
-│   └── views/              # 页面视图
-├── server/                 # 后端服务
-│   ├── src/
-│   │   ├── main.ts         # 入口文件
-│   │   └── routes/         # API 路由
-│   └── data/               # 数据存储
-└── public/                 # 静态资源
+├── src/                        # Frontend source
+│   ├── components/             # Vue components
+│   │   ├── Canvas.vue          # Main canvas component
+│   │   ├── AgentPanel.vue      # AI assistant panel
+│   │   ├── canvas/             # Canvas sub-components
+│   │   └── toolbar/            # Toolbar components
+│   ├── composables/            # Vue composables
+│   │   ├── useCanvas.ts        # Canvas logic
+│   │   ├── useAgent.ts         # Agent interaction logic
+│   │   ├── useCanvasCrop.ts    # Image cropping
+│   │   ├── useCanvasHistory.ts # Undo/redo history
+│   │   └── ...                 # Other canvas composables
+│   ├── types/                  # TypeScript type definitions
+│   ├── utils/                  # Utility functions
+│   └── views/                  # Page views
+├── server/                     # Backend service
+│   └── src/
+│       ├── agent/              # AI Agent module
+│       │   ├── agent.service.ts    # Core agent logic
+│       │   ├── system-prompt.ts    # Agent system prompt
+│       │   ├── tools/              # Agent tool implementations
+│       │   └── design-knowledge/   # Design knowledge base
+│       ├── ai/                 # AI service (LLM, image, video)
+│       ├── workspaces/         # Workspace management
+│       ├── channels/           # Communication channels
+│       └── model-config/       # Model configuration
+├── agent-integration/          # Agent integration guide & examples
+└── public/                     # Static assets
 ```
 
-## 技术栈
+---
 
-### 前端
-- Vue 3 + TypeScript
-- Vite
-- Leafer UI (画布引擎)
-- PrimeVue (UI 组件库)
-- TipTap (富文本编辑)
-- UnoCSS (原子化 CSS)
+## Development
 
-### 后端
-- Bun + TypeScript
-- NestJS / Express
-- OpenAI API
-- Google Gemini API
-
-## 开发指南
-
-### 构建生产版本
+### Build for Production
 
 ```bash
-# 前端构建
-npm run build
-
-# 预览构建结果
-npm run preview
+npm run build      # Includes vue-tsc type checking
+npm run preview    # Preview the production build
 ```
 
-### 类型检查
+### Run Tests
 
 ```bash
-npm run build  # 包含 vue-tsc 类型检查
+npm test           # Run unit tests
+npm run test:ui    # Run tests with UI
 ```
 
-### 运行测试
+---
 
-```bash
-# 运行单元测试
-npm test
+## Contributing
 
-# 运行测试并打开 UI 界面
-npm run test:ui
-```
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-## P1 功能改进（已完成）
+## Code of Conduct
 
-✅ **数据持久化** - 画布状态自动保存至后端，切换工作空间自动加载  
-✅ **性能优化工具** - 提供 debounce/throttle 工具和批量更新优化  
-✅ **TypeScript 类型** - 完善核心类型定义（Canvas、Workspace、Tool 等）  
-✅ **测试框架** - 集成 Vitest，包含性能工具的单元测试示例
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
 
-## 常见问题
+## License
 
-**Q: 启动后看不到工作空间？**  
-A: 首次运行需要点击左侧边栏的"创建新工作空间"按钮。
+This project is licensed under the [MIT License](LICENSE).
 
-**Q: AI 功能无法使用？**  
-A: 检查后端 `.env` 中的 API 密钥是否正确配置。
+---
 
-**Q: 文件上传失败？**  
-A: 检查文件大小是否超过限制（默认 10MB），确保 `server/files` 目录存在且有写入权限。
+## FAQ
 
-## 许可证
+**Q: No workspace visible after starting?**
+A: Click the "Create New Workspace" button in the left sidebar.
 
-Private - All Rights Reserved
+**Q: AI features not working?**
+A: Check that the API keys in `server/.env` are correctly configured. You can also set `MOCK_AGENT=true` to test without API credits.
 
-## 联系方式
-
-如有问题或建议，请提交 Issue。
+**Q: File upload failed?**
+A: Check the file size limit (default 10MB) and ensure the `server/files` directory exists with write permissions.

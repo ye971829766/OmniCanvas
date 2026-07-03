@@ -1,15 +1,7 @@
 <template>
   <main class="canvas-container">
-    <div
-      v-if="canvasLoading"
-      class="absolute inset-0 w-full h-full z-100 flex justify-center items-center bg-white/50 backdrop-blur-sm z-1000"
-    >
-      <ProgressBar
-        mode="indeterminate"
-        style="height: 6px; width: 200px"
-      ></ProgressBar>
-    </div>
-    <div class="dot-grid"></div>
+    <CanvasLoader :loading="canvasLoading" />
+    <CanvasBackground ref="canvasBgRef" :leafer-app="canvasApp" />
     <div
       class="flex-1 relative overflow-hidden w-full h-full"
       ref="canvasRef"
@@ -145,9 +137,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, useTemplateRef, watch, toRef, onMounted, onUnmounted } from "vue";
+import { ref, shallowRef, useTemplateRef, watch, toRef, onMounted, onUnmounted } from "vue";
 import logoImg from "@/assets/logo.jpg";
 import { useToast } from "primevue/usetoast";
+import CanvasBackground from "@/components/canvas/CanvasBackground.vue";
+import CanvasLoader from "@/components/canvas/CanvasLoader.vue";
 
 const props = defineProps<{
   agentPanelCollapsed: boolean;
@@ -163,6 +157,7 @@ import ElementInfoLabel from "@/components/canvas/floatToolbar/ElementInfoLabel.
 import ViboardToolbar from "@/components/ViboardToolbar.vue";
 import { VideoNode } from "@/components/canvas/nodes/VideoNode";
 import { useCanvas } from "@/composables/useCanvas";
+import { useCanvasEntrance } from "@/composables/useCanvasEntrance";
 import { uploadImage, uploadVideo } from "@/utils/api";
 import LayerPanel from "@/components/canvas/LayerPanel.vue";
 import ZoomController from "@/components/canvas/ZoomController.vue";
@@ -175,6 +170,7 @@ import {
 import { Image } from "leafer-ui";
 
 const canvasRef = useTemplateRef("canvasRef");
+const canvasBgRef = shallowRef<InstanceType<typeof CanvasBackground> | null>(null);
 const toast = useToast();
 
 // State for bottom toolbar controls
@@ -205,6 +201,9 @@ const {
   fontFamily,
   toRef(props, "activeWorkspaceId"),
 );
+
+// A2: Element entrance animations — spring scale-in on every agent-placed node
+useCanvasEntrance(canvasApp);
 
 const {
   isCropping,
@@ -597,9 +596,25 @@ onUnmounted(() => {
   window.removeEventListener("keydown", handleCropKeyDown);
 });
 
+/**
+ * Convert Leafer world-space coordinates to screen coordinates,
+ * then trigger a ripple on the background canvas.
+ */
+function triggerAgentRipple(worldX: number, worldY: number): void {
+  const app = canvasApp.value;
+  if (!app || !canvasBgRef.value) return;
+  const zoom: number = (app.tree as any).scale ?? 1;
+  const panX: number = (app.tree as any).x ?? 0;
+  const panY: number = (app.tree as any).y ?? 0;
+  const screenX = worldX * zoom + panX;
+  const screenY = worldY * zoom + panY;
+  canvasBgRef.value.triggerRipple(screenX, screenY);
+}
+
 defineExpose({
   canvasApp,
   recordHistoryDebounced,
+  triggerAgentRipple,
 });
 </script>
 
@@ -679,14 +694,6 @@ body {
   justify-content: center;
 }
 
-/* Dot Grid Background */
-.dot-grid {
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(#e4e4e7 1.5px, transparent 1.5px);
-  background-size: 24px 24px;
-  z-index: -1;
-}
 
 /* Demo Info */
 .demo-info {

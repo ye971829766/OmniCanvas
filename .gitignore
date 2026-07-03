@@ -1,9 +1,54 @@
+# Dependencies
 node_modules
-.qoder
-dist
-.agents
 
-# Leaked third-party prompt artifact - must not be re-committed
-Prompt.md
+# Build output
+dist
+
+# Environment variables
 .env
-server/.env
+.env.local
+.env.*.local
+
+# IDE / Editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Logs
+*.log
+*.err.log
+*.out.log
+
+# Agent / AI tool artifacts
+.agents
+.qoder
+.claude
+
+# Backup files
+*.bak
+
+# Scratch / debug scripts
+scratch/
+
+# Leaked third-party prompt artifact
+Prompt.md
+
+# Standalone system-prompt copy (canonical version is in server/src/agent/system-prompt.ts)
+system-prompt.md
+
+# Server runtime data (user-generated content)
+server/data/
+server/files/
+
+# Test artifacts
+server/test.mp4

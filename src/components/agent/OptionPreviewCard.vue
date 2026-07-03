@@ -1,6 +1,9 @@
 <script setup lang="ts">
-defineProps<{
+import { ref, watch, computed } from "vue";
+
+const props = defineProps<{
   refId: string;
+  title?: string;
   state?: {
     refId: string;
     type: "image" | "video" | "text" | "rect" | string;
@@ -11,45 +14,162 @@ defineProps<{
   };
 }>();
 
-const emit = defineEmits<{
-  (e: "zoom", refId: string): void;
-}>();
+const emit = defineEmits<{ (e: "zoom", refId: string): void }>();
+
+// Track when image finishes loading to fire the curtain reveal
+const imgLoaded = ref(false);
+const showGlow = ref(false);
+
+const displayTitle = computed(() => {
+  if (props.title) return props.title;
+  const stateVal = props.state as any;
+  if (stateVal?.prompt) {
+    const p = String(stateVal.prompt).trim();
+    if (p.length > 0) {
+      // Pick first 16 characters or Chinese title
+      return p.length > 18 ? p.slice(0, 18) + "…" : p;
+    }
+  }
+  return "视觉设计方案";
+});
+
+watch(
+  () => props.state?.status,
+  (status) => {
+    if (status === "done") {
+      imgLoaded.value = false; // reset for re-generation
+    }
+  },
+);
+
+function onImgLoad() {
+  imgLoaded.value = true;
+  showGlow.value = true;
+  setTimeout(() => {
+    showGlow.value = false;
+  }, 700);
+}
+
+function downloadMedia(e: MouseEvent) {
+  e.stopPropagation();
+  const url = props.state?.url || props.state?.thumbnailUrl;
+  if (!url) return;
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${displayTitle.value || "design"}_${Date.now()}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
 </script>
 
 <template>
-  <div class="option-preview-card" @click="emit('zoom', refId)">
-    <!-- Loading status -->
-    <div v-if="!state || state.status === 'generating'" class="preview-skeleton">
-      <div class="skeleton-shimmer" />
-      <div class="skeleton-label">生成中…</div>
+  <div
+    class="preview-card"
+    :class="{ 'glow-ring': showGlow }"
+    @click="emit('zoom', refId)"
+  >
+    <!-- ── GENERATING: gradient mesh skeleton ──────────────────── -->
+    <div v-if="!state || state.status === 'generating'" class="preview-mesh">
+      <div class="mesh-gradient" />
+      <div class="mesh-content">
+        <p class="mesh-label">生成中…</p>
+        <div class="mesh-progress" />
+      </div>
     </div>
 
-    <!-- Error status -->
+    <!-- ── ERROR ──────────────────────────────────────────────── -->
     <div v-else-if="state.status === 'error'" class="preview-error">
-      <span class="text-red-500 mr-2">⚠️</span>
+      <span class="error-icon">⚠</span>
       <span class="error-text">{{ state.error || "生成失败" }}</span>
     </div>
 
-    <!-- Done status (Image) -->
+    <!-- ── DONE: image ────────────────────────────────────────── -->
     <div
       v-else-if="state.status === 'done' && state.type === 'image'"
-      class="preview-content"
+      class="preview-done"
     >
-      <img :src="state.url" class="preview-img" />
+      <img
+        :src="state.url"
+        class="preview-img"
+        :class="{ revealed: imgLoaded }"
+        @load="onImgLoad"
+      />
+      <!-- curtain reveal (clips away top→bottom as image loads) -->
+      <div class="curtain" :class="{ 'curtain-open': imgLoaded }" />
+
+      <!-- Floating Download Button (Reference Image 2/3 style) -->
+      <button
+        class="action-download-btn"
+        @click.stop="downloadMedia"
+        title="下载高清原图"
+        aria-label="下载图片"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          width="16"
+          height="16"
+        >
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </button>
+
       <div class="preview-overlay">
         <span class="preview-tip">点击定位画布</span>
       </div>
     </div>
 
-    <!-- Done status (Video) -->
+    <!-- ── DONE: video ────────────────────────────────────────── -->
     <div
       v-else-if="state.status === 'done' && state.type === 'video'"
-      class="preview-content"
+      class="preview-done"
     >
-      <img :src="state.thumbnailUrl || state.url" class="preview-img" />
-      <div class="video-play-btn">
-        <span class="play-icon">▶</span>
-      </div>
+      <img
+        :src="state.thumbnailUrl || state.url"
+        class="preview-img"
+        :class="{ revealed: imgLoaded }"
+        @load="onImgLoad"
+      />
+      <div class="curtain" :class="{ 'curtain-open': imgLoaded }" />
+      <!-- Play button with breathing pulse -->
+      <button
+        class="play-btn"
+        @click.stop="emit('zoom', refId)"
+        aria-label="定位画布"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </button>
+
+      <!-- Floating Download Button -->
+      <button
+        class="action-download-btn"
+        @click.stop="downloadMedia"
+        title="下载视频"
+        aria-label="下载视频"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          width="16"
+          height="16"
+        >
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </button>
+
+      <span class="video-badge">VIDEO</span>
       <div class="preview-overlay">
         <span class="preview-tip">点击定位画布</span>
       </div>
@@ -58,52 +178,196 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-.option-preview-card {
-  margin-top: 8px;
-  margin-bottom: 8px;
-  border-radius: 12px;
-  border: 1px solid var(--p-surface-200, #e5e7eb);
-  background: var(--p-surface-50, #f9fafb);
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+/* ── Title Header ───────────────────────────────────────────────── */
+.card-title-header {
+  padding: 8px 12px 6px;
+  background: var(--p-surface-0, #ffffff);
+  border-bottom: 1px solid var(--p-surface-100, #f4f4f5);
 }
 
-.option-preview-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  border-color: var(--p-primary-color);
+.card-title-text {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--p-text-color, #18181b);
+  letter-spacing: 0.2px;
 }
 
-.preview-loading {
+/* ── Floating Download Button (Reference Image style) ──────────── */
+.action-download-btn {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #18181b;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12.5px;
-  color: var(--p-text-muted-color, #6b7280);
+  cursor: pointer;
+  z-index: 5;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  transition: all 0.18s ease;
 }
 
+.action-download-btn:hover {
+  background: #18181b;
+  color: #ffffff;
+  transform: scale(1.08);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Card shell ─────────────────────────────────────────────────── */
+.preview-card {
+  position: relative;
+  margin: 8px 0;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  transition:
+    transform 0.18s cubic-bezier(0, 0, 0.2, 1),
+    box-shadow 0.18s cubic-bezier(0, 0, 0.2, 1);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* .preview-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+} */
+
+/* .preview-card:hover .preview-img {
+  transform: scale(1.02);
+} */
+
+/* Glow ring flash on complete */
+.glow-ring {
+  box-shadow:
+    0 0 0 3px rgba(16, 185, 129, 0.2),
+    0 8px 24px rgba(0, 0, 0, 0.1);
+  animation: glow-flash 0.7s ease-out forwards;
+}
+
+@keyframes glow-flash {
+  0% {
+    box-shadow:
+      0 0 0 4px rgba(16, 185, 129, 0.35),
+      0 8px 24px rgba(0, 0, 0, 0.1);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0px rgba(16, 185, 129, 0),
+      0 4px 16px rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* ── Gradient mesh skeleton ─────────────────────────────────────── */
+.preview-mesh {
+  min-height: 180px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.mesh-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    #f4f4f5 0%,
+    #e4e4e7 25%,
+    #fafafa 50%,
+    #e4e4e7 75%,
+    #f4f4f5 100%
+  );
+  background-size: 400% 400%;
+  animation: mesh-flow 4s ease-in-out infinite;
+}
+
+@keyframes mesh-flow {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.mesh-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.mesh-label {
+  font-size: 12px;
+  color: #71717a;
+  font-weight: 500;
+  user-select: none;
+}
+
+.mesh-progress {
+  width: 80px;
+  height: 2px;
+  border-radius: 1px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.06);
+  position: relative;
+}
+
+.mesh-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, #7c3aed, transparent);
+  background-size: 200% 100%;
+  animation: mesh-progress-flow 1.8s ease-in-out infinite;
+}
+
+@keyframes mesh-progress-flow {
+  0% {
+    background-position: 150% 0;
+  }
+  100% {
+    background-position: -150% 0;
+  }
+}
+
+/* ── Error ──────────────────────────────────────────────────────── */
 .preview-error {
   display: flex;
   align-items: center;
+  gap: 8px;
   padding: 16px;
+  background: #fef2f2;
+  border-radius: 14px;
   font-size: 12.5px;
-  color: #ef4444;
 }
 
+.error-icon {
+  font-size: 16px;
+}
 .error-text {
+  color: #ef4444;
   font-weight: 500;
 }
 
-.preview-content {
+/* ── Done content ───────────────────────────────────────────────── */
+.preview-done {
   position: relative;
-  width: 100%;
+  overflow: hidden;
   background: #111;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .preview-img {
@@ -112,102 +376,137 @@ const emit = defineEmits<{
   max-height: 480px;
   display: block;
   object-fit: contain;
-  transition: transform 0.3s ease;
+  filter: blur(10px);
+  transition:
+    filter 0.4s ease,
+    transform 0.3s cubic-bezier(0, 0, 0.2, 1);
 }
 
-.preview-skeleton {
-  height: 200px;
-  position: relative;
-  overflow: hidden;
-  background: var(--p-surface-100, #f3f4f6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.preview-img.revealed {
+  filter: blur(0);
 }
 
-.skeleton-shimmer {
+/* Curtain: a div that slides up to reveal the image top→bottom */
+.curtain {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.5) 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation: shimmer-sweep 1.6s ease-in-out infinite;
+  background: #f4f4f5;
+  transform-origin: top center;
+  transform: scaleY(1);
+  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
 }
 
-@keyframes shimmer-sweep {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+.curtain-open {
+  transform: scaleY(0);
 }
 
-.skeleton-label {
-  font-size: var(--text-sm, 13px);
-  color: var(--p-text-muted-color, #9ca3af);
-  position: relative;
-  z-index: 1;
-}
-
+/* Overlay */
 .preview-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.6) 0%,
-    rgba(0, 0, 0, 0) 60%
-  );
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, transparent 55%);
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
   padding: 10px 12px;
-  opacity: 0.85;
+  opacity: 0;
   transition: opacity 0.2s ease;
 }
 
-.option-preview-card:hover .preview-overlay {
+.preview-card:hover .preview-overlay {
   opacity: 1;
 }
 
-.preview-tag {
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  color: #fff;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.video-tag {
-  background: rgba(109, 40, 217, 0.4);
-  border-color: rgba(109, 40, 217, 0.2);
-}
-
 .preview-tip {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 11px;
+  font-weight: 500;
 }
 
-.video-play-btn {
+/* ── Video play button ──────────────────────────────────────────── */
+.play-btn {
   position: absolute;
-  width: 36px;
-  height: 36px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+  border: none;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 2;
-  transition: transform 0.2s ease;
+  color: #18181b;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  z-index: 3;
+  animation: play-breathe 2s ease-in-out infinite;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
 }
 
-.option-preview-card:hover .video-play-btn {
-  transform: scale(1.1);
+.play-btn:hover {
+  background: #18181b;
+  color: #fff;
+  transform: translate(-50%, -50%) scale(1.1);
+  animation: none;
 }
 
-.play-icon {
-  color: var(--p-primary-color);
-  font-size: 12px;
-  margin-left: 2px;
+@keyframes play-breathe {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+.video-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  padding: 3px 8px;
+  border-radius: 99px;
+  z-index: 3;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────── */
+:global(.p-dark) .preview-card {
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+:global(.p-dark) .mesh-gradient {
+  background: linear-gradient(
+    135deg,
+    #18181b 0%,
+    #27272a 25%,
+    #1f1f23 50%,
+    #27272a 75%,
+    #18181b 100%
+  );
+  background-size: 400% 400%;
+}
+
+:global(.p-dark) .preview-error {
+  background: #1c1111;
+}
+
+:global(.p-dark) .curtain {
+  background: #18181b;
+}
+
+:global(.p-dark) .error-text {
+  color: #f87171;
 }
 </style>
