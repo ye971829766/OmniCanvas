@@ -734,7 +734,7 @@ body {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--text-secondary);
-  background: white;
+  background: var(--surface-panel);
   padding: 6px 12px;
   border-radius: 20px;
   border: 1px solid var(--border-color);

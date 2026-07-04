@@ -171,7 +171,7 @@ function truncate(value: unknown, maxLength: number) {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
-  color: #71717a;
+  color: var(--text-muted);
 }
 
 /* Skeleton shimmer on active text */
@@ -221,15 +221,15 @@ function truncate(value: unknown, maxLength: number) {
 }
 
 /* Dark mode */
-:global(.p-dark) .activity-icon {
+:global(.p-dark .activity-icon) {
   color: #a78bfa;
 }
 
-:global(.p-dark) .activity-text {
+:global(.p-dark .activity-text) {
   color: #a1a1aa;
 }
 
-:global(.p-dark) .activity-progress {
+:global(.p-dark .activity-progress) {
   background: linear-gradient(
     90deg,
     transparent 0%,

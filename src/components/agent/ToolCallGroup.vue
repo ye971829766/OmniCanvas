@@ -229,7 +229,7 @@ function truncate(s: string, n: number) {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #a1a1aa;
+  background: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -252,7 +252,7 @@ function truncate(s: string, n: number) {
 
 .row-chevron {
   font-size: 11px;
-  color: #a1a1aa;
+  color: var(--text-muted);
   margin-left: auto;
   transition: transform 0.15s ease;
 }
@@ -323,19 +323,19 @@ function truncate(s: string, n: number) {
 }
 
 /* Dark mode */
-:global(.p-dark) .inline-action-btn {
+:global(.p-dark .inline-action-btn) {
   color: #a1a1aa;
 }
 
-:global(.p-dark) .inline-action-btn:hover {
+:global(.p-dark .inline-action-btn:hover) {
   color: #fafafa;
 }
 
-:global(.p-dark) .inline-timeline-body {
+:global(.p-dark .inline-timeline-body) {
   border-left-color: #27272a;
 }
 
-:global(.p-dark) .row-header:hover {
+:global(.p-dark .row-header:hover) {
   background: #1f1f23;
   color: #fafafa;
 }

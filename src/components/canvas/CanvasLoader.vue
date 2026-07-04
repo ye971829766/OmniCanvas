@@ -72,15 +72,15 @@ const emit = defineEmits<{ (e: 'hidden'): void }>();
 }
 
 /* Dark mode */
-:global(.p-dark) .canvas-loader {
+:global(.p-dark .canvas-loader) {
   background: rgba(9, 9, 11, 0.9);
 }
 
-:global(.p-dark) .loader-spinner {
+:global(.p-dark .loader-spinner) {
   color: #f4f4f5;
 }
 
-:global(.p-dark) .loader-text {
+:global(.p-dark .loader-text) {
   color: #a1a1aa;
 }
 </style>

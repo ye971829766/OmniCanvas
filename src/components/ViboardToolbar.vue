@@ -610,7 +610,7 @@ onUnmounted(() => {
   transform: translateX(-50%) translateY(4px);
   margin-bottom: 8px;
   background-color: var(--tooltip-bg);
-  color: white;
+  color: var(--p-surface-0);
   padding: 4px 6px;
   border-radius: 6px;
   font-size: 0.7rem;
@@ -654,14 +654,12 @@ onUnmounted(() => {
   align-items: center;
   gap: 2px;
   padding: 4px 6px;
-  background-color: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
+  background-color: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: 12px;
-  box-shadow:
-    0 10px 25px -10px rgba(0, 0, 0, 0.05),
-    0 1px 3px rgba(0, 0, 0, 0.01);
+  box-shadow: var(--shadow-lg);
   pointer-events: auto;
   overflow: visible;
 }
@@ -673,12 +671,12 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%) translateY(10px);
   height: 44px;
-  background-color: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
+  background-color: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: 9999px;
-  box-shadow: 0 10px 25px -10px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-lg);
   display: flex;
   align-items: center;
   justify-content: center;

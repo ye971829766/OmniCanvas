@@ -109,7 +109,7 @@ onUnmounted(stopPolling);
   100% { opacity: 0; }
 }
 
-:global(.p-dark) .canvas-thumb {
+:global(.p-dark .canvas-thumb) {
   background: #18181b;
   border-color: #27272a;
 }

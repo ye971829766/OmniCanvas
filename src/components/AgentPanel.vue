@@ -230,8 +230,8 @@ function useSuggestion(s: string) {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--p-surface-0, #fff);
-  border-left: 1px solid var(--p-surface-200, #e5e7eb);
+  background: var(--surface-panel);
+  border-left: 1px solid var(--border-color);
   overflow: hidden;
   z-index: 99;
 }
@@ -247,8 +247,8 @@ function useSuggestion(s: string) {
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--p-surface-0, #fff);
-  box-shadow: 0 -8px 16px -4px rgba(0, 0, 0, 0.04);
+  background: var(--surface-panel);
+  box-shadow: 0 -8px 16px -4px var(--border-subtle);
   z-index: 50;
 }
 
@@ -265,9 +265,9 @@ function useSuggestion(s: string) {
   align-items: center;
   justify-content: space-between;
   padding: 7px 14px;
-  border-top: 1px solid var(--p-surface-100, #f3f4f6);
+  border-top: 1px solid var(--border-subtle);
   font-size: var(--text-sm);
-  color: var(--p-text-muted-color, #6b7280);
+  color: var(--text-muted);
 }
 
 .notification-text {
@@ -282,7 +282,7 @@ function useSuggestion(s: string) {
 
 .notification-btn-enable {
   background: transparent;
-  color: var(--p-primary-color, #6d28d9);
+  color: var(--accent-primary);
   border: none;
   padding: 0;
   cursor: pointer;
@@ -296,7 +296,7 @@ function useSuggestion(s: string) {
 
 .notification-btn-close {
   background: transparent;
-  color: var(--p-text-muted-color, #9ca3af);
+  color: var(--text-muted);
   border: none;
   font-size: 14px;
   cursor: pointer;
@@ -312,16 +312,16 @@ function useSuggestion(s: string) {
   gap: 7px;
   padding: 8px 14px 12px;
   font-size: var(--text-sm);
-  background: rgba(250, 250, 250, 0.95);
-  backdrop-filter: blur(8px);
-  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border-top: 1px solid var(--border-subtle);
   overflow: hidden;
 }
 
 .status-icon {
   display: flex;
   align-items: center;
-  color: #10b981;
+  color: var(--accent-success);
   flex-shrink: 0;
 }
 
@@ -356,7 +356,7 @@ function useSuggestion(s: string) {
   flex: 1;
   font-weight: 500;
   font-size: 13px;
-  color: #3f3f46;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -365,7 +365,7 @@ function useSuggestion(s: string) {
 .status-timer {
   font-family: var(--font-family-mono, "JetBrains Mono", "SF Mono", monospace);
   font-size: 11px;
-  color: #a1a1aa;
+  color: var(--text-muted);
   font-weight: 500;
   letter-spacing: 0.5px;
   flex-shrink: 0;
@@ -381,9 +381,9 @@ function useSuggestion(s: string) {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    #10b981 25%,
-    #34d399 50%,
-    #10b981 75%,
+    var(--accent-success) 25%,
+    var(--accent-success) 50%,
+    var(--accent-success) 75%,
     transparent 100%
   );
   background-size: 200% 100%;

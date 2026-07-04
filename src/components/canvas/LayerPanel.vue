@@ -729,7 +729,7 @@ watch(
 
 .layer-item .action-btn.delete:hover {
   background: #fef2f2;
-  color: #ef4444;
+  color: var(--accent-error);
 }
 </style>
 

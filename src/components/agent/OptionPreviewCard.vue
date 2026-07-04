@@ -156,7 +156,7 @@ function downloadMedia(e: MouseEvent) {
 .card-title-text {
   font-size: 13px;
   font-weight: 650;
-  color: var(--p-text-color, #18181b);
+  color: var(--text-primary);
   letter-spacing: 0.2px;
 }
 
@@ -171,7 +171,7 @@ function downloadMedia(e: MouseEvent) {
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(0, 0, 0, 0.08);
-  color: #18181b;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -182,7 +182,7 @@ function downloadMedia(e: MouseEvent) {
 }
 
 .action-download-btn:hover {
-  background: #18181b;
+  background: var(--accent-primary);
   color: #ffffff;
   transform: scale(1.08);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
@@ -280,7 +280,7 @@ function downloadMedia(e: MouseEvent) {
 
 .mesh-label {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
   font-weight: 500;
   user-select: none;
 }
@@ -327,7 +327,7 @@ function downloadMedia(e: MouseEvent) {
   font-size: 16px;
 }
 .error-text {
-  color: #ef4444;
+  color: var(--accent-error);
   font-weight: 500;
 }
 
@@ -384,7 +384,7 @@ function downloadMedia(e: MouseEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #18181b;
+  color: var(--text-primary);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
   z-index: 3;
   animation: play-breathe 2s ease-in-out infinite;
@@ -394,7 +394,7 @@ function downloadMedia(e: MouseEvent) {
 }
 
 .play-btn:hover {
-  background: #18181b;
+  background: var(--accent-primary);
   color: #fff;
   transform: translate(-50%, -50%) scale(1.1);
   animation: none;
@@ -427,12 +427,12 @@ function downloadMedia(e: MouseEvent) {
 }
 
 /* ── Dark mode ──────────────────────────────────────────────────── */
-:global(.p-dark) .preview-card {
+:global(.p-dark .preview-card) {
   border-color: rgba(255, 255, 255, 0.05);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
-:global(.p-dark) .mesh-gradient {
+:global(.p-dark .mesh-gradient) {
   background: linear-gradient(
     135deg,
     #18181b 0%,
@@ -444,15 +444,15 @@ function downloadMedia(e: MouseEvent) {
   background-size: 400% 400%;
 }
 
-:global(.p-dark) .preview-error {
+:global(.p-dark .preview-error) {
   background: #1c1111;
 }
 
-:global(.p-dark) .curtain {
+:global(.p-dark .curtain) {
   background: #18181b;
 }
 
-:global(.p-dark) .error-text {
+:global(.p-dark .error-text) {
   color: #f87171;
 }
 </style>

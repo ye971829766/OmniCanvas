@@ -587,7 +587,7 @@ function handleSubmit() {
           title="停止"
           @click="emit('stop')"
         >
-          <Square :size="10" />
+          <Square :size="10" fill="currentColor" />
         </button>
         <button
           v-else
@@ -622,7 +622,7 @@ function handleSubmit() {
 
 /* Focus: lift + glow ring */
 .agent-input-wrap.is-focused {
-  border-color: #18181b;
+  border-color: var(--accent-primary);
   box-shadow:
     0 0 0 3px rgba(24, 24, 27, 0.07),
     0 4px 16px rgba(0, 0, 0, 0.07);
@@ -791,7 +791,7 @@ function handleSubmit() {
   align-items: center;
   justify-content: center;
   color: #fff;
-  background: #18181b;
+  background: var(--accent-primary);
   transition:
     background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     transform       0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -823,29 +823,34 @@ function handleSubmit() {
 }
 
 .toolbar-send-btn:disabled {
-  background: #e4e4e7;
-  color: #a1a1aa;
+  background: var(--surface-active);
+  color: var(--text-muted);
   cursor: not-allowed;
   box-shadow: none;
   transform: none;
 }
 
 .send-stop {
-  background: transparent;
-  border: 1.5px solid #ef4444;
-  color: #ef4444;
+  background: var(--accent-error, #ff3b30);
+  border: none;
+  color: #ffffff;
   border-radius: 8px;
   box-shadow: none;
-  animation: stop-pulse 1.5s ease-in-out infinite;
+  animation: none !important;
+  transform: none !important;
+  transition: opacity 0.15s ease;
 }
 
 .send-stop:hover {
-  background: rgba(239, 68, 68, 0.08) !important;
+  background: var(--accent-error, #ff3b30) !important;
+  opacity: 0.88;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
-@keyframes stop-pulse {
-  0%, 100% { transform: scale(1);    }
-  50%       { transform: scale(1.06); }
+.send-stop:active {
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .char-counter {
@@ -1037,7 +1042,7 @@ function handleSubmit() {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #0f172a;
+  background: var(--accent-primary);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
   display: flex;
@@ -1069,54 +1074,54 @@ function handleSubmit() {
 }
 
 /* ── Dark mode ─────────────────────────────────────────────────── */
-:global(.p-dark) .agent-input-wrap {
+:global(.p-dark .agent-input-wrap) {
   background: #18181b;
   border-color: #27272a;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-:global(.p-dark) .agent-input-wrap.is-focused {
+:global(.p-dark .agent-input-wrap.is-focused) {
   border-color: #d4d4d8;
   box-shadow:
     0 0 0 3px rgba(212, 212, 216, 0.08),
     0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
-:global(.p-dark) .agent-input-wrap.is-dragging {
+:global(.p-dark .agent-input-wrap.is-dragging) {
   border-color: #34d399;
   background: rgba(52, 211, 153, 0.05);
 }
 
-:global(.p-dark) .toolbar-send-btn:not(:disabled) {
+:global(.p-dark .toolbar-send-btn:not(:disabled)) {
   background: #fafafa;
   color: #09090b;
   box-shadow: 0 2px 8px rgba(255, 255, 255, 0.12);
 }
 
-:global(.p-dark) .toolbar-send-btn:not(:disabled):hover {
+:global(.p-dark .toolbar-send-btn:not(:disabled):hover) {
   box-shadow: 0 4px 14px rgba(255, 255, 255, 0.2);
 }
 
-:global(.p-dark) .toolbar-send-btn:disabled {
+:global(.p-dark .toolbar-send-btn:disabled) {
   background: #27272a;
   color: #52525b;
 }
 
-:global(.p-dark) .agent-input-toolbar {
+:global(.p-dark .agent-input-toolbar) {
   border-top-color: #27272a;
 }
 
-:global(.p-dark) .mentions-popup {
+:global(.p-dark .mentions-popup) {
   background: #1f1f23;
   border-color: rgba(255, 255, 255, 0.06);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 
-:global(.p-dark) .mention-item.active {
+:global(.p-dark .mention-item.active) {
   background: #27272a;
 }
 
-:global(.p-dark) .mention-item-name {
+:global(.p-dark .mention-item-name) {
   color: #e4e4e7;
 }
 </style>

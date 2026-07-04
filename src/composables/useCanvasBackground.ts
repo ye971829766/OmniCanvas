@@ -26,21 +26,21 @@ export interface Ripple {
 // ---------------------------------------------------------------------------
 
 const LIGHT = {
-  bg: "#fafafa",
-  dot: { r: 228, g: 228, b: 231 }, // #e4e4e7
-  dotRadius: 0.75, // 1.5 px diameter
+  bg: "#f5f6f7",
+  dot: { r: 199, g: 201, b: 206 }, // #c7c9ce — clearly visible on light canvas
+  dotRadius: 0.95, // 1.9 px diameter
   spacing: 24,
 } as const;
 
 const DARK = {
-  bg: "#0a0a0a",
-  dot: { r: 39, g: 39, b: 42 }, // #27272a
-  dotRadius: 0.6, // 1.2 px diameter
+  bg: "#121215",
+  dot: { r: 82, g: 82, b: 90 }, // #52525a — visible on dark canvas
+  dotRadius: 0.85, // 1.7 px diameter
   spacing: 24,
 } as const;
 
-/** Ripple accent — violet that looks warm/AI-like on both themes */
-const ACCENT = { r: 124, g: 58, b: 237 }; // #7c3aed
+/** Ripple accent — neutral near-black, matches the near-black CTA palette */
+const ACCENT = { r: 28, g: 28, b: 30 }; // #1c1c1e
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -270,24 +270,11 @@ export function useCanvasBackground(
       const blurAlpha = (1 - zoom / 0.3) * 0.3;
       ctx.fillStyle = isDark.value
         ? `rgba(10,10,10,${blurAlpha})`
-        : `rgba(250,250,250,${blurAlpha})`;
+        : `rgba(245,246,247,${blurAlpha})`;
       ctx.fillRect(0, 0, W, H);
     }
 
-    // ------------------------------------------------------------------
-    // Dark-mode radial vignette
-    // ------------------------------------------------------------------
-    if (isDark.value) {
-      const cx = W / 2;
-      const cy = H / 2;
-      const innerR = Math.min(W, H) * 0.25;
-      const outerR = Math.hypot(W, H) / 2;
-      const grad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
-      grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(1, "rgba(0,0,0,0.45)");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
-    }
+
 
     // ------------------------------------------------------------------
     // Ripples (drawn on top so they're always visible)

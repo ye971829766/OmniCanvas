@@ -910,7 +910,7 @@ onUnmounted(() => {
 
 .opacity-input-wrapper:focus-within,
 .pop-opacity-wrapper:focus-within {
-  background-color: white;
+  background-color: var(--p-surface-0);
   border-color: var(--brand-text, #6c5cff);
   box-shadow: 0 0 0 2px rgba(108, 92, 255, 0.12);
 }
@@ -952,12 +952,11 @@ onUnmounted(() => {
 
 .color-popover {
   width: 190px;
-  background: white;
+  background: var(--p-surface-0);
+  color: var(--p-text-color);
+  border: 1px solid var(--p-surface-200);
   border-radius: 12px;
-  box-shadow:
-    0 20px 40px -8px rgba(0, 0, 0, 0.15),
-    0 8px 16px -4px rgba(0, 0, 0, 0.08),
-    0 0 0 1px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-lg);
   padding: 8px;
   display: flex;
   flex-direction: column;

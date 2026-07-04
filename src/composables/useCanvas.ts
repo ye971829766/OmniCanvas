@@ -1,4 +1,5 @@
 import { ref, shallowRef, watch, onMounted, onUnmounted, type Ref } from "vue";
+import { useTheme } from "@/composables/useTheme";
 import {
   App,
   MoveEvent,
@@ -331,11 +332,11 @@ export function useCanvas(
 
     // Don't intercept copy/cut when user has selected text (e.g. in chat panel)
     const selection = window.getSelection();
-    const hasTextSelection = selection && selection.toString().trim().length > 0;
+    const hasTextSelection =
+      selection && selection.toString().trim().length > 0;
     const key = e.key.toLowerCase();
     const isCtrl = e.ctrlKey || e.metaKey;
     if (hasTextSelection && isCtrl && (key === "c" || key === "x")) return;
-
 
     if (isCtrl) {
       if (key === "z") {
@@ -560,7 +561,7 @@ export function useCanvas(
       editor: {
         editBoxType: "box",
         hideOnMove: false,
-        stroke: "var(--p-primary-color)",
+        stroke: "#3d8bd6",
         circle: {
           width: 14,
           height: 14,
@@ -606,10 +607,14 @@ export function useCanvas(
       y: 28,
     });
 
+    // Dynamic guide line color per theme mode (neutral monochrome)
+    const { isDark } = useTheme();
+    const getSnapLineColor = (dark: boolean) => (dark ? "#ffffff" : "#18181b");
+
     // Initialize smart snapping using leafer-x-snap
     const snap = new Snap(app as any, {
       snapSize: 6,
-      lineColor: "#000000",
+      lineColor: getSnapLineColor(isDark.value),
       strokeWidth: 1.5,
       dashPattern: [4, 4],
       isDash: true,
@@ -637,6 +642,16 @@ export function useCanvas(
       },
     });
     snap.enable(true);
+
+    watch(
+      isDark,
+      (dark) => {
+        if (snap) {
+          snap.lineColor = getSnapLineColor(dark);
+        }
+      },
+      { immediate: true },
+    );
 
     // Observe container resize to update Leafer App dimensions
     resizeObserver = new ResizeObserver((entries) => {

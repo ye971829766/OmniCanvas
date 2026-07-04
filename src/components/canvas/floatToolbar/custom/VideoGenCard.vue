@@ -426,7 +426,7 @@ const handleGenerate = async () => {
 <style scoped lang="scss">
 .video-gen-card {
   width: 500px;
-  background-color: #ffffff;
+  background-color: var(--surface-panel);
   border: 1px solid var(--border-color);
   border-radius: 16px; // rounded-2xl
   box-shadow:
@@ -641,7 +641,7 @@ const handleGenerate = async () => {
 
 .error-banner {
   font-size: 10px;
-  color: #ef4444;
+  color: var(--accent-error);
   word-break: break-all;
   background-color: #fef2f2;
   border: 1px solid #fee2e2;
@@ -758,7 +758,7 @@ const handleGenerate = async () => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
   &:hover:not(:disabled) {
-    background: #ef4444;
+    background: var(--accent-error);
   }
 
   &:disabled {

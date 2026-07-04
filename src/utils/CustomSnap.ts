@@ -36,7 +36,7 @@ export type SnapConfig = {
 };
 
 const DEFAULT_SNAP_SIZE = 10;
-const DEFAULT_LINE_COLOR = "#7F6EF6";
+const DEFAULT_LINE_COLOR = "#18181b";
 
 export class CustomSnap {
   private app: IApp;

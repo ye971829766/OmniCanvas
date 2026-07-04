@@ -224,14 +224,26 @@
                 Guest Designer
               </span>
             </div>
-            <Button
-              variant="text"
-              rounded
-              class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
-              @click="openSettings"
-            >
-              <Settings :size="18" />
-            </Button>
+            <div class="flex items-center gap-0.5">
+              <Button
+                variant="text"
+                rounded
+                class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
+                :title="isDark ? '切换到亮色模式' : '切换到暗色模式'"
+                @click="toggleTheme"
+              >
+                <Sun v-if="isDark" :size="18" />
+                <Moon v-else :size="18" />
+              </Button>
+              <Button
+                variant="text"
+                rounded
+                class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
+                @click="openSettings"
+              >
+                <Settings :size="18" />
+              </Button>
+            </div>
           </div>
 
           <!-- Collapsed State -->
@@ -240,6 +252,16 @@
             key="collapsed"
             class="flex flex-col items-center gap-4 w-full"
           >
+            <Button
+              variant="text"
+              rounded
+              class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
+              :title="isDark ? '切换到亮色模式' : '切换到暗色模式'"
+              @click="toggleTheme"
+            >
+              <Sun v-if="isDark" :size="18" />
+              <Moon v-else :size="18" />
+            </Button>
             <Button
               variant="text"
               rounded
@@ -322,11 +344,16 @@ import {
   Pencil,
   Trash2,
   Settings,
+  Sun,
+  Moon,
 } from "lucide-vue-next";
 import { gsap } from "gsap";
 import vTooltip from "primevue/tooltip";
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
+import { useTheme } from "@/composables/useTheme";
+
+const { isDark, toggleTheme } = useTheme();
 
 const props = defineProps<{
   activeWorkspaceId: string | number | null;

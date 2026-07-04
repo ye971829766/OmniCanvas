@@ -11,6 +11,10 @@ import { NoirPreset } from '@/themes/app-theme';
 import router from '@/router';
 import { ConfirmationService } from 'primevue';
 import ToastService from 'primevue/toastservice';
+import { initTheme } from '@/composables/useTheme';
+
+// Apply saved / OS theme before mount to avoid a flash of the wrong theme.
+initTheme();
 
 const app = createApp(App);
 app.use(PrimeVue, {

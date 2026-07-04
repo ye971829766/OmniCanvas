@@ -768,7 +768,7 @@ function copyText(txt: string) {
 }
 
 /* Dark mode: blobs slightly more visible */
-:global(.p-dark) .ambient-blob {
+:global(.p-dark .ambient-blob) {
   opacity: 0.045;
 }
 
@@ -843,8 +843,8 @@ function copyText(txt: string) {
   max-width: 88%;
   padding: 10px 14px;
   border-radius: 18px 18px 4px 18px;
-  background: #f4f4f5;
-  color: #18181b;
+  background: var(--surface-hover);
+  color: var(--text-primary);
   font-size: var(--text-base);
   line-height: 1.6;
   white-space: pre-wrap;
@@ -902,7 +902,7 @@ function copyText(txt: string) {
   animation: chatgpt-dot-pulse 0.8s ease-in-out infinite alternate;
 }
 
-:global(.p-dark) :deep(.streaming-cursor-dot) {
+:global(.p-dark .streaming-cursor-dot) {
   background: #f4f4f5;
 }
 
@@ -943,7 +943,7 @@ function copyText(txt: string) {
 }
 
 .markdown-body :deep(strong) {
-  color: #0f172a;
+  color: var(--text-primary);
   font-weight: 660;
 }
 
@@ -1169,7 +1169,7 @@ function copyText(txt: string) {
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.05);
 }
 
-:global(.p-dark) .structured-error-card {
+:global(.p-dark .structured-error-card) {
   background: rgba(40, 16, 16, 0.6);
   border-color: rgba(239, 68, 68, 0.3);
 }
@@ -1184,21 +1184,21 @@ function copyText(txt: string) {
 .error-card-title {
   font-size: 13px;
   font-weight: 700;
-  color: #18181b;
+  color: var(--text-primary);
 }
 
-:global(.p-dark) .error-card-title {
+:global(.p-dark .error-card-title) {
   color: #f4f4f5;
 }
 
 .error-card-desc {
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
   line-height: 1.5;
   margin: 0 0 10px;
 }
 
-:global(.p-dark) .error-card-desc {
+:global(.p-dark .error-card-desc) {
   color: #a1a1aa;
 }
 
@@ -1329,7 +1329,7 @@ function copyText(txt: string) {
 .thinking-timer {
   font-family: var(--font-family-mono, monospace);
   font-size: 12px;
-  color: #71717a;
+  color: var(--text-muted);
 }
 
 .thinking-indicator {
@@ -1500,109 +1500,122 @@ function copyText(txt: string) {
    DARK MODE OVERRIDES  (.p-dark selector mirrors PrimeVue convention)
    ═══════════════════════════════════════════════════════════════════ */
 
-:global(.p-dark) .agent-bubble-user {
+:global(.p-dark .agent-bubble-user) {
   background: #27272a;
   color: #fafafa;
 }
 
-:global(.p-dark) .agent-bubble-ai,
-:global(.p-dark) .markdown-body {
-  color: #e4e4e7;
+:global(.p-dark .agent-bubble-ai),
+:global(.p-dark .markdown-body),
+:global(.p-dark .markdown-body p),
+:global(.p-dark .markdown-body li),
+:global(.p-dark .markdown-body h1),
+:global(.p-dark .markdown-body h2),
+:global(.p-dark .markdown-body h3),
+:global(.p-dark .markdown-body h4),
+:global(.p-dark .markdown-body h5),
+:global(.p-dark .markdown-body h6) {
+  color: #f4f4f6;
 }
 
-:global(.p-dark) .markdown-body :deep(strong) {
+:global(.p-dark .markdown-body strong) {
   color: #fafafa;
 }
 
-:global(.p-dark) .markdown-body :deep(th) {
+:global(.p-dark .markdown-body span[style*="color"]),
+:global(.p-dark .markdown-body font[color]) {
+  color: inherit !important;
+}
+
+:global(.p-dark .markdown-body th) {
   background: #27272a;
   color: #fafafa;
 }
 
-:global(.p-dark) .markdown-body :deep(th),
-:global(.p-dark) .markdown-body :deep(td) {
+:global(.p-dark .markdown-body th),
+:global(.p-dark .markdown-body td) {
   border-color: #27272a;
 }
 
-:global(.p-dark) .markdown-body :deep(tr:nth-child(even)) {
+:global(.p-dark .markdown-body tr:nth-child(even)) {
   background: #18181b;
 }
 
-:global(.p-dark) .markdown-body :deep(code) {
+:global(.p-dark .markdown-body code) {
   background: #27272a;
   color: #c4b5fd;
 }
 
-:global(.p-dark) .markdown-body :deep(blockquote) {
+:global(.p-dark .markdown-body blockquote) {
   background: #18181b;
   color: #a1a1aa;
 }
 
-:global(.p-dark) .markdown-body :deep(hr) {
+:global(.p-dark .markdown-body hr) {
   border-top-color: #27272a;
 }
 
-:global(.p-dark) .empty-title {
+:global(.p-dark .empty-title) {
   color: #fafafa;
 }
 
-:global(.p-dark) .empty-sub {
+:global(.p-dark .empty-sub) {
   color: #a1a1aa;
 }
 
-:global(.p-dark) .agent-chip {
+:global(.p-dark .agent-chip) {
   border-color: #27272a;
   color: #d4d4d8;
 }
 
-:global(.p-dark) .agent-chip:hover {
+:global(.p-dark .agent-chip:hover) {
   background: #1f1f23;
   border-color: #3f3f46;
 }
 
-:global(.p-dark) .chip-arrow {
+:global(.p-dark .chip-arrow) {
   color: #71717a;
 }
 
-:global(.p-dark) .thinking-sparkle {
+:global(.p-dark .thinking-sparkle) {
   color: #a78bfa;
 }
 
-:global(.p-dark) .thinking-text {
+:global(.p-dark .thinking-text) {
   color: #a1a1aa;
 }
 
-:global(.p-dark) .inline-thinking-header {
+:global(.p-dark .inline-thinking-header) {
   background: transparent;
   border: none;
   color: #a1a1aa;
 }
 
-:global(.p-dark) .gemini-sparkle-icon,
-:global(.p-dark) .thinking-label {
+:global(.p-dark .gemini-sparkle-icon),
+:global(.p-dark .thinking-label) {
   color: #f4f4f5;
 }
 
 
 
-:global(.p-dark) .user-image-wrapper {
+:global(.p-dark .user-image-wrapper) {
   border-color: #27272a;
   background: #18181b;
 }
 
-:global(.p-dark) .agent-empty-logo {
+:global(.p-dark .agent-empty-logo) {
   box-shadow:
     0 0 32px rgba(124, 58, 237, 0.12),
     0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
-:global(.p-dark) .mention-chip-msg {
+:global(.p-dark .mention-chip-msg) {
   background: rgba(124, 58, 237, 0.12);
   color: #a78bfa;
   border-color: rgba(124, 58, 237, 0.25);
 }
 
-:global(.p-dark) .msg-failed {
+:global(.p-dark .msg-failed) {
   color: #71717a;
 }
 </style>

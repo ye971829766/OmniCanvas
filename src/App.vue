@@ -16,5 +16,8 @@
 
 body {
   font-size: var(--text-base);
+  /* App canvas: soft warm-gray backdrop that white panels float above. */
+  background: var(--surface-app);
+  color: var(--text-primary);
 }
 </style>

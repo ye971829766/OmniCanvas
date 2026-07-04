@@ -185,18 +185,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 2px;
-  background-color: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color, var(--p-surface-200));
+  background-color: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: 9999px;
   padding: 4px 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
-}
-
-.p-dark .zoom-controller-container {
-  background-color: rgba(30, 30, 30, 0.85);
-  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .zoom-btn {

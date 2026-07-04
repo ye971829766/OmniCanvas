@@ -112,7 +112,7 @@ function getInspirationUrls(text: string): string[] {
 .tool-accordion-body {
   padding: 10px 12px;
   border-top: 1px solid var(--p-surface-100, #f3f4f6);
-  background: #fff;
+  background: var(--surface-panel);
 }
 
 .tool-task-title {
@@ -162,7 +162,7 @@ function getInspirationUrls(text: string): string[] {
   height: 48px;
   border-radius: 6px;
   overflow: hidden;
-  background: #eee;
+  background: var(--surface-hover);
   flex-shrink: 0;
   border: 1px solid var(--p-surface-200, #e5e7eb);
 }

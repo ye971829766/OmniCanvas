@@ -489,7 +489,7 @@ const handleGenerate = async () => {
 
   &:focus {
     border-color: var(--p-primary-color);
-    background-color: #fff;
+    background-color: var(--surface-panel);
   }
 
   &:disabled {
@@ -557,7 +557,7 @@ const handleGenerate = async () => {
 
 .error-msg {
   font-size: 10px;
-  color: #ef4444;
+  color: var(--accent-error);
   word-break: break-all;
   background-color: #fef2f2;
   border: 1px solid #fee2e2;
@@ -673,7 +673,7 @@ const handleGenerate = async () => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
   &:hover:not(:disabled) {
-    background: #ef4444;
+    background: var(--accent-error);
   }
 
   &:disabled {

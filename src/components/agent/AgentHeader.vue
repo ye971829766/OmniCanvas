@@ -56,7 +56,7 @@ const emit = defineEmits<{
   justify-content: center;
   overflow: hidden;
   color: #fff;
-  background: #000;
+  background: var(--accent-primary);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 

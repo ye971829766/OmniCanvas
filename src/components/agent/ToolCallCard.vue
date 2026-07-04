@@ -85,7 +85,7 @@ const displayTitle = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #64748b;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -109,7 +109,7 @@ const displayTitle = computed(() => {
 
 .badge-summary {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-muted);
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -139,13 +139,13 @@ const displayTitle = computed(() => {
 }
 
 /* Dark mode */
-:global(.p-dark) .tool-badge-pill {
+:global(.p-dark .tool-badge-pill) {
   background: rgba(30, 41, 59, 0.7);
   border-color: rgba(51, 65, 85, 0.8);
   color: #cbd5e1;
 }
 
-:global(.p-dark) .is-running .tool-badge-pill {
+:global(.p-dark .is-running .tool-badge-pill) {
   background: linear-gradient(
     90deg,
     rgba(30, 41, 59, 0.7) 0%,
@@ -158,11 +158,11 @@ const displayTitle = computed(() => {
   border-color: rgba(16, 185, 129, 0.4);
 }
 
-:global(.p-dark) .badge-label {
+:global(.p-dark .badge-label) {
   color: #f1f5f9;
 }
 
-:global(.p-dark) .badge-icon {
+:global(.p-dark .badge-icon) {
   color: #94a3b8;
 }
 </style>
