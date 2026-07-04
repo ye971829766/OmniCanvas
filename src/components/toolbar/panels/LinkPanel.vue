@@ -66,14 +66,14 @@ function handleFileUpload(e: Event) {
 
 #link-input {
   flex: 1;
-  background-color: var(--zinc-100);
-  border: 1px solid rgba(228, 228, 231, 0.5);
+  background-color: var(--p-surface-100);
+  border: 1px solid var(--p-surface-200);
   border-radius: 9999px;
   padding: 4px 10px;
   height: 26px;
   font-size: 0.75rem;
   font-family: var(--font-family-sans);
-  color: var(--text-primary);
+  color: var(--p-text-color);
   outline: none;
   transition:
     background 0.15s,
@@ -81,13 +81,14 @@ function handleFileUpload(e: Event) {
 }
 
 #link-input:focus {
-  background-color: white;
-  border-color: var(--brand-text);
+  background-color: var(--p-surface-0);
+  border-color: var(--p-primary-color);
   box-shadow: 0 0 0 3px rgba(108, 92, 255, 0.15);
 }
 
 .submit-btn {
-  background-color: var(--brand-text);
+  background-color: var(--p-primary-color);
+  color: var(--p-primary-contrast-color);
   border: none;
   width: 24px;
   height: 24px;
@@ -96,7 +97,7 @@ function handleFileUpload(e: Event) {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(108, 92, 255, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   flex-shrink: 0;
   transition:
     background 0.2s,
@@ -104,7 +105,7 @@ function handleFileUpload(e: Event) {
 }
 
 .submit-btn:hover {
-  background-color: #5a4be8;
+  opacity: 0.9;
   transform: scale(1.05);
 }
 
@@ -119,7 +120,7 @@ function handleFileUpload(e: Event) {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  color: var(--text-secondary);
+  color: var(--p-text-muted-color);
   cursor: pointer;
   flex-shrink: 0;
   transition:
@@ -128,7 +129,7 @@ function handleFileUpload(e: Event) {
 }
 
 .file-upload-label:hover {
-  background-color: var(--zinc-100);
-  color: var(--text-primary);
+  background-color: var(--p-surface-100);
+  color: var(--p-text-color);
 }
 </style>

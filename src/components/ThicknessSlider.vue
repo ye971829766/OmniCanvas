@@ -243,8 +243,8 @@ onUnmounted(() => {
 }
 
 .thickness-thumb {
-  background-color: white;
-  border: 1px solid var(--border-color, #e4e4e7);
+  background-color: var(--p-surface-0);
+  border: 1px solid var(--p-surface-200);
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.1),
     0 2px 4px -1px rgba(0, 0, 0, 0.06);

@@ -100,9 +100,9 @@ const shapeTypes: ShapeItem[] = [
 .param-input {
   width: 38px;
   height: 24px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--p-surface-200);
   border-radius: 6px;
-  background: var(--zinc-100);
+  background: var(--p-surface-100);
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--text-primary);

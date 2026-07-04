@@ -407,13 +407,13 @@ function normalizeBounds(bounds: unknown): Bounds | null {
   padding: 0 4px;
   border: 0;
   border-radius: 4px;
-  color: var(--text-secondary);
+  color: var(--p-text-muted-color);
   background: transparent;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
 
   &:hover:not(:disabled) {
-    color: var(--p-surface-800);
+    color: var(--p-text-color);
     background: var(--p-surface-100);
   }
 
@@ -442,7 +442,7 @@ function normalizeBounds(bounds: unknown): Bounds | null {
 }
 
 .section-label {
-  color: var(--text-secondary);
+  color: var(--p-text-muted-color);
   font-size: 10.5px;
   font-weight: 500;
 }
@@ -461,14 +461,14 @@ function normalizeBounds(bounds: unknown): Bounds | null {
 .text-btn {
   border: 0;
   border-radius: 4px;
-  color: var(--text-secondary);
-  background: var(--p-surface-50);
+  color: var(--p-text-muted-color);
+  background: var(--p-surface-100);
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
 
   &:hover:not(:disabled) {
-    color: var(--p-surface-900);
-    background: var(--p-surface-100);
+    color: var(--p-text-color);
+    background: var(--p-surface-200);
   }
 
   &:disabled {
@@ -503,6 +503,6 @@ function normalizeBounds(bounds: unknown): Bounds | null {
 
 .divider {
   height: 1px;
-  background: var(--border-color);
+  background: var(--p-surface-200);
 }
 </style>

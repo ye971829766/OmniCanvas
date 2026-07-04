@@ -76,19 +76,19 @@ const MAX = 64;
   font-size: 0.75rem;
   border-radius: 6px;
   background: transparent !important;
-  border-color: var(--border-color) !important;
+  border-color: var(--p-surface-200) !important;
   display: flex;
   align-items: center;
   transition: all 0.2s ease;
 }
 
 .font-family-dropdown:hover {
-  background-color: var(--zinc-100) !important;
+  background-color: var(--p-surface-100) !important;
   border-color: var(--p-surface-300) !important;
 }
 
 .font-family-dropdown:focus-within {
-  border-color: var(--blue-text) !important;
+  border-color: var(--p-primary-color) !important;
   box-shadow: 0 0 0 2px rgba(108, 92, 255, 0.1) !important;
 }
 
@@ -97,14 +97,14 @@ const MAX = 64;
   line-height: 22px !important;
   font-size: 0.75rem !important;
   font-weight: 600 !important;
-  color: var(--text-primary) !important;
+  color: var(--p-text-color) !important;
   font-family: inherit;
   text-align: left;
 }
 
 :deep(.p-select-dropdown) {
   width: 22px !important;
-  color: var(--text-secondary) !important;
+  color: var(--p-text-muted-color) !important;
 }
 
 .text-size-controls {
@@ -131,15 +131,15 @@ const MAX = 64;
   text-align: center !important;
   border-radius: 6px !important;
   background: transparent !important;
-  border: 1px solid var(--border-color) !important;
-  color: var(--text-primary) !important;
+  border: 1px solid var(--p-surface-200) !important;
+  color: var(--p-text-color) !important;
   font-family: var(--font-family-mono) !important;
   padding: 0 4px !important;
   transition: all 0.2s ease;
 }
 
 :deep(.p-inputnumber-input:hover) {
-  background-color: var(--zinc-100) !important;
+  background-color: var(--p-surface-100) !important;
   border-color: var(--p-surface-300) !important;
 }
 

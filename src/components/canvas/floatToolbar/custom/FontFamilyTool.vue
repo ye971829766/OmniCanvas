@@ -106,9 +106,9 @@ const setFont = (value: string) => {
   gap: 6px;
   height: 24px;
   padding: 0 6px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--p-surface-200);
   border-radius: 4px;
-  color: var(--text-primary);
+  color: var(--p-text-color);
   background: transparent;
   cursor: pointer;
   min-width: 68px;
@@ -135,7 +135,7 @@ const setFont = (value: string) => {
 
 .chevron-icon {
   flex-shrink: 0;
-  color: var(--text-secondary);
+  color: var(--p-text-muted-color);
 }
 
 .font-panel {
@@ -153,17 +153,17 @@ const setFont = (value: string) => {
   border-radius: 6px;
   font-size: 11px;
   cursor: pointer;
-  color: var(--text-primary);
+  color: var(--p-text-color);
   transition: background 0.15s, color 0.15s;
 
   &:hover {
     background: var(--p-surface-100);
-    color: var(--text-primary);
+    color: var(--p-text-color);
   }
 
   &.active {
-    background: var(--p-primary-100);
-    color: var(--blue-text);
+    background: var(--p-surface-200);
+    color: var(--p-primary-color);
     font-weight: 600;
   }
 }

@@ -18,6 +18,10 @@ _Redefining visual design and creative workflows by fusing high-performance vect
 
 [English](#-key-features) · [中文特性](#-中文核心特性) · [Architecture](#-system-architecture) · [Getting Started](#-getting-started) · [Admin System](#-admin-dashboard--management) · [Vision & Roadmap](#-vision--future-roadmap)
 
+<br />
+
+<img src="public/示例.png" alt="OmniCanvas Screenshot" width="100%" style="border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);" />
+
 </div>
 
 ---

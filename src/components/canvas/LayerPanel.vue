@@ -589,8 +589,8 @@ watch(
 }
 
 .layer-item.active {
-  background: var(--p-primary-50, var(--p-surface-100));
-  border-color: var(--p-primary-300, var(--p-surface-400));
+  background: var(--p-surface-100);
+  border-color: var(--p-primary-color);
 }
 
 .layer-actions-left {
@@ -621,7 +621,7 @@ watch(
 
 .reorder-btn:hover:not(:disabled) {
   background: var(--p-surface-200);
-  color: var(--p-surface-800);
+  color: var(--p-text-color);
 }
 
 .reorder-btn:disabled {
@@ -636,14 +636,14 @@ watch(
   cursor: pointer;
   width: 16px;
   height: 16px;
-  color: var(--text-secondary, #64748b);
+  color: var(--p-text-muted-color);
   border-radius: 4px;
   transition: all 0.2s ease;
 }
 
 .collapse-toggle-btn:hover {
   background: var(--p-surface-100);
-  color: var(--p-surface-800);
+  color: var(--p-text-color);
 }
 
 .collapse-spacer {

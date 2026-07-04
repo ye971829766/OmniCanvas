@@ -302,14 +302,14 @@ const alignOptions = [
 }
 
 .section-label, .row-label {
-  color: var(--text-secondary);
+  color: var(--p-text-muted-color);
   font-size: 10.5px;
   font-weight: 500;
 }
 
 .button-group {
   display: flex;
-  background: var(--zinc-100);
+  background: var(--p-surface-100);
   padding: 2px;
   border-radius: 6px;
   gap: 2px;
@@ -324,7 +324,7 @@ const alignOptions = [
   height: 22px;
   border: 0;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--p-text-muted-color);
   border-radius: 4px;
   font-size: 10.5px;
   font-weight: 500;
@@ -332,19 +332,19 @@ const alignOptions = [
   transition: all 0.2s ease;
 
   &:hover:not(.active) {
-    color: var(--text-primary);
+    color: var(--p-text-color);
   }
 
   &.active {
-    background: white;
-    color: var(--brand-text);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    background: var(--p-surface-0);
+    color: var(--p-text-color);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   }
 }
 
 .divider {
   height: 1px;
-  background: var(--border-color);
+  background: var(--p-surface-200);
 }
 
 .panel-row {
@@ -364,10 +364,10 @@ const alignOptions = [
 .wrap-toggle-btn {
   height: 24px;
   padding: 0 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--p-surface-200);
   border-radius: 4px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--p-text-muted-color);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -375,12 +375,12 @@ const alignOptions = [
 
   &:hover {
     border-color: var(--p-surface-400);
-    color: var(--text-primary);
+    color: var(--p-text-color);
   }
 
   &.active {
-    background: var(--blue-bg);
-    color: var(--blue-text);
+    background: var(--p-primary-color);
+    color: var(--p-primary-contrast-color);
     border-color: transparent;
   }
 }

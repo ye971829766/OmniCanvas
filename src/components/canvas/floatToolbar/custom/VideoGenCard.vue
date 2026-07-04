@@ -841,7 +841,7 @@ const handleGenerate = async () => {
 .popover-slider-label {
   font-size: 11px;
   font-weight: 600;
-  color: var(--p-surface-800);
+  color: var(--p-text-color);
 }
 
 .slider-wrapper {

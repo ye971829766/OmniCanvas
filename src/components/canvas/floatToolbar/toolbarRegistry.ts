@@ -4,6 +4,7 @@ import FillTool from "./custom/FillTool.vue";
 import BorderTool from "./custom/BorderTool.vue";
 import FontFamilyTool from "./custom/FontFamilyTool.vue";
 import FontSizeTool from "./custom/FontSizeTool.vue";
+import ExportTool from "./custom/ExportTool.vue";
 import type { ToolbarItem, ToolbarTarget } from "./types";
 import AutoLayoutAndFreeLayout from "./custom/AutoLayoutAndFreeLayout.vue";
 import LayoutAndArrangement from "./custom/LayoutAndArrangement.vue";
@@ -30,6 +31,13 @@ export const toggleSizeLock = (target: ToolbarTarget) => {
   } else {
     target.lockRatio = !target.lockRatio;
   }
+};
+
+const exportToolItem: ToolbarItem = {
+  type: "custom",
+  key: "exportTool",
+  label: "下载",
+  component: ExportTool,
 };
 
 const sizeTools: ToolbarItem[] = [
@@ -84,12 +92,7 @@ const shapeTools: ToolbarItem[] = [
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
 
 const lineTools: ToolbarItem[] = [
@@ -106,24 +109,15 @@ const lineTools: ToolbarItem[] = [
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
+
 const videoTools: ToolbarItem[] = [
   ...sizeTools,
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
 
 const frameTools: ToolbarItem[] = [
@@ -140,12 +134,7 @@ const frameTools: ToolbarItem[] = [
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
 
 const textTools: ToolbarItem[] = [
@@ -174,12 +163,7 @@ const textTools: ToolbarItem[] = [
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
 
 const groupTools: ToolbarItem[] = [
@@ -196,12 +180,7 @@ const groupTools: ToolbarItem[] = [
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
 
 const multipleSelectTools: ToolbarItem[] = [
@@ -220,13 +199,9 @@ const multipleSelectTools: ToolbarItem[] = [
     label: "布局与排列",
     component: LayoutAndArrangement,
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
+
 const imageTools: ToolbarItem[] = [
   ...sizeTools,
   {
@@ -241,13 +216,9 @@ const imageTools: ToolbarItem[] = [
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
+
 const penTools: ToolbarItem[] = [
   {
     type: "custom",
@@ -268,13 +239,9 @@ const penTools: ToolbarItem[] = [
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
+
 const imageGenTools: ToolbarItem[] = [
   {
     type: "custom",
@@ -307,24 +274,15 @@ const imageGenTools: ToolbarItem[] = [
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
+
 const videoGenTools: ToolbarItem[] = [
   ...sizeTools,
   {
     type: "divider",
   },
-  {
-    type: "button",
-    action: "export",
-    icon: Download,
-    label: "下载",
-  },
+  exportToolItem,
 ];
 export const toolbarRegistry: Record<string, ToolbarItem[]> = {
   Rect: shapeTools,

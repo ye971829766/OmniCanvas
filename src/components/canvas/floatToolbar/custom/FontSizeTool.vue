@@ -140,7 +140,7 @@ const setFontSize = (value: number | number[] | null) => {
 }
 
 .size-label {
-  color: var(--p-surface-800);
+  color: var(--p-text-color);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;

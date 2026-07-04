@@ -851,8 +851,8 @@ onUnmounted(() => {
 .pop-hex-wrapper {
   display: flex;
   align-items: center;
-  background-color: var(--zinc-100, #f4f4f5);
-  border: 1px solid transparent;
+  background-color: var(--p-surface-100);
+  border: 1px solid var(--p-surface-200);
   border-radius: 6px;
   padding: 0 6px;
   height: 22px;
@@ -865,15 +865,15 @@ onUnmounted(() => {
 
 .hex-input-wrapper:focus-within,
 .pop-hex-wrapper:focus-within {
-  background-color: white;
-  border-color: var(--brand-text, #6c5cff);
+  background-color: var(--p-surface-0);
+  border-color: var(--p-primary-color);
   box-shadow: 0 0 0 2px rgba(108, 92, 255, 0.12);
 }
 
 .hex-prefix {
   font-size: 0.6rem;
   font-weight: 600;
-  color: var(--text-secondary, #71717a);
+  color: var(--p-text-muted-color);
   user-select: none;
 }
 
@@ -884,7 +884,7 @@ onUnmounted(() => {
   font-size: 0.65rem;
   font-weight: 600;
   font-family: var(--font-family-mono, "Inter", monospace);
-  color: var(--text-primary, #18181b);
+  color: var(--p-text-color);
   outline: none;
   padding: 0;
   text-transform: uppercase;
@@ -895,8 +895,8 @@ onUnmounted(() => {
 .pop-opacity-wrapper {
   display: flex;
   align-items: center;
-  background-color: var(--zinc-100, #f4f4f5);
-  border: 1px solid transparent;
+  background-color: var(--p-surface-100);
+  border: 1px solid var(--p-surface-200);
   border-radius: 6px;
   padding: 0 5px;
   height: 22px;
@@ -911,7 +911,7 @@ onUnmounted(() => {
 .opacity-input-wrapper:focus-within,
 .pop-opacity-wrapper:focus-within {
   background-color: var(--p-surface-0);
-  border-color: var(--brand-text, #6c5cff);
+  border-color: var(--p-primary-color);
   box-shadow: 0 0 0 2px rgba(108, 92, 255, 0.12);
 }
 
@@ -922,7 +922,7 @@ onUnmounted(() => {
   font-size: 0.65rem;
   font-weight: 600;
   font-family: var(--font-family-mono, "Inter", monospace);
-  color: var(--text-primary, #18181b);
+  color: var(--p-text-color);
   outline: none;
   padding: 0;
   text-align: right;
@@ -937,7 +937,7 @@ onUnmounted(() => {
 .opacity-suffix {
   font-size: 0.6rem;
   font-weight: 500;
-  color: var(--text-secondary, #71717a);
+  color: var(--p-text-muted-color);
   user-select: none;
 }
 

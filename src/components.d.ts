@@ -26,6 +26,7 @@ declare module 'vue' {
     ConfirmDialog: typeof import('primevue/confirmdialog')['default']
     Dialog: typeof import('primevue/dialog')['default']
     ElementInfoLabel: typeof import('./components/canvas/floatToolbar/ElementInfoLabel.vue')['default']
+    ExportTool: typeof import('./components/canvas/floatToolbar/custom/ExportTool.vue')['default']
     FillTool: typeof import('./components/canvas/floatToolbar/custom/FillTool.vue')['default']
     FloatToolbar: typeof import('./components/canvas/floatToolbar/index.vue')['default']
     FontFamilyTool: typeof import('./components/canvas/floatToolbar/custom/FontFamilyTool.vue')['default']

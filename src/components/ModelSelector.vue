@@ -84,7 +84,7 @@
         class="model-selector__subselect"
       >
     <template #header>
-        <div class="font-medium p-3">尺寸</div>
+        <div class="font-medium p-3 text-[var(--p-text-color)]">尺寸</div>
     </template>
     </Select>
       <Select
@@ -98,7 +98,7 @@
         class="model-selector__subselect"
       >
       <template #header>
-        <div class="font-medium p-3">质量</div>
+        <div class="font-medium p-3 text-[var(--p-text-color)]">质量</div>
       </template>
     </Select>
       <Select
@@ -112,7 +112,7 @@
         class="model-selector__subselect"
       >
       <template #header>
-        <div class="font-medium p-3">比例</div>
+        <div class="font-medium p-3 text-[var(--p-text-color)]">比例</div>
       </template>
     </Select>
       <Select
@@ -126,7 +126,7 @@
         class="model-selector__subselect"
       >
       <template #header>
-        <div class="font-medium p-3">数量</div>
+        <div class="font-medium p-3 text-[var(--p-text-color)]">数量</div>
       </template>
     </Select>
     </div>

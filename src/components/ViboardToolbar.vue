@@ -430,7 +430,7 @@ onUnmounted(() => {
   border-radius: 6px;
   z-index: 0;
   pointer-events: none;
-  background-color: var(--zinc-100);
+  background-color: var(--p-surface-100);
   opacity: 0;
   transition:
     left 0.35s cubic-bezier(0.2, 0.9, 0.4, 1),
