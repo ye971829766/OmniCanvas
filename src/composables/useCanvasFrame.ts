@@ -44,8 +44,10 @@ export function useCanvasFrame(
 
       editor.list.forEach((leaf: any) => {
         if (leaf.parent !== frame) return;
+        if (leaf.isCropOverlay || leaf.__tag === "SimulateElement" || leaf.tag === "SimulateElement") return;
 
         const frameBounds = frame.worldBoxBounds;
+
         const leafWorldBounds = leaf.worldBoxBounds;
 
         if (!frameBounds || !leafWorldBounds) return;

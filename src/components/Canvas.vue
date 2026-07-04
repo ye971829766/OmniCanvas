@@ -105,7 +105,7 @@
             ' cubic-bezier(0.45, 0, 0.55, 1)',
           transform: agentPanelCollapsed
             ? 'translateX(0)'
-            : 'translateX(-360px)',
+            : 'translateX(-380px)',
         }"
       />
       <button
@@ -137,7 +137,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, useTemplateRef, watch, toRef, onMounted, onUnmounted } from "vue";
+import {
+  ref,
+  shallowRef,
+  useTemplateRef,
+  watch,
+  toRef,
+  onMounted,
+  onUnmounted,
+} from "vue";
 import logoImg from "@/assets/logo.jpg";
 import { useToast } from "primevue/usetoast";
 import CanvasBackground from "@/components/canvas/CanvasBackground.vue";
@@ -170,7 +178,9 @@ import {
 import { Image } from "leafer-ui";
 
 const canvasRef = useTemplateRef("canvasRef");
-const canvasBgRef = shallowRef<InstanceType<typeof CanvasBackground> | null>(null);
+const canvasBgRef = shallowRef<InstanceType<typeof CanvasBackground> | null>(
+  null,
+);
 const toast = useToast();
 
 // State for bottom toolbar controls
@@ -693,7 +703,6 @@ body {
   align-items: center;
   justify-content: center;
 }
-
 
 /* Demo Info */
 .demo-info {

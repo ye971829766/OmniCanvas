@@ -48,16 +48,24 @@ export function useCanvasCrop(
   const updateCropToolbarPosition = () => {
     if (!cropBorder || !isCropping.value) return;
     const bounds = cropBorder.worldBoxBounds;
-    if (!bounds) return;
-
-    // Position toolbar 45px above crop box
-    const top = bounds.y - 45;
-    const left = bounds.x + bounds.width / 2;
-    cropToolbarStyle.value = {
-      left: `${left}px`,
-      top: `${top}px`,
-    };
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
+      const top = bounds.y - 45;
+      const left = bounds.x + bounds.width / 2;
+      cropToolbarStyle.value = {
+        left: `${left}px`,
+        top: `${top}px`,
+      };
+    } else if (imageNode && imageNode.worldBoxBounds) {
+      const imgBounds = imageNode.worldBoxBounds;
+      const top = imgBounds.y - 45;
+      const left = imgBounds.x + imgBounds.width / 2;
+      cropToolbarStyle.value = {
+        left: `${left}px`,
+        top: `${top}px`,
+      };
+    }
   };
+
 
   const updateCropUI = () => {
     if (!imageNode || !cropGroup) return;
@@ -148,10 +156,32 @@ export function useCanvasCrop(
     });
   };
 
+  const cleanLeftoverCropNodes = () => {
+    const app = canvasApp.value;
+    if (!app || !app.tree) return;
+    const toRemove: any[] = [];
+    app.tree.find((node: any) => {
+      if (
+        node.isCropOverlay ||
+        node.tag === "SimulateElement" ||
+        node.__tag === "SimulateElement" ||
+        (node.tag === "Group" && Array.isArray(node.children) && node.children.length === 13)
+      ) {
+        toRemove.push(node);
+      }
+      return false;
+    });
+    toRemove.forEach((n) => {
+      try { n.remove(); } catch (e) {}
+    });
+  };
+
   const startCanvasCrop = () => {
     const app = canvasApp.value;
     const target = selectTarget.value;
     if (!app || !target || target.tag !== "Image") return;
+
+    cleanLeftoverCropNodes();
 
     imageNode = target;
     isCropping.value = true;
@@ -161,23 +191,41 @@ export function useCanvasCrop(
     app.editor.cancel();
     app.editor.hittable = false;
 
+
     // Define initial crop box size (80% of image size, centered)
     cw = imageNode.width * 0.8;
     ch = imageNode.height * 0.8;
     cx = (imageNode.width - cw) / 2;
     cy = (imageNode.height - ch) / 2;
 
-    // Create Group container overlay sharing same dimensions & transforms as image
+    const targetLayer = app.zoomLayer || app.tree;
+
+    // Use Leafer UI's native getTransform(targetLayer) to obtain the exact combined matrix (x, y, scale, rotation)
+    // of imageNode relative to targetLayer (app.zoomLayer). This guarantees 100% pixel-perfect overlay positioning
+    // whether imageNode is inside a Frame, Group, or nested layout, while completely avoiding Frame event deadlock.
+    let matrix: any = null;
+    if (typeof imageNode.getTransform === "function") {
+      try {
+        matrix = imageNode.getTransform(targetLayer);
+      } catch (err) {
+        matrix = null;
+      }
+    }
+
+    const groupX = matrix?.x ?? matrix?.e ?? imageNode.x ?? 0;
+    const groupY = matrix?.y ?? matrix?.f ?? imageNode.y ?? 0;
+    const composedScaleX = matrix?.scaleX ?? matrix?.a ?? imageNode.scaleX ?? 1;
+    const composedScaleY = matrix?.scaleY ?? matrix?.d ?? imageNode.scaleY ?? 1;
+    const composedRotation = matrix?.rotation ?? imageNode.rotation ?? 0;
+
     cropGroup = new Group({
-      x: imageNode.x,
-      y: imageNode.y,
+      x: groupX,
+      y: groupY,
       width: imageNode.width,
       height: imageNode.height,
-      scaleX: imageNode.scaleX,
-      scaleY: imageNode.scaleY,
-      rotation: imageNode.rotation,
-      skewX: imageNode.skewX,
-      skewY: imageNode.skewY,
+      scaleX: composedScaleX,
+      scaleY: composedScaleY,
+      rotation: composedRotation,
       zIndex: 99999,
     });
     // Explicitly set flags to bypass history tracking and state persistence
@@ -206,7 +254,6 @@ export function useCanvasCrop(
       strokeWidth: 2.5,
       fill: "rgba(255,255,255,0.01)",
       cursor: "move",
-      draggable: true,
     });
 
     const createHandle = (cursorStyle: string) => {
@@ -218,9 +265,9 @@ export function useCanvasCrop(
         strokeWidth: 2,
         cornerRadius: 2,
         cursor: cursorStyle,
-        draggable: true,
       });
     };
+
 
     nwHandle = createHandle("nwse-resize");
     nHandle = createHandle("ns-resize");
@@ -246,8 +293,13 @@ export function useCanvasCrop(
     cropGroup.add(swHandle);
     cropGroup.add(wHandle);
 
-    // Add crop group to parent of image
-    imageNode.parent.add(cropGroup);
+    // Add crop group directly to targetLayer (app.zoomLayer)
+    targetLayer.add(cropGroup);
+
+
+
+
+
 
     // Setup drag logic for crop border (moves entire crop frame)
     registerDrag(cropBorder, (dx, dy, _, start) => {
@@ -433,7 +485,10 @@ export function useCanvasCrop(
     app.tree.on(ZoomEvent.ZOOM, updateCropUI);
 
     updateCropUI();
+    requestAnimationFrame(() => updateCropUI());
+    setTimeout(() => updateCropUI(), 50);
   };
+
 
   const applyRatioPreset = () => {
     if (!imageNode || cropRatio.value === "free") {
@@ -485,8 +540,10 @@ export function useCanvasCrop(
       cropGroup.destroy();
       cropGroup = null;
     }
+    cleanLeftoverCropNodes();
     isCropping.value = false;
   };
+
 
   const cancelCanvasCrop = () => {
     const app = canvasApp.value;

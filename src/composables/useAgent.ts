@@ -114,9 +114,14 @@ function isInternalToolError(message: unknown) {
 }
 
 export function stripInternalToolErrors(text: string) {
+  if (!text) return "";
   return text
     .replace(
       /\n{0,2}\s*⚠️\s+[a-z_]+:\s+(?:Parameter\s+"[^"]+"\s+must be[^\n]*|Missing required parameter[^\n]*|Tool\s+[a-z_]+\s+timed out[^\n]*)/g,
+      "",
+    )
+    .replace(
+      /\n?\s*(?:\*{1,3}|#{1,6}\s*)?Visual\s+observation[^\n]*/gi,
       "",
     )
     .replace(/\n{3,}/g, "\n\n")
@@ -320,6 +325,15 @@ export function useAgent(
               if (parsedMsg.tools && parsedMsg.tools.length > 0) {
                 last.tools.push(...parsedMsg.tools);
               }
+              // Rebuild blocks from merged state so rendering stays consistent
+              const rebuiltBlocks: typeof last.blocks = [];
+              if (last.tools.length > 0) {
+                if (last.text) rebuiltBlocks.push({ id: `${last.id}-txt`, type: "text", text: last.text });
+                rebuiltBlocks.push({ id: `${last.id}-tls`, type: "tools", tools: last.tools });
+              } else if (last.text) {
+                rebuiltBlocks.push({ id: `${last.id}-txt`, type: "text", text: last.text });
+              }
+              last.blocks = rebuiltBlocks;
             } else {
               parsed.push(parsedMsg);
             }
@@ -456,8 +470,12 @@ export function useAgent(
           trackNode(frame);
         }
         recordHistory?.();
+        setTimeout(() => {
+          zoomToNode("agent_frame");
+        }, 80);
         break;
       }
+
 
       case "add_node": {
         const n = op.node;
@@ -632,11 +650,9 @@ export function useAgent(
           // Notify caller so it can play a background ripple at the drop point
           onAgentPlace?.(x, y);
 
-          if (n.type === "image_gen" || n.type === "video_gen" || n.type === "frame") {
-            setTimeout(() => {
-              zoomToNode(n.refId);
-            }, 100);
-          }
+          setTimeout(() => {
+            zoomToNode(n.refId);
+          }, 80);
 
           recordHistory?.();
         }
@@ -671,9 +687,13 @@ export function useAgent(
           node.set(patch);
           trackNode(node);
           recordHistory?.();
+          setTimeout(() => {
+            zoomToNode(op.refId);
+          }, 80);
         }
         break;
       }
+
 
       case "remove_node": {
         const node = nodeMap.get(op.refId);
@@ -958,7 +978,10 @@ export function useAgent(
     running.value = true;
     abort = new AbortController();
 
+
+
     try {
+
       const res = await fetch(
         `${AGENT_BASE_URL}/agent/${sessionId.value}/chat`,
         {
@@ -1041,21 +1064,40 @@ export function useAgent(
     deleteAgentSession(sessionId.value).catch(() => {});
   }
 
-  function zoomToNode(refId: string) {
+  function zoomToNode(refId?: string) {
     const app = canvasApp.value;
     if (!app?.tree) return;
-    const node = nodeMap.get(refId);
+    let node: any = null;
+    if (refId) {
+      node = nodeMap.get(refId);
+    }
+    if (!node) {
+      node = findAgentFrame();
+    }
+    if (!node && refId) {
+      app.tree.find((child: any) => {
+        if (child.refId === refId || child.id === refId) {
+          node = child;
+          return true;
+        }
+        return false;
+      });
+    }
+
     if (node) {
       try {
-        if (app.editor) {
+        const agentFrame = findAgentFrame();
+        if (app.editor && node !== agentFrame) {
           app.editor.select(node);
         }
-        (app.tree as any).zoom(node, 100, undefined, 0.8);
+        // [top, right, bottom, left] padding: 420px on right leaves room for 380px Agent Panel
+        (app.tree as any).zoom(node, [80, 420, 80, 80], undefined, 0.85);
       } catch (err) {
         console.warn("Failed to zoom to node:", err);
       }
     }
   }
+
 
   function retryLastMessage() {
     if (running.value) return;

@@ -11,8 +11,6 @@ import {
 import { useAgent } from "@/composables/useAgent";
 import { gsap } from "gsap";
 
-
-
 import AgentHeader from "./agent/AgentHeader.vue";
 import AgentMessages from "./agent/AgentMessages.vue";
 import AgentInput from "./agent/AgentInput.vue";
@@ -24,7 +22,6 @@ const props = defineProps<{
   onAgentPlace?: (node: any) => void;
   workspaceId?: string | number;
 }>();
-
 
 const emit = defineEmits<{
   (e: "update:collapsed", val: boolean): void;
@@ -85,7 +82,7 @@ const bottomRef = ref<HTMLElement | null>(null);
 
 onMounted(() => {
   if (collapsed.value) {
-    gsap.set(containerRef.value, { x: 380, opacity: 0 });
+    gsap.set(containerRef.value, { x: 420, opacity: 0 });
     isVisible.value = false;
   }
 });
@@ -94,7 +91,7 @@ watch(collapsed, (isCollapsed) => {
   if (isCollapsed) {
     // Smooth exit animation first, hide display after animation finishes
     gsap.to(containerRef.value, {
-      x: 380,
+      x: 420,
       opacity: 0,
       duration: 0.22,
       ease: "power2.in",
@@ -107,7 +104,7 @@ watch(collapsed, (isCollapsed) => {
     isVisible.value = true;
     gsap.fromTo(
       containerRef.value,
-      { x: 380, opacity: 0 },
+      { x: 420, opacity: 0 },
       {
         x: 0,
         opacity: 1,
@@ -118,11 +115,10 @@ watch(collapsed, (isCollapsed) => {
     gsap.fromTo(
       [headerRef.value, messagesRef.value, bottomRef.value],
       { opacity: 0, y: 4 },
-      { opacity: 1, y: 0, duration: 0.22, ease: "power2.out", delay: 0.05 }
+      { opacity: 1, y: 0, duration: 0.22, ease: "power2.out", delay: 0.05 },
     );
   }
 });
-
 
 // Active timer and active status calculations
 let timerInterval: any = null;
@@ -157,10 +153,6 @@ onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
 });
 
-
-
-
-
 const suggestions = [
   "生成一张可爱的橘猫照片",
   "做一张咖啡店开业海报，暖色调",
@@ -185,10 +177,9 @@ function useSuggestion(s: string) {
 <template>
   <div
     ref="containerRef"
-    class="agent-panel w-[380px]"
+    class="agent-panel w-[420px]"
     :style="{ display: isVisible ? 'flex' : 'none' }"
   >
-
     <div class="flex-1 flex flex-col min-h-0">
       <!-- Header -->
       <div ref="headerRef" class="panel-header-row">
@@ -248,9 +239,9 @@ function useSuggestion(s: string) {
 .panel-header-row {
   display: flex;
   align-items: center;
+  width: 100%;
   flex-shrink: 0;
 }
-
 
 .agent-panel-bottom {
   position: relative;

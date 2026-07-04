@@ -329,8 +329,13 @@ export function useCanvas(
       (e.target instanceof HTMLElement && e.target.isContentEditable);
     if (isInput) return;
 
+    // Don't intercept copy/cut when user has selected text (e.g. in chat panel)
+    const selection = window.getSelection();
+    const hasTextSelection = selection && selection.toString().trim().length > 0;
     const key = e.key.toLowerCase();
     const isCtrl = e.ctrlKey || e.metaKey;
+    if (hasTextSelection && isCtrl && (key === "c" || key === "x")) return;
+
 
     if (isCtrl) {
       if (key === "z") {

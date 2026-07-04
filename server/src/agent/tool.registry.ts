@@ -20,6 +20,7 @@ import { reviewAndAdjustTool } from './tools/review.tools';
 import { analyzeDesignTool } from './tools/vision-analysis.tools';
 import { verifyDesignTool } from './tools/verify-design.tools';
 import { planDesignTool } from './tools/plan-design.tools';
+import { webSearchTool, webExtractTool } from './tools/web-search.tools';
 
 /** All design tools the agent can call. */
 export const ALL_TOOLS: AgentTool[] = [
@@ -54,6 +55,9 @@ export const ALL_TOOLS: AgentTool[] = [
   analyzeDesignTool,
   verifyDesignTool,
   planDesignTool,
+  // Web (internet access)
+  webSearchTool,
+  webExtractTool,
 ];
 
 export const TOOL_MAP = new Map(ALL_TOOLS.map((t) => [t.name, t]));

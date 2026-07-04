@@ -144,7 +144,8 @@ export function useCanvasHistory(
           (c: any) =>
             c.tag !== "SimulateElement" &&
             c.__tag !== "SimulateElement" &&
-            !c.isCropOverlay
+            !c.isCropOverlay &&
+            !isLeftoverCropOverlay(c)
         )
         .map((c: any) => serializeNode(c));
     }
@@ -172,14 +173,17 @@ export function useCanvasHistory(
       }
 
       if (child && Array.isArray(childrenData)) {
-        childrenData.forEach((childData: any) => {
-          const childNode = deserializeNode(childData);
-          if (childNode) {
-            child.add(childNode);
-          }
-        });
+        childrenData
+          .filter((cd: any) => !isLeftoverCropOverlay(cd))
+          .forEach((childData: any) => {
+            const childNode = deserializeNode(childData);
+            if (childNode) {
+              child.add(childNode);
+            }
+          });
       }
     }
+
     // 恢复 historyId 和 refId
     if (child && data.__historyId) {
       child.__historyId = data.__historyId;

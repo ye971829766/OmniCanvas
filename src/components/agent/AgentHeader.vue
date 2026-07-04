@@ -41,9 +41,11 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
   padding: 12px 14px;
   border-bottom: 1px solid var(--p-surface-100, #f3f4f6);
 }
+
 
 .agent-logo {
   width: 24px;

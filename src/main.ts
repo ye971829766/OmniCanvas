@@ -2,6 +2,7 @@ import { createApp } from 'vue';
 import 'normalize.css';
 import 'virtual:uno.css';
 import 'primeicons/primeicons.css';
+import '@incremark/theme/incremark.css';
 import '@/styles/tokens.css';
 
 import App from './App.vue';

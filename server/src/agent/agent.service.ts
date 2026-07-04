@@ -24,7 +24,9 @@ function extractErrorMessage(e: any): string {
       const parsed = typeof body === "string" ? JSON.parse(body) : body;
       const msg = parsed?.error?.message ?? parsed?.message;
       if (msg) return msg;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   return cause?.message ?? e?.message ?? "agent error";
 }
@@ -168,7 +170,7 @@ export class AgentService {
         sink.emit({ type: "error", message: "请输入任务内容。" });
         return;
       }
-      if (process.env.MOCK_AGENT === 'true') {
+      if (process.env.MOCK_AGENT === "true") {
         await this.dispatchMock(userInput, sink, abortSignal);
         return;
       }
@@ -488,12 +490,7 @@ export class AgentService {
 
       // Append visual observations if any
       if (stepVisualObservations.length > 0) {
-        const combinedParts: any[] = [
-          {
-            type: "text",
-            text: `Visual observation snapshots after tool execution:`,
-          },
-        ];
+        const combinedParts: any[] = [];
         for (const obs of stepVisualObservations) {
           const uploadedUrl = await this.ai.uploadImageToHost(obs.image);
           combinedParts.push({ type: "image", image: uploadedUrl });
@@ -512,7 +509,6 @@ export class AgentService {
     const historyToSave = messages.filter((m) => m.role !== "system");
     this.memory.set(sessionId, historyToSave as any);
   }
-
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SHARED UTILITIES
@@ -601,84 +597,178 @@ export class AgentService {
     abortSignal?: AbortSignal,
   ): Promise<void> {
     const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-    const check = () => { if (abortSignal?.aborted) throw new DOMException('aborted', 'AbortError'); };
+    const check = () => {
+      if (abortSignal?.aborted) throw new DOMException("aborted", "AbortError");
+    };
     const uid = () => Math.random().toString(36).slice(2, 10);
 
     const think = async (text: string) => {
-      for (const ch of text) { check(); sink.emit({ type: 'thinking', text: ch }); await wait(14); }
+      for (const ch of text) {
+        check();
+        sink.emit({ type: "thinking", text: ch });
+        await wait(14);
+      }
     };
-    const tool = async (name: string, input: any, outputFn: () => any, ms = 600) => {
+    const tool = async (
+      name: string,
+      input: any,
+      outputFn: () => any,
+      ms = 600,
+    ) => {
       check();
       const id = uid();
-      sink.emit({ type: 'tool_call', id, tool: name, input });
+      sink.emit({ type: "tool_call", id, tool: name, input });
       await wait(ms);
       check();
       const output = outputFn();
-      sink.emit({ type: 'tool_result', id, tool: name, output });
+      sink.emit({ type: "tool_result", id, tool: name, output });
       return output;
     };
 
     const q = userInput.trim().toLowerCase();
-    const isDesign = /海报|banner|图|设计|生成|做|创建|制作|layout|poster|logo|品牌|视频|配色|画布|card|封面/.test(q);
-    const isGreeting = !isDesign && (q.length < 12 || /^(hi|hello|你好|嗨|hey|test|ok|哈|在吗|是的|好的|嗯|谢|谢谢|thanks)/.test(q));
-    const isQuestion = !isDesign && /\?|？|什么|怎么|如何|能不能|可以|会不会|介绍/.test(q);
+    const isDesign =
+      /海报|banner|图|设计|生成|做|创建|制作|layout|poster|logo|品牌|视频|配色|画布|card|封面/.test(
+        q,
+      );
+    const isGreeting =
+      !isDesign &&
+      (q.length < 12 ||
+        /^(hi|hello|你好|嗨|hey|test|ok|哈|在吗|是的|好的|嗯|谢|谢谢|thanks)/.test(
+          q,
+        ));
+    const isQuestion =
+      !isDesign && /\?|？|什么|怎么|如何|能不能|可以|会不会|介绍/.test(q);
 
     if (isGreeting) {
       const replies = [
-        '嗨！有什么设计想法想聊聊？',
-        '你好～告诉我你想做什么，我来帮你把它变成现实。',
-        '嗯，我在。有设计需求直接说就好。',
+        "嗨！有什么设计想法想聊聊？",
+        "你好～告诉我你想做什么，我来帮你把它变成现实。",
+        "嗯，我在。有设计需求直接说就好。",
       ];
-      const reply = replies[Math.floor(Math.random() * replies.length)] ?? '';
+      const reply = replies[Math.floor(Math.random() * replies.length)] ?? "";
       await think(reply);
-      sink.emit({ type: 'final', text: reply });
+      sink.emit({ type: "final", text: reply });
       return;
     }
 
     if (isQuestion) {
       const reply = `我是 AI 设计助手，可以在画布上帮你生成海报、Banner、图片、视频，以及做排版和配色。直接描述你的需求就好，比如"做一张咖啡店开业海报，暖色调"。`;
       await think(reply);
-      sink.emit({ type: 'final', text: reply });
+      sink.emit({ type: "final", text: reply });
       return;
     }
 
     // --- Design task: full mock workflow ---
-    const frameId = 'agent_frame';
+    const frameId = "agent_frame";
 
-    await tool('plan_design', { request: userInput, deliverables: ['1080×1080 海报'] }, () => ({
-      plan: { totalSteps: 4, steps: [
-        { step: 1, title: '设置画布' }, { step: 2, title: '生成主图' },
-        { step: 3, title: '添加文字' }, { step: 4, title: '视觉质检' },
-      ]}, note: '已生成 4 步计划。',
-    }), 350);
+    await tool(
+      "plan_design",
+      { request: userInput, deliverables: ["1080×1080 海报"] },
+      () => ({
+        plan: {
+          totalSteps: 4,
+          steps: [
+            { step: 1, title: "设置画布" },
+            { step: 2, title: "生成主图" },
+            { step: 3, title: "添加文字" },
+            { step: 4, title: "视觉质检" },
+          ],
+        },
+        note: "已生成 4 步计划。",
+      }),
+      350,
+    );
 
-    await tool('set_frame', { width: 1080, height: 1080, background: '#0a0e1a' }, () => {
-      sink.canvas({ op: 'set_frame', width: 1080, height: 1080, background: '#0a0e1a' });
-      return { note: 'Frame set to 1080×1080.' };
-    }, 250);
+    await tool(
+      "set_frame",
+      { width: 1080, height: 1080, background: "#0a0e1a" },
+      () => {
+        sink.canvas({
+          op: "set_frame",
+          width: 1080,
+          height: 1080,
+          background: "#0a0e1a",
+        });
+        return { note: "Frame set to 1080×1080." };
+      },
+      250,
+    );
 
     const imgId = `img_${uid()}`;
-    await tool('generate_image', { prompt: userInput, aspectRatio: '1:1', parentId: frameId }, () => {
-      sink.canvas({ op: 'add_node', node: {
-        refId: imgId, type: 'rect', parentId: frameId,
-        x: 0, y: 0, width: 1080, height: 680,
-        fill: { type: 'linear', stops: [{ offset: 0, color: '#1a1f5e' }, { offset: 1, color: '#4f1a8a' }] } as any,
-      }});
-      return { refId: imgId, note: '图片占位节点已放置（Mock）。' };
-    }, 700);
+    await tool(
+      "generate_image",
+      { prompt: userInput, aspectRatio: "1:1", parentId: frameId },
+      () => {
+        sink.canvas({
+          op: "add_node",
+          node: {
+            refId: imgId,
+            type: "rect",
+            parentId: frameId,
+            x: 0,
+            y: 0,
+            width: 1080,
+            height: 680,
+            fill: {
+              type: "linear",
+              stops: [
+                { offset: 0, color: "#1a1f5e" },
+                { offset: 1, color: "#4f1a8a" },
+              ],
+            } as any,
+          },
+        });
+        return { refId: imgId, note: "图片占位节点已放置（Mock）。" };
+      },
+      700,
+    );
 
     const titleId = `txt_${uid()}`;
-    await tool('add_text', { text: 'MOCK DESIGN', fontSize: 72, fontWeight: 'bold', fill: '#ffffff', x: 80, y: 720, parentId: frameId }, () => {
-      sink.canvas({ op: 'add_node', node: { refId: titleId, type: 'text', parentId: frameId, text: 'MOCK DESIGN', fontSize: 72, fontWeight: 'bold', fill: '#ffffff', x: 80, y: 720, width: 920 }});
-      return { refId: titleId };
-    }, 250);
+    await tool(
+      "add_text",
+      {
+        text: "MOCK DESIGN",
+        fontSize: 72,
+        fontWeight: "bold",
+        fill: "#ffffff",
+        x: 80,
+        y: 720,
+        parentId: frameId,
+      },
+      () => {
+        sink.canvas({
+          op: "add_node",
+          node: {
+            refId: titleId,
+            type: "text",
+            parentId: frameId,
+            text: "MOCK DESIGN",
+            fontSize: 72,
+            fontWeight: "bold",
+            fill: "#ffffff",
+            x: 80,
+            y: 720,
+            width: 920,
+          },
+        });
+        return { refId: titleId };
+      },
+      250,
+    );
 
-    await tool('verify_design', { refId: frameId, requirements: userInput }, () => ({
-      success: true, score: 9, note: '✅ 设计通过质检（评分 9/10）。',
-    }), 450);
+    await tool(
+      "verify_design",
+      { refId: frameId, requirements: userInput },
+      () => ({
+        success: true,
+        score: 9,
+        note: "✅ 设计通过质检（评分 9/10）。",
+      }),
+      450,
+    );
 
     const summary = `设计完成！\n\n> ⓘ **Mock 模式**：图片以色块占位，关闭 \`MOCK_AGENT\` 可切换真实生成。`;
-    sink.emit({ type: 'final', text: summary });
+    sink.emit({ type: "final", text: summary });
   }
 
   private safeParse(s: string): any {

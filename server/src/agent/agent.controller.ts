@@ -141,24 +141,27 @@ export class AgentController {
       if (msg.role === 'user') {
         let content: any = '';
         if (typeof msg.content === 'string') {
-          content = msg.content;
+          content = msg.content === '[Visual Image Expired in History]' ? '' : msg.content;
         } else if (Array.isArray(msg.content)) {
-          content = msg.content.map((part: any) => {
-            if (part.type === 'text') {
-              return { type: 'text', text: part.text };
-            } else if (part.type === 'image') {
-              return {
-                type: 'image_url',
-                image_url: { url: part.image }
-              };
-            }
-            return part;
-          });
+          content = msg.content
+            .filter((part: any) => !(part.type === 'text' && part.text === '[Visual Image Expired in History]'))
+            .map((part: any) => {
+              if (part.type === 'text') {
+                return { type: 'text', text: part.text };
+              } else if (part.type === 'image') {
+                return {
+                  type: 'image_url',
+                  image_url: { url: part.image }
+                };
+              }
+              return part;
+            });
         }
         result.push({
           role: 'user',
           content
         });
+
       } else if (msg.role === 'assistant') {
         let textContent = '';
         const toolCalls: any[] = [];

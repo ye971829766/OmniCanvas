@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from "vue";
+import { computed } from "vue";
 
 const props = defineProps<{
   refId: string;
@@ -16,10 +16,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: "zoom", refId: string): void }>();
 
-// Track when image finishes loading to fire the curtain reveal
-const imgLoaded = ref(false);
-const showGlow = ref(false);
-
 const displayTitle = computed(() => {
   if (props.title) return props.title;
   const stateVal = props.state as any;
@@ -33,22 +29,6 @@ const displayTitle = computed(() => {
   return "视觉设计方案";
 });
 
-watch(
-  () => props.state?.status,
-  (status) => {
-    if (status === "done") {
-      imgLoaded.value = false; // reset for re-generation
-    }
-  },
-);
-
-function onImgLoad() {
-  imgLoaded.value = true;
-  showGlow.value = true;
-  setTimeout(() => {
-    showGlow.value = false;
-  }, 700);
-}
 
 function downloadMedia(e: MouseEvent) {
   e.stopPropagation();
@@ -67,9 +47,9 @@ function downloadMedia(e: MouseEvent) {
 <template>
   <div
     class="preview-card"
-    :class="{ 'glow-ring': showGlow }"
     @click="emit('zoom', refId)"
   >
+
     <!-- ── GENERATING: gradient mesh skeleton ──────────────────── -->
     <div v-if="!state || state.status === 'generating'" class="preview-mesh">
       <div class="mesh-gradient" />
@@ -90,14 +70,7 @@ function downloadMedia(e: MouseEvent) {
       v-else-if="state.status === 'done' && state.type === 'image'"
       class="preview-done"
     >
-      <img
-        :src="state.url"
-        class="preview-img"
-        :class="{ revealed: imgLoaded }"
-        @load="onImgLoad"
-      />
-      <!-- curtain reveal (clips away top→bottom as image loads) -->
-      <div class="curtain" :class="{ 'curtain-open': imgLoaded }" />
+      <img :src="state.url" class="preview-img" />
 
       <!-- Floating Download Button (Reference Image 2/3 style) -->
       <button
@@ -130,13 +103,8 @@ function downloadMedia(e: MouseEvent) {
       v-else-if="state.status === 'done' && state.type === 'video'"
       class="preview-done"
     >
-      <img
-        :src="state.thumbnailUrl || state.url"
-        class="preview-img"
-        :class="{ revealed: imgLoaded }"
-        @load="onImgLoad"
-      />
-      <div class="curtain" :class="{ 'curtain-open': imgLoaded }" />
+      <img :src="state.thumbnailUrl || state.url" class="preview-img" />
+
       <!-- Play button with breathing pulse -->
       <button
         class="play-btn"
@@ -376,30 +344,8 @@ function downloadMedia(e: MouseEvent) {
   max-height: 480px;
   display: block;
   object-fit: contain;
-  filter: blur(10px);
-  transition:
-    filter 0.4s ease,
-    transform 0.3s cubic-bezier(0, 0, 0.2, 1);
 }
 
-.preview-img.revealed {
-  filter: blur(0);
-}
-
-/* Curtain: a div that slides up to reveal the image top→bottom */
-.curtain {
-  position: absolute;
-  inset: 0;
-  background: #f4f4f5;
-  transform-origin: top center;
-  transform: scaleY(1);
-  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
-  pointer-events: none;
-}
-
-.curtain-open {
-  transform: scaleY(0);
-}
 
 /* Overlay */
 .preview-overlay {

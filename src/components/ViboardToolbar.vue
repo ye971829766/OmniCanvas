@@ -234,15 +234,15 @@ function getIconComponent(iconName: string) {
 }
 
 function getBtnCoords(btn: HTMLElement) {
-  if (!btn || !mainToolbar.value) return { top: 0, height: 0 };
+  if (!btn || !mainToolbar.value) return { left: 0, width: 0 };
   const btnRect = btn.getBoundingClientRect();
   const toolbarRect = mainToolbar.value.getBoundingClientRect();
   const style = window.getComputedStyle(mainToolbar.value);
-  const borderTop = parseFloat(style.borderTopWidth) || 0;
+  const borderLeft = parseFloat(style.borderLeftWidth) || 0;
 
   return {
-    top: btnRect.top - toolbarRect.top - borderTop,
-    height: btnRect.height,
+    left: btnRect.left - toolbarRect.left - borderLeft,
+    width: btnRect.width,
   };
 }
 
@@ -262,11 +262,11 @@ function initPillPosition() {
   activePill.value.style.transition = "none";
   hoverPill.value.style.transition = "none";
 
-  activePill.value.style.top = `${coords.top}px`;
-  activePill.value.style.height = `${coords.height}px`;
+  activePill.value.style.left = `${coords.left}px`;
+  activePill.value.style.width = `${coords.width}px`;
 
-  hoverPill.value.style.top = `${coords.top}px`;
-  hoverPill.value.style.height = `${coords.height}px`;
+  hoverPill.value.style.left = `${coords.left}px`;
+  hoverPill.value.style.width = `${coords.width}px`;
 
   void activePill.value.offsetHeight; // Force reflow
   activePill.value.style.transition = prevTransition;
@@ -282,8 +282,8 @@ function updateHoverPill() {
   if (!targetBtn) return;
 
   const coords = getBtnCoords(targetBtn);
-  hoverPill.value.style.top = `${coords.top}px`;
-  hoverPill.value.style.height = `${coords.height}px`;
+  hoverPill.value.style.left = `${coords.left}px`;
+  hoverPill.value.style.width = `${coords.width}px`;
 
   if (hoveredTool.value && hoveredTool.value !== props.modelValue) {
     hoverPill.value.style.opacity = "1";
@@ -306,10 +306,10 @@ function triggerToolTransition(nextTool: string | undefined) {
   visibleToolDef.value = activeToolDef.value;
   showPropertiesPanel.value = true;
 
-  // 只更新 pill 的位置和高度，不做复杂动画
+  // 只更新 pill 的位置和宽度，不做复杂动画
   const coords = getBtnCoords(nextBtn);
-  activePill.value.style.top = `${coords.top}px`;
-  activePill.value.style.height = `${coords.height}px`;
+  activePill.value.style.left = `${coords.left}px`;
+  activePill.value.style.width = `${coords.width}px`;
 
   updateHoverPill();
 }
@@ -425,30 +425,30 @@ onUnmounted(() => {
 /* Shared Hover Pill Background */
 .hover-pill {
   position: absolute;
-  left: 4px;
-  right: 4px;
+  top: 4px;
+  bottom: 4px;
   border-radius: 6px;
   z-index: 0;
   pointer-events: none;
   background-color: var(--zinc-100);
   opacity: 0;
   transition:
-    top 0.35s cubic-bezier(0.2, 0.9, 0.4, 1),
-    height 0.35s cubic-bezier(0.2, 0.9, 0.4, 1),
+    left 0.35s cubic-bezier(0.2, 0.9, 0.4, 1),
+    width 0.35s cubic-bezier(0.2, 0.9, 0.4, 1),
     opacity 0.2s ease;
 }
 
 /* Shared Active Pill Background */
 .active-pill {
   position: absolute;
-  left: 4px;
-  right: 4px;
+  top: 4px;
+  bottom: 4px;
   border-radius: 6px;
   z-index: 1;
   pointer-events: none;
   transition:
-    top 0.45s cubic-bezier(0.25, 1, 0.5, 1),
-    height 0.45s cubic-bezier(0.25, 1, 0.5, 1),
+    left 0.45s cubic-bezier(0.25, 1, 0.5, 1),
+    width 0.45s cubic-bezier(0.25, 1, 0.5, 1),
     background-color 0.25s ease;
   transform-style: preserve-3d;
   perspective: 1000px;
@@ -512,10 +512,10 @@ onUnmounted(() => {
 
 /* Divider styling */
 .divider {
-  width: 16px;
-  height: 1px;
+  width: 1px;
+  height: 16px;
   background-color: var(--border-color);
-  margin: 4px 0;
+  margin: 0 4px;
   z-index: 2;
 }
 
@@ -605,9 +605,10 @@ onUnmounted(() => {
 
 .tooltip {
   position: absolute;
-  left: 44px;
-  top: 50%;
-  transform: translateY(-50%) translateX(-4px);
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  margin-bottom: 8px;
   background-color: var(--tooltip-bg);
   color: white;
   padding: 4px 6px;
@@ -633,15 +634,15 @@ onUnmounted(() => {
 
 .tooltip-wrapper:hover .tooltip {
   opacity: 1;
-  transform: translateY(-50%) translateX(0);
+  transform: translateX(-50%) translateY(0);
 }
 
 /* Toolbar Floating Wrapper */
 .toolbar-wrapper {
   position: absolute;
-  left: 20px;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 100;
   pointer-events: none;
 }
@@ -649,10 +650,10 @@ onUnmounted(() => {
 .toolbar-container {
   position: relative;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 2px;
-  padding: 6px 4px;
+  padding: 4px 6px;
   background-color: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -668,9 +669,9 @@ onUnmounted(() => {
 /* Secondary Properties Toolbar */
 .properties-toolbar-wrapper {
   position: absolute;
-  left: 72px;
-  top: 50%;
-  transform: translateY(-50%) translateX(10px);
+  bottom: 76px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
   height: 44px;
   background-color: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(12px);
@@ -694,7 +695,7 @@ onUnmounted(() => {
 
 .properties-toolbar-wrapper.active {
   opacity: 1;
-  transform: translateY(-50%) translateX(0);
+  transform: translateX(-50%) translateY(0);
   pointer-events: auto;
 }
 
@@ -706,11 +707,11 @@ onUnmounted(() => {
 
 .panel-fade-enter-from {
   opacity: 0;
-  transform: translateX(20px);
+  transform: translateY(10px);
 }
 
 .panel-fade-leave-to {
   opacity: 0;
-  transform: translateX(-20px);
+  transform: translateY(-10px);
 }
 </style>

@@ -1,19 +1,20 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, nextTick } from "vue";
 import {
   IncremarkContent,
   AutoScrollContainer,
   type UseIncremarkOptions,
-} from '@incremark/vue';
-import ToolActivity from './ToolActivity.vue';
-import ToolCallCard from './ToolCallCard.vue';
-import ToolCallGroup from './ToolCallGroup.vue';
-import OptionPreviewCard from './OptionPreviewCard.vue';
-import { Image } from 'primevue';
-import plotTwistAvatar from '@/assets/plot_twist_avatar.jpg';
-import logoImg from '@/assets/logo.jpg';
-import type { ChatMessage, ToolCallItem } from '@/composables/useAgent';
-import { stripInternalToolErrors } from '@/composables/useAgent';
+} from "@incremark/vue";
+import { vStreamingDot } from "@/directives/vStreamingDot";
+import ToolActivity from "./ToolActivity.vue";
+import ToolCallCard from "./ToolCallCard.vue";
+import ToolCallGroup from "./ToolCallGroup.vue";
+import OptionPreviewCard from "./OptionPreviewCard.vue";
+import { Image } from "primevue";
+import plotTwistAvatar from "@/assets/plot_twist_avatar.jpg";
+import logoImg from "@/assets/logo.jpg";
+import type { ChatMessage, ToolCallItem } from "@/composables/useAgent";
+import { stripInternalToolErrors } from "@/composables/useAgent";
 
 const props = defineProps<{
   messages: ChatMessage[];
@@ -28,15 +29,14 @@ const formattedTimer = computed(() => {
   const time = props.elapsedTime ?? 0;
   const m = Math.floor(time / 60);
   const s = time % 60;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 });
 
-
 const emit = defineEmits<{
-  (e: 'useSuggestion', s: string): void;
-  (e: 'zoomToNode', refId: string): void;
-  (e: 'scroll'): void;
-  (e: 'retry'): void;
+  (e: "useSuggestion", s: string): void;
+  (e: "zoomToNode", refId: string): void;
+  (e: "scroll"): void;
+  (e: "retry"): void;
 }>();
 
 const scrollRef = ref<any>(null);
@@ -47,11 +47,34 @@ function scrollToBottom() {
   userScrolledUp.value = false;
 }
 
+watch(
+  () => props.loading,
+  async (isLoading) => {
+    if (!isLoading) {
+      await nextTick();
+      scrollToBottom();
+      setTimeout(() => scrollToBottom(), 120);
+      setTimeout(() => scrollToBottom(), 350);
+    }
+  },
+);
+
+watch(
+  () => props.messages.length,
+  async () => {
+    await nextTick();
+    if (!userScrolledUp.value) {
+      scrollToBottom();
+      setTimeout(() => scrollToBottom(), 120);
+    }
+  },
+);
+
 function handleScroll() {
   if (scrollRef.value) {
     userScrolledUp.value = scrollRef.value.isUserScrolledUp() ?? false;
   }
-  emit('scroll');
+  emit("scroll");
 }
 
 function isUserScrolledUp() {
@@ -70,13 +93,12 @@ const getIncremarkOptions = (streaming: boolean): UseIncremarkOptions => ({
     enabled: streaming,
     charsPerTick: [1, 3],
     tickInterval: 30,
-    effect: 'none',
+    effect: "none",
   },
 });
 
-
 interface ToolRenderBlock {
-  type: 'single' | 'group';
+  type: "single" | "group";
   tool?: ToolCallItem;
   tools?: ToolCallItem[];
   id: string;
@@ -86,9 +108,9 @@ function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
   if (!tools || !tools.length) return [];
 
   const STANDALONE_TOOLS = new Set([
-    'generate_image',
-    'generate_video',
-    'collect_inspiration',
+    "generate_image",
+    "generate_video",
+    "collect_inspiration",
   ]);
 
   const blocks: ToolRenderBlock[] = [];
@@ -102,7 +124,7 @@ function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
 
       // Render as a single clean action badge (e.g. "排版设计") instead of "使用了 X 个工具"
       blocks.push({
-        type: 'single',
+        type: "single",
         tool: {
           id: activeTool.id,
           name: activeTool.name,
@@ -120,7 +142,7 @@ function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
     if (STANDALONE_TOOLS.has(tool.name)) {
       flushGroup();
       blocks.push({
-        type: 'single',
+        type: "single",
         tool,
         id: tool.id,
       });
@@ -137,11 +159,20 @@ function filterBlocks(blocks: any[]): any[] {
   let hasLayoutBadge = false;
 
   for (const blk of blocks) {
-    if (blk.type === 'text') {
-      result.push(blk);
-    } else if (blk.type === 'tools' && blk.tools && blk.tools.length > 0) {
+    if (blk.type === "text") {
+      if (blk.text && stripInternalToolErrors(blk.text).trim()) {
+        result.push(blk);
+      }
+    } else if (blk.type === "tools" && blk.tools && blk.tools.length > 0) {
       const isPureLayout = blk.tools.every((t: any) =>
-        ['add_text', 'set_frame', 'add_rect', 'add_frame', 'update_node', 'remove_node'].includes(t.name)
+        [
+          "add_text",
+          "set_frame",
+          "add_rect",
+          "add_frame",
+          "update_node",
+          "remove_node",
+        ].includes(t.name),
       );
 
       if (isPureLayout) {
@@ -163,35 +194,30 @@ function isLastStreamingTextPart(
   blocks: any[],
   partIdx: number,
   parts: ParsedMessagePart[],
-  isStreaming: boolean
+  isStreaming: boolean,
 ): boolean {
   if (!isStreaming || !blocks || !blocks.length) return false;
-  const textBlocks = blocks.filter((b) => b.type === 'text' && b.text);
+  const textBlocks = blocks.filter((b) => b.type === "text" && b.text);
   if (!textBlocks.length) return false;
   if (textBlocks[textBlocks.length - 1].id !== blk.id) return false;
 
   for (let i = parts.length - 1; i >= 0; i--) {
-    if (parts[i].type === 'text') {
+    if (parts[i].type === "text") {
       return i === partIdx;
     }
   }
   return false;
 }
 
-
-
-
-
-
-
 interface ParsedMessagePart {
-  type: 'text' | 'grid' | 'image_ref';
+  type: "text" | "grid" | "image_ref";
   content: string | string[];
   refId?: string;
 }
 
 function parseMessageText(text: string): ParsedMessagePart[] {
   text = stripInternalToolErrors(text);
+  if (!text || !text.trim()) return [];
   const regex = /\[inspiration_grid:([^\]]+)\]|\[@image:#([^\]]+)\]/g;
   const parts: ParsedMessagePart[] = [];
   let lastIndex = 0;
@@ -199,26 +225,32 @@ function parseMessageText(text: string): ParsedMessagePart[] {
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({
-        type: 'text',
-        content: text.substring(lastIndex, match.index),
-      });
+      const sub = text.substring(lastIndex, match.index);
+      if (sub.trim()) {
+        parts.push({
+          type: "text",
+          content: sub,
+        });
+      }
     }
     if (match[1]) {
-      const urls = match[1].split(',').map((u) => u.trim());
-      parts.push({ type: 'grid', content: urls });
+      const urls = match[1].split(",").map((u) => u.trim());
+      parts.push({ type: "grid", content: urls });
     } else if (match[2]) {
       const refId = match[2].trim();
-      parts.push({ type: 'image_ref', content: `[@image:#${refId}]`, refId });
+      parts.push({ type: "image_ref", content: `[@image:#${refId}]`, refId });
     }
     lastIndex = regex.lastIndex;
   }
 
   if (lastIndex < text.length) {
-    parts.push({ type: 'text', content: text.substring(lastIndex) });
+    const tail = text.substring(lastIndex);
+    if (tail.trim()) {
+      parts.push({ type: "text", content: tail });
+    }
   }
 
-  return parts.length > 0 ? parts : [{ type: 'text', content: text }];
+  return parts;
 }
 
 function parseUserText(text: string) {
@@ -230,17 +262,17 @@ function parseUserText(text: string) {
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
       parts.push({
-        type: 'text',
+        type: "text",
         content: text.substring(lastIndex, match.index),
       });
     }
-    parts.push({ type: 'mention', content: match[1] });
+    parts.push({ type: "mention", content: match[1] });
     lastIndex = regex.lastIndex;
   }
   if (lastIndex < text.length) {
-    parts.push({ type: 'text', content: text.substring(lastIndex) });
+    parts.push({ type: "text", content: text.substring(lastIndex) });
   }
-  return parts.length > 0 ? parts : [{ type: 'text', content: text }];
+  return parts.length > 0 ? parts : [{ type: "text", content: text }];
 }
 
 function copyText(txt: string) {
@@ -265,7 +297,10 @@ function copyText(txt: string) {
           <div class="skeleton-avatar" />
           <div class="skeleton-lines">
             <div class="skeleton-line" :style="{ width: `${60 + i * 10}%` }" />
-            <div class="skeleton-line short" :style="{ width: `${30 + i * 8}%` }" />
+            <div
+              class="skeleton-line short"
+              :style="{ width: `${30 + i * 8}%` }"
+            />
           </div>
         </div>
       </div>
@@ -276,7 +311,11 @@ function copyText(txt: string) {
         <div class="ambient-blob blob-2" aria-hidden="true" />
         <div class="ambient-blob blob-3" aria-hidden="true" />
         <div class="agent-empty-logo">
-          <img :src="logoImg" alt="PlotTwist" class="agent-empty-logo-img float-logo" />
+          <img
+            :src="logoImg"
+            alt="PlotTwist"
+            class="agent-empty-logo-img float-logo"
+          />
         </div>
         <p class="empty-title">告诉我你想设计什么</p>
         <p class="empty-sub">描述想法，我来生成图像、视频和排版</p>
@@ -296,23 +335,25 @@ function copyText(txt: string) {
       <!-- Conversation -->
       <template v-for="m in messages" :key="m.id">
         <!-- user -->
-        <div v-if="m.role === 'user'" class="flex flex-col items-end w-full group relative">
+        <div
+          v-if="
+            m.role === 'user' &&
+            m.text.trim() !== '[Visual Image Expired in History]'
+          "
+          class="flex flex-col items-end w-full group relative"
+        >
           <div class="agent-bubble-user-wrap relative">
             <div class="agent-bubble-user">
-              <template v-for="(part, pidx) in parseUserText(m.text)" :key="pidx">
+              <template
+                v-for="(part, pidx) in parseUserText(m.text)"
+                :key="pidx"
+              >
                 <span v-if="part.type === 'mention'" class="mention-chip-msg">{{
                   part.content
                 }}</span>
                 <template v-else>{{ part.content }}</template>
               </template>
             </div>
-            <!-- Copy button on hover -->
-            <button class="msg-copy-btn user-copy-btn" @click="copyText(m.text)" title="复制">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
           </div>
           <!-- user attachments grid -->
           <div
@@ -323,7 +364,7 @@ function copyText(txt: string) {
               v-for="(img, iidx) in m.images"
               :key="iidx"
               class="user-image-wrapper"
-              style="width:72px;height:72px"
+              style="width: 72px; height: 72px"
             >
               <Image class="user-image" :src="img" alt="Image" preview />
             </div>
@@ -332,8 +373,11 @@ function copyText(txt: string) {
 
         <!-- assistant -->
         <div v-else class="flex flex-col gap-2">
-          <div class="flex items-start gap-2.5">
-            <div class="avatar-ring shrink-0 mt-0.5" :class="{ 'is-streaming': m.streaming }">
+          <div class="flex items-start gap-1">
+            <div
+              class="avatar-ring shrink-0 mt-0.5"
+              :class="{ 'is-streaming': m.streaming }"
+            >
               <img
                 class="agent-avatar"
                 :src="plotTwistAvatar"
@@ -341,43 +385,68 @@ function copyText(txt: string) {
               />
             </div>
             <div class="flex-1 min-w-0">
-              <!-- Inline thinking indicator right next to avatar when AI is actively thinking -->
-              <div v-if="m.streaming && (!m.text || !m.text.trim() || m.tools?.some(t => !t.done))" class="inline-thinking-header">
+              <!-- Inline thinking indicator right next to avatar when AI is actively thinking       -->
+              <div
+                class="inline-thinking-header"
+                v-if="
+                  m.streaming &&
+                  (!m.text || !m.text.trim() || m.tools?.some((t) => !t.done))
+                "
+              >
                 <span class="gemini-sparkle-icon">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path d="M12 2C12 7.5 7.5 12 2 12C7.5 12 12 16.5 12 22C12 16.5 16.5 12 22 12C16.5 12 12 7.5 12 2Z"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="16"
+                    height="16"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M12 2C12 7.5 7.5 12 2 12C7.5 12 12 16.5 12 22C12 16.5 16.5 12 22 12C16.5 12 12 7.5 12 2Z"
+                    />
                   </svg>
                 </span>
                 <span class="thinking-label">思考中</span>
-                <span class="thinking-timer">{{ formattedTimer }}</span>
+                <!-- <span class="thinking-timer">{{ formattedTimer }}</span> -->
               </div>
 
-
-
               <!-- Interleaved Blocks Rendering (Text -> Tool -> Text -> Tool) -->
-              <div v-if="m.blocks && m.blocks.length" class="flex flex-col gap-1.5">
-
+              <div
+                v-if="m.blocks && m.blocks.length"
+                class="flex flex-col gap-1.5"
+              >
                 <template v-for="blk in filterBlocks(m.blocks)" :key="blk.id">
-
                   <!-- Text Block -->
-                  <div v-if="blk.type === 'text' && blk.text" class="agent-bubble-ai">
+                  <div
+                    v-if="blk.type === 'text' && blk.text && stripInternalToolErrors(blk.text).trim()"
+                    class="agent-bubble-ai"
+                  >
                     <template
                       v-for="(part, idx) in parseMessageText(blk.text)"
                       :key="idx"
                     >
                       <IncremarkContent
                         v-if="
-                          part.type === 'text' && typeof part.content === 'string'
+                          part.type === 'text' &&
+                          typeof part.content === 'string'
+                        "
+                        v-streaming-dot="
+                          isLastStreamingTextPart(
+                            blk,
+                            m.blocks,
+                            idx,
+                            parseMessageText(blk.text),
+                            !!m.streaming,
+                          )
                         "
                         class="incremark markdown-body"
-                        :class="{ streaming: isLastStreamingTextPart(blk, m.blocks, idx, parseMessageText(blk.text), !!m.streaming) }"
                         :content="part.content"
-
-
                         :is-finished="!m.streaming"
                         :incremark-options="getIncremarkOptions(!!m.streaming)"
                       />
-                      <div v-else-if="part.type === 'grid'" class="inspiration-grid">
+                      <div
+                        v-else-if="part.type === 'grid'"
+                        class="inspiration-grid"
+                      >
                         <div
                           v-for="(url, uidx) in part.content"
                           :key="uidx"
@@ -398,8 +467,16 @@ function copyText(txt: string) {
                   </div>
 
                   <!-- Tools Block -->
-                  <div v-else-if="blk.type === 'tools' && blk.tools && blk.tools.length" class="tool-cards">
-                    <template v-for="block in groupTools(blk.tools)" :key="block.id">
+                  <div
+                    v-else-if="
+                      blk.type === 'tools' && blk.tools && blk.tools.length
+                    "
+                    class="tool-cards"
+                  >
+                    <template
+                      v-for="block in groupTools(blk.tools)"
+                      :key="block.id"
+                    >
                       <ToolCallGroup
                         v-if="block.type === 'group' && block.tools"
                         :tools="block.tools"
@@ -414,7 +491,7 @@ function copyText(txt: string) {
               </div>
 
               <!-- Legacy Fallback -->
-              <div v-else-if="m.text" class="agent-bubble-ai">
+              <div v-else-if="m.text && stripInternalToolErrors(m.text).trim()" class="agent-bubble-ai">
                 <template
                   v-for="(part, idx) in parseMessageText(m.text)"
                   :key="idx"
@@ -423,13 +500,16 @@ function copyText(txt: string) {
                     v-if="
                       part.type === 'text' && typeof part.content === 'string'
                     "
+                    v-streaming-dot="!!m.streaming"
                     class="incremark markdown-body"
-                    :class="{ streaming: m.streaming }"
                     :content="part.content"
                     :is-finished="!m.streaming"
                     :incremark-options="getIncremarkOptions(!!m.streaming)"
                   />
-                  <div v-else-if="part.type === 'grid'" class="inspiration-grid">
+                  <div
+                    v-else-if="part.type === 'grid'"
+                    class="inspiration-grid"
+                  >
                     <div
                       v-for="(url, uidx) in part.content"
                       :key="uidx"
@@ -457,7 +537,14 @@ function copyText(txt: string) {
                 <p class="error-card-desc">{{ m.error }}</p>
                 <div class="error-card-actions">
                   <button class="error-retry-btn" @click="emit('retry')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      width="12"
+                      height="12"
+                    >
                       <polyline points="23 4 23 10 17 10"></polyline>
                       <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                     </svg>
@@ -477,10 +564,18 @@ function copyText(txt: string) {
               />
 
               <!-- Generated media cards -->
-              <div v-if="m.tools && m.tools.length" class="flex flex-col gap-2 mt-2">
+              <div
+                v-if="m.tools && m.tools.length"
+                class="flex flex-col gap-2 mt-2"
+              >
                 <template v-for="tool in m.tools" :key="tool.id">
                   <OptionPreviewCard
-                    v-if="(tool.name === 'generate_image' || tool.name === 'generate_video') && tool.output?.refId && nodeStates[tool.output.refId]"
+                    v-if="
+                      (tool.name === 'generate_image' ||
+                        tool.name === 'generate_video') &&
+                      tool.output?.refId &&
+                      nodeStates[tool.output.refId]
+                    "
                     :refId="tool.output.refId"
                     :state="nodeStates[tool.output.refId]"
                     @zoom="emit('zoomToNode', $event)"
@@ -502,14 +597,20 @@ function copyText(txt: string) {
         title="滚动到最新消息"
         aria-label="滚动到底部"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          width="16"
+          height="16"
+        >
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </button>
     </Transition>
   </div>
 </template>
-
 
 <style scoped>
 .agent-messages {
@@ -563,8 +664,13 @@ function copyText(txt: string) {
 }
 
 @keyframes skeleton-pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 
 .agent-empty {
@@ -599,8 +705,13 @@ function copyText(txt: string) {
 }
 
 @keyframes logo-float {
-  0%, 100% { transform: translateY(0);   }
-  50%       { transform: translateY(-4px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 /* ── E2: Ambient background blobs ────────────────────────────────── */
@@ -614,33 +725,46 @@ function copyText(txt: string) {
 }
 
 .blob-1 {
-  width: 120px; height: 120px;
+  width: 120px;
+  height: 120px;
   background: #7c3aed;
-  top: 10%; left: 15%;
+  top: 10%;
+  left: 15%;
   animation-delay: 0s;
   animation-duration: 9s;
 }
 
 .blob-2 {
-  width: 80px; height: 80px;
+  width: 80px;
+  height: 80px;
   background: #10b981;
-  top: 60%; right: 20%;
+  top: 60%;
+  right: 20%;
   animation-delay: -3s;
   animation-duration: 7s;
 }
 
 .blob-3 {
-  width: 100px; height: 100px;
+  width: 100px;
+  height: 100px;
   background: #f59e0b;
-  bottom: 15%; left: 35%;
+  bottom: 15%;
+  left: 35%;
   animation-delay: -5s;
   animation-duration: 11s;
 }
 
 @keyframes blob-drift {
-  0%, 100% { transform: translate(0, 0)      scale(1);    }
-  33%       { transform: translate(12px, -8px) scale(1.08); }
-  66%       { transform: translate(-8px, 6px) scale(0.94); }
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(12px, -8px) scale(1.08);
+  }
+  66% {
+    transform: translate(-8px, 6px) scale(0.94);
+  }
 }
 
 /* Dark mode: blobs slightly more visible */
@@ -683,7 +807,10 @@ function copyText(txt: string) {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .agent-chip:hover {
@@ -699,7 +826,9 @@ function copyText(txt: string) {
 .chip-arrow {
   opacity: 0;
   transform: translateX(-4px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
   color: var(--p-text-muted-color, #71717a);
   font-size: 12px;
   flex-shrink: 0;
@@ -725,8 +854,14 @@ function copyText(txt: string) {
 }
 
 @keyframes msg-enter-user {
-  from { opacity: 0; transform: scale(0.93) translateX(10px); }
-  to   { opacity: 1; transform: scale(1)    translateX(0);    }
+  from {
+    opacity: 0;
+    transform: scale(0.93) translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
 }
 
 .agent-bubble-ai {
@@ -740,8 +875,14 @@ function copyText(txt: string) {
 }
 
 @keyframes msg-enter-ai {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0);   }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ── ChatGPT-style Pulsing Streaming Dot (Inline at text tail) ────── */
@@ -749,8 +890,7 @@ function copyText(txt: string) {
   position: relative;
 }
 
-.incremark.streaming :deep(.markdown-body > *:last-child)::after {
-  content: '';
+:deep(.streaming-cursor-dot) {
   display: inline-block;
   width: 7.5px;
   height: 7.5px;
@@ -759,23 +899,23 @@ function copyText(txt: string) {
   margin-left: 4px;
   vertical-align: 1px;
   transform-origin: center;
-  animation: chatgpt-dot-pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: chatgpt-dot-pulse 0.8s ease-in-out infinite alternate;
 }
 
+:global(.p-dark) :deep(.streaming-cursor-dot) {
+  background: #f4f4f5;
+}
 
 @keyframes chatgpt-dot-pulse {
-  0%, 100% {
-    transform: scale(0.5);
-    opacity: 0.3;
+  0% {
+    opacity: 0.2;
+    transform: scale(0.75);
   }
-  50% {
-    transform: scale(1.15);
+  100% {
     opacity: 1;
+    transform: scale(1.25);
   }
 }
-
-
-
 
 .markdown-body {
   font-size: var(--text-base);
@@ -852,10 +992,20 @@ function copyText(txt: string) {
   line-height: 1.35;
 }
 
-.markdown-body :deep(h1) { font-size: 1.25em; border-bottom: 1px solid var(--p-surface-200, #e4e4e7); padding-bottom: 4px; }
-.markdown-body :deep(h2) { font-size: 1.15em; }
-.markdown-body :deep(h3) { font-size: 1.05em; }
-.markdown-body :deep(h4) { font-size: 1em; }
+.markdown-body :deep(h1) {
+  font-size: 1.25em;
+  border-bottom: 1px solid var(--p-surface-200, #e4e4e7);
+  padding-bottom: 4px;
+}
+.markdown-body :deep(h2) {
+  font-size: 1.15em;
+}
+.markdown-body :deep(h3) {
+  font-size: 1.05em;
+}
+.markdown-body :deep(h4) {
+  font-size: 1em;
+}
 
 /* ── Code & Pre ──────────────────────────────────────────────────── */
 .markdown-body :deep(code) {
@@ -867,13 +1017,80 @@ function copyText(txt: string) {
   border-radius: 4px;
 }
 
+.markdown-body :deep(.incremark-code) {
+  margin: 8px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #18181b;
+}
+
+.markdown-body :deep(.code-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: #27272a;
+  color: #a1a1aa;
+  font-size: 12px;
+  font-family: var(--font-family-mono, monospace);
+  min-height: 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.markdown-body :deep(.code-header .language) {
+  color: #a1a1aa;
+  text-transform: lowercase;
+  font-weight: 500;
+}
+
+.markdown-body :deep(.code-btn),
+.markdown-body :deep(button.code-btn),
+.markdown-body :deep(.incremark-code-copy-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #a1a1aa;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+  opacity: 0.7;
+  transition: all 0.15s ease;
+}
+
+.markdown-body :deep(.code-btn:hover),
+.markdown-body :deep(button.code-btn:hover),
+.markdown-body :deep(.incremark-code-copy-btn:hover) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  opacity: 1;
+}
+
+.markdown-body :deep(.code-btn svg),
+.markdown-body :deep(button.code-btn svg),
+.markdown-body :deep(.incremark-icon),
+.markdown-body :deep(.incremark-icon svg) {
+  width: 14px;
+  height: 14px;
+  max-width: 14px;
+  max-height: 14px;
+  display: block;
+}
+
 .markdown-body :deep(pre) {
   background: #18181b;
   color: #f4f4f5;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: 0 0 8px 8px;
   overflow-x: auto;
-  margin: 8px 0;
+  margin: 0;
 }
 
 .markdown-body :deep(pre code) {
@@ -900,8 +1117,8 @@ function copyText(txt: string) {
 }
 
 .agent-avatar {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
@@ -915,7 +1132,6 @@ function copyText(txt: string) {
   height: 32px;
   flex-shrink: 0;
 }
-
 
 /* ── Interactive Inline Image Tag Button ([@image:#1]) ──────────────── */
 .inline-image-tag-btn {
@@ -942,7 +1158,6 @@ function copyText(txt: string) {
   border-color: #10b981;
   transform: translateY(-1px);
 }
-
 
 /* ── Structured Error Card (Reference Image 5 style) ────────────────── */
 .structured-error-card {
@@ -1043,6 +1258,8 @@ function copyText(txt: string) {
 .agent-bubble-user-wrap {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  width: 100%;
 }
 
 .msg-copy-btn {
@@ -1076,7 +1293,6 @@ function copyText(txt: string) {
   font-weight: 500;
   color: var(--p-text-muted-color, #71717a);
   user-select: none;
-  margin-bottom: 4px;
 }
 
 .gemini-sparkle-icon {
@@ -1116,8 +1332,6 @@ function copyText(txt: string) {
   color: #71717a;
 }
 
-
-
 .thinking-indicator {
   display: inline-flex;
   align-items: center;
@@ -1133,15 +1347,20 @@ function copyText(txt: string) {
   flex-shrink: 0;
 }
 
-
-
 @keyframes sparkle-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes sparkle-pulse {
-  0%, 100% { transform: rotate(0deg)   scale(0.9); }
-  50%       { transform: rotate(180deg) scale(1.1); }
+  0%,
+  100% {
+    transform: rotate(0deg) scale(0.9);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.1);
+  }
 }
 
 .thinking-text {
@@ -1149,7 +1368,6 @@ function copyText(txt: string) {
   color: var(--p-text-muted-color, #71717a);
   font-weight: 500;
 }
-
 
 .inspiration-grid {
   display: grid;
@@ -1354,7 +1572,6 @@ function copyText(txt: string) {
   color: #a1a1aa;
 }
 
-
 :global(.p-dark) .inline-thinking-header {
   background: transparent;
   border: none;
@@ -1367,14 +1584,6 @@ function copyText(txt: string) {
 }
 
 
-:global(.p-dark) .incremark.streaming :deep(.markdown-body > *:last-child)::after {
-  background: #f4f4f5;
-}
-
-
-
-
-
 
 :global(.p-dark) .user-image-wrapper {
   border-color: #27272a;
@@ -1382,7 +1591,9 @@ function copyText(txt: string) {
 }
 
 :global(.p-dark) .agent-empty-logo {
-  box-shadow: 0 0 32px rgba(124, 58, 237, 0.12), 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 0 32px rgba(124, 58, 237, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 :global(.p-dark) .mention-chip-msg {

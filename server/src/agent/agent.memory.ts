@@ -37,7 +37,8 @@ export class AgentMemory {
   private readonly logger = new Logger(AgentMemory.name);
 
   /** Approximate max tokens to keep in history. */
-  private readonly MAX_TOKENS = 24_000;
+  private readonly MAX_TOKENS = 200_000;
+
   /** Session TTL in ms (default 30 days). */
   private readonly SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
   /** Cleanup interval in ms (every 5 min). */
@@ -294,26 +295,11 @@ export class AgentMemory {
   }
 
   private stripOldImages(messages: ModelMessage[]): ModelMessage[] {
-    // Only keep visual images in the last 6 messages of history to avoid token accumulation and size explosion.
-    // Earlier image parts are replaced with a text descriptor.
-    return messages.map((msg, index) => {
-      if (index >= messages.length - 6) return msg;
-
-      if (Array.isArray(msg.content)) {
-        const hasImage = msg.content.some((p: any) => p.type === 'image');
-        if (hasImage) {
-          const strippedParts = msg.content.map((p: any) => {
-            if (p.type === 'image') {
-              return { type: 'text', text: '[Visual Image Expired in History]' };
-            }
-            return p;
-          });
-          return { ...msg, content: strippedParts } as any;
-        }
-      }
-      return msg;
-    }) as ModelMessage[];
+    // Preserve all image URLs and parts in full history without expiration stripping
+    return messages;
   }
+
+
 
   /**
    * Truncate from the front, preserving the most recent messages,
