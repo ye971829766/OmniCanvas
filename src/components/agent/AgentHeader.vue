@@ -16,7 +16,7 @@ const emit = defineEmits<{
   <div class="agent-header">
     <div class="flex items-center gap-2">
       <span class="agent-logo">
-        <img src="@/assets/logo.jpg" alt="PlotTwist" class="agent-logo-img" />
+        <img src="@/assets/logo.jpg" alt="OmniCanvas" class="agent-logo-img" />
       </span>
       <span class="font-600 text-15px">AI 设计助手</span>
     </div>
@@ -45,7 +45,6 @@ const emit = defineEmits<{
   padding: 12px 14px;
   border-bottom: 1px solid var(--p-surface-100, #f3f4f6);
 }
-
 
 .agent-logo {
   width: 24px;

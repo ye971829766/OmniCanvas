@@ -13,7 +13,7 @@ import { ref } from "vue";
  * setting (prefers-color-scheme).
  */
 
-const STORAGE_KEY = "agentsboard-theme";
+const STORAGE_KEY = "OmniCanvas-theme";
 type ThemeMode = "light" | "dark";
 
 const isDark = ref(false);

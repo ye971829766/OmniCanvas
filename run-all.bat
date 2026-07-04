@@ -1,5 +1,5 @@
 @echo off
-echo Starting AgentsBoard Services...
+echo Starting OmniCanvas Services...
 
 :: Verify bun installation
 where bun >nul 2>nul
@@ -13,15 +13,15 @@ echo Detected runner: %RUNNER%
 
 :: Start Backend
 echo Starting Backend (Server)...
-start "AgentsBoard Backend" cmd /k "cd server && bun run dev"
+start "OmniCanvas Backend" cmd /k "cd server && bun run dev"
 
 :: Start Admin
 echo Starting Admin...
-start "AgentsBoard Admin" cmd /k "cd admin && %RUNNER% run dev"
+start "OmniCanvas Admin" cmd /k "cd admin && %RUNNER% run dev"
 
 :: Start Frontend
 echo Starting Frontend...
-start "AgentsBoard Frontend" cmd /k "%RUNNER% run dev"
+start "OmniCanvas Frontend" cmd /k "%RUNNER% run dev"
 
 echo All services launched in separate windows!
 pause

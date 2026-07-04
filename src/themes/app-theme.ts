@@ -5,7 +5,7 @@ import { definePreset } from "@primeuix/themes";
 import Aura from "@primeuix/themes/aura";
 
 /**
- * AgentsBoard theme — the SINGLE source of truth for the app's color palette.
+ * OmniCanvas theme — the SINGLE source of truth for the app's color palette.
  *
  * Everything downstream reads from the PrimeVue `--p-*` CSS variables this
  * preset generates:
@@ -44,8 +44,8 @@ const SURFACE_LIGHT = {
 // canvas (50) must be the DARKEST and panels (0) slightly elevated/lighter, with
 // hover/border rising further. Higher indices climb toward light text.
 const SURFACE_DARK = {
-  0: "#18181b",   // panel / card (elevated)
-  50: "#121215",  // app canvas (darkest — sits behind panels)
+  0: "#18181b", // panel / card (elevated)
+  50: "#121215", // app canvas (darkest — sits behind panels)
   100: "#27272a", // hover / selected
   200: "#3f3f46", // hairline border (visible on panels)
   300: "#52525b",
@@ -79,20 +79,20 @@ export const NoirPreset = definePreset(Aura, {
       light: {
         surface: SURFACE_LIGHT,
         primary: {
-          color: "{surface.950}",       // near-black CTA (#161618)
+          color: "{surface.950}", // near-black CTA (#161618)
           contrastColor: "#ffffff",
           hoverColor: "{surface.800}",
           activeColor: "{surface.700}",
         },
         text: {
-          color: "{surface.900}",        // #1d1d1f primary text
+          color: "{surface.900}", // #1d1d1f primary text
           hoverColor: "{surface.950}",
-          mutedColor: "{surface.600}",   // #86868b secondary text
+          mutedColor: "{surface.600}", // #86868b secondary text
           hoverMutedColor: "{surface.700}",
         },
         content: {
           background: "{surface.0}",
-          borderColor: "{surface.200}",  // #ececee hairline
+          borderColor: "{surface.200}", // #ececee hairline
         },
         highlight: {
           background: "{surface.100}",

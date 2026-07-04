@@ -128,7 +128,7 @@
       >
         <img
           :src="logoImg"
-          alt="PlotTwist"
+          alt="OmniCanvas"
           class="w-28px h-28px rounded-full object-cover"
         />
       </button>

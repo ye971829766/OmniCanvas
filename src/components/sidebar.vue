@@ -21,7 +21,7 @@
               <img
                 v-if="!collapsed || !openShow"
                 src="@/assets/logo.jpg"
-                alt="PlotTwist"
+                alt="OmniCanvas"
                 key="logo"
                 class="w-30px h-30px rounded-full shadow-sm shrink-0"
               />
@@ -46,7 +46,7 @@
                 v-if="renderExpandedContent"
                 class="ml-2.5 text-xl font-bold font-mono tracking-wide whitespace-nowrap"
               >
-                PlotTwist
+                Omni
               </span>
             </Transition>
           </div>
@@ -316,7 +316,11 @@
       :style="{ width: '25rem' }"
     >
       <div class="flex flex-col gap-2 pt-2">
-        <label for="newWorkspaceName" class="text-sm font-semibold text-[var(--p-text-muted-color)]">请输入新工作空间名称:</label>
+        <label
+          for="newWorkspaceName"
+          class="text-sm font-semibold text-[var(--p-text-muted-color)]"
+          >请输入新工作空间名称:</label
+        >
         <InputText
           id="newWorkspaceName"
           v-model="newWorkspaceName"
@@ -326,7 +330,12 @@
         />
       </div>
       <template #footer>
-        <Button label="取消" text severity="secondary" @click="renameDialogVisible = false" />
+        <Button
+          label="取消"
+          text
+          severity="secondary"
+          @click="renameDialogVisible = false"
+        />
         <Button label="确定" @click="submitRename" />
       </template>
     </Dialog>

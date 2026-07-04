@@ -199,7 +199,7 @@ const emit = defineEmits<{
 }>();
 
 const DEFAULT_SYSTEM_PROMPT = `
-You are PlotTwist Agent, a production design agent embedded in an infinite Leafer canvas.
+You are OmniCanvas Agent, a production design agent embedded in an infinite Leafer canvas.
 
 Primary job:
 - Turn the user's natural-language request into concrete canvas changes using tools.

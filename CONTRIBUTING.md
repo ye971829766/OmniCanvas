@@ -1,6 +1,6 @@
-# Contributing to AgentsBoard
+# Contributing to OmniCanvas
 
-Thank you for considering contributing to AgentsBoard! Every contribution helps make this project better for everyone.
+Thank you for considering contributing to OmniCanvas! Every contribution helps make this project better for everyone.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDU
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/agentsboard.git`
+2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/OmniCanvas.git`
 3. Create a branch: `git checkout -b feature/your-feature-name`
 4. Make your changes
 5. Push to your fork: `git push origin feature/your-feature-name`
@@ -71,13 +71,13 @@ npm test
 
 ### Reporting Bugs
 
-- Use the [Bug Report](https://github.com/YOUR_USERNAME/agentsboard/issues/new?template=bug_report.md) issue template
+- Use the [Bug Report](https://github.com/YOUR_USERNAME/OmniCanvas/issues/new?template=bug_report.md) issue template
 - Include steps to reproduce, expected vs actual behavior
 - Include browser/OS information and screenshots if applicable
 
 ### Suggesting Features
 
-- Use the [Feature Request](https://github.com/YOUR_USERNAME/agentsboard/issues/new?template=feature_request.md) issue template
+- Use the [Feature Request](https://github.com/YOUR_USERNAME/OmniCanvas/issues/new?template=feature_request.md) issue template
 - Describe the problem you're trying to solve
 - Explain why this feature would be useful
 

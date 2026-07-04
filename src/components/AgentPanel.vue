@@ -142,7 +142,7 @@ watch(running, (newRunning) => {
     showNotificationBanner.value = false;
     // Trigger real system notification if enabled
     if (notificationEnabled.value && Notification.permission === "granted") {
-      new Notification("AgentsBoard 设计任务已完成", {
+      new Notification("OmniCanvas 设计任务已完成", {
         body: "您的 AI 设计已成功放置到画布！",
       });
     }

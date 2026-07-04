@@ -40,7 +40,7 @@ const services = [
 
 const children = [];
 
-console.log('\x1b[35m%s\x1b[0m', `Starting AgentsBoard Services concurrently (using ${runner} for web apps)...`);
+console.log('\x1b[35m%s\x1b[0m', `Starting OmniCanvas Services concurrently (using ${runner} for web apps)...`);
 console.log('\x1b[35m%s\x1b[0m', 'Press Ctrl+C to stop all services.');
 
 services.forEach(service => {

@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🎨 AgentsBoard (Viboard)
+# 🎨 OmniCanvas
 
 ### **The Next-Generation AI-Native Infinite Canvas for Multimodal Spatial Creation**
 
-*Redefining visual design and creative workflows by fusing high-performance vector graphics, autonomous multi-agent reasoning networks, and multimodal generative AI.*
+_Redefining visual design and creative workflows by fusing high-performance vector graphics, autonomous multi-agent reasoning networks, and multimodal generative AI._
 
 基于自主多模态 AI Agent 驱动的下一代空间化矢量无限画布与智能设计创作引擎。
 
@@ -24,9 +24,9 @@
 
 ## 💡 Vision & Mission / 愿景与使命
 
-Traditional whiteboards and vector editing tools are bounded by manual interaction overhead. **AgentsBoard (Viboard)** transforms the infinite canvas from a static design dynamic canvas into an **Active Cognitive Space**.
+Traditional whiteboards and vector editing tools are bounded by manual interaction overhead. **OmniCanvas** transforms the infinite canvas from a static design dynamic canvas into an **Active Cognitive Space**.
 
-By deeply combining real-time spatial state parsing with LLM reasoning, visual analysis models, and multi-modal generative AI, AgentsBoard empowers creators to articulate concepts in natural language, while autonomous agents turn high-level intent into pixel-perfect vector structures, styled layouts, and generative media.
+By deeply combining real-time spatial state parsing with LLM reasoning, visual analysis models, and multi-modal generative AI, OmniCanvas empowers creators to articulate concepts in natural language, while autonomous agents turn high-level intent into pixel-perfect vector structures, styled layouts, and generative media.
 
 > **"From canvas as a canvas, to canvas as an autonomous co-creator."**
 
@@ -35,6 +35,7 @@ By deeply combining real-time spatial state parsing with LLM reasoning, visual a
 ## 🔥 Key Features
 
 ### 🎨 1. High-Performance Vector Infinite Canvas Engine
+
 - **Leafer UI 2.x Engine Integration**: Ultra-fast vector rendering with unlimited zoom, smooth pan, GPU hardware acceleration, and sub-millisecond response.
 - **Rich Vector Primitive Suite**: Rectangles, circles, ellipses, stars, regular polygons, straight lines, directional arrows, and dynamic connectors.
 - **Natural Freehand & Marker Stroke**: Smooth marker pen drawing with customizable stroke thickness, pressure sensitivity, and live smoothing.
@@ -44,13 +45,16 @@ By deeply combining real-time spatial state parsing with LLM reasoning, visual a
 - **Non-Destructive History & Background**: Full undo/redo stack snapshot management, coupled with customizable grid, dot matrix, and infinite viewport backgrounds.
 
 ### 🤖 2. Autonomous Multi-Modal AI Agent & MCOT Reasoning Network
+
 - **Real-Time Spatial Context Awareness**: The Agent continuously reads, serializes, and understands the precise JSON state of all canvas elements in real time.
 - **MCOT (Multi-Chain of Thought) Visual Reasoning**: Displays the Agent's multi-step decision graph and internal thought tree in an interactive visual flow.
 - **SSE Stream Protocol & Live Execution**: Zero-latency Server-Sent Events streaming response with live feedback on tool calling steps.
 - **Interactive Option Preview Cards**: The Agent automatically generates multiple design variants, enabling creators to preview and switch options with a single click.
 
 ### 🧰 3. Industrial-Grade Agent Tool Calling Matrix
-AgentsBoard provides a modular, pluggable 10+ tool registry (`server/src/agent/tools/`):
+
+OmniCanvas provides a modular, pluggable 10+ tool registry (`server/src/agent/tools/`):
+
 - 📐 `canvas.tools`: Full CRUD operations over canvas elements, layering, grouping, and styling.
 - 🎨 `style.tools`: Automated color palette extraction, gradient synthesis, and visual style transfer.
 - 📐 `layout.tools`: Algorithmic alignment, dynamic grid auto-layout, spacing distribution, and smart arrangement.
@@ -59,10 +63,12 @@ AgentsBoard provides a modular, pluggable 10+ tool registry (`server/src/agent/t
 - 🔍 `web-search.tools` & `inspiration.tools`: Real-time web inspiration fetching, color moodboard curation, and reference search.
 
 ### 🖼️ 4. Native Multi-Modal Generation Pipeline
+
 - **AI Image Generation**: Direct integration with Flux, OpenAI DALL-E 3, and Google Gemini Imagen with progress streaming and instant canvas placement.
 - **AI Video Generation**: Native support for Luma, CogVideo, and local FFmpeg video rendering pipelines.
 
 ### 🛠️ 5. Enterprise Admin & Dynamic Gateway Management
+
 - **Dedicated Admin Portal (`/admin`)**: Vue 3 + Element Plus dashboard for managing system metrics, channels, models, and diagnostic tools.
 - **Dynamic AI Model Catalog**: Flexible assignment of Chat, Image, and Video models per workspace or user request.
 - **Hybrid Offline Mock Engine**: Complete local mock modes (`MOCK_AGENT`, `MOCK_IMAGE_GENERATION`, `MOCK_VIDEO`) allowing full feature development without API keys.
@@ -139,16 +145,16 @@ flowchart TB
 
 ## 💻 Tech Stack Matrix
 
-| Area | Technologies & Frameworks | Description |
-|------|---------------------------|-------------|
-| **Canvas Engine** | Leafer UI 2.x, `@leafer-in/editor`, `@leafer-in/viewport`, `leafer-x-easy-snap` | High-performance vector graphics rendering engine |
-| **Frontend Core** | Vue 3.5 (Composition API), TypeScript 5.x, Vite 5, Vue Router 4 | Main user application architecture |
-| **UI Components** | PrimeVue 4, Lucide Icons, PrimeIcons, Element Plus (Admin) | Component libraries for App & Admin |
-| **Rich Text & Math**| TipTap 3, KaTeX, Marked, Incremark | Canvas text formatting and mathematical expression rendering |
-| **Styling & Animate**| UnoCSS, GSAP Animation Engine, Sass | Atomic CSS utility styling and smooth transitions |
-| **Server Framework**| NestJS 11, Express, Bun Runtime, RxJS | Enterprise backend web framework and fast execution |
-| **AI Integration** | Vercel AI SDK (`ai`, `@ai-sdk/openai`), `@google/genai` | Multi-provider unified LLM & multi-modal orchestration |
-| **Media Engine** | FFmpeg Installer, Multer File Manager | Server-side video processing and file upload pipeline |
+| Area                  | Technologies & Frameworks                                                       | Description                                                  |
+| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| **Canvas Engine**     | Leafer UI 2.x, `@leafer-in/editor`, `@leafer-in/viewport`, `leafer-x-easy-snap` | High-performance vector graphics rendering engine            |
+| **Frontend Core**     | Vue 3.5 (Composition API), TypeScript 5.x, Vite 5, Vue Router 4                 | Main user application architecture                           |
+| **UI Components**     | PrimeVue 4, Lucide Icons, PrimeIcons, Element Plus (Admin)                      | Component libraries for App & Admin                          |
+| **Rich Text & Math**  | TipTap 3, KaTeX, Marked, Incremark                                              | Canvas text formatting and mathematical expression rendering |
+| **Styling & Animate** | UnoCSS, GSAP Animation Engine, Sass                                             | Atomic CSS utility styling and smooth transitions            |
+| **Server Framework**  | NestJS 11, Express, Bun Runtime, RxJS                                           | Enterprise backend web framework and fast execution          |
+| **AI Integration**    | Vercel AI SDK (`ai`, `@ai-sdk/openai`), `@google/genai`                         | Multi-provider unified LLM & multi-modal orchestration       |
+| **Media Engine**      | FFmpeg Installer, Multer File Manager                                           | Server-side video processing and file upload pipeline        |
 
 ---
 
@@ -163,8 +169,8 @@ flowchart TB
 
 ```bash
 # Clone the repository
-git clone https://github.com/ye971829766/agentsboard.git
-cd agentsboard
+git clone https://github.com/ye971829766/OmniCanvas.git
+cd OmniCanvas
 
 # Install root & frontend dependencies
 npm install
@@ -195,14 +201,16 @@ cd ..
 ```
 
 #### Frontend Environment (`.env`)
+
 ```env
 VITE_API_BASE_URL=http://localhost:3000
-VITE_APP_TITLE=AgentsBoard
+VITE_APP_TITLE=OmniCanvas
 VITE_ENABLE_IMAGE_GEN=true
 VITE_ENABLE_VIDEO_GEN=true
 ```
 
 #### Backend Environment (`server/.env`)
+
 ```env
 PORT=3000
 OPENAI_API_KEY=your_openai_key_here
@@ -229,11 +237,11 @@ bun dev:all
 npm run dev:all
 ```
 
-| Service | Local URL | Description |
-|---------|-----------|-------------|
-| **Frontend App** | `http://localhost:5173` | Main infinite canvas & AI agent interface |
+| Service             | Local URL               | Description                                  |
+| ------------------- | ----------------------- | -------------------------------------------- |
+| **Frontend App**    | `http://localhost:5173` | Main infinite canvas & AI agent interface    |
 | **Admin Dashboard** | `http://localhost:5174` | System monitoring, channels, and diagnostics |
-| **Backend Service** | `http://localhost:3000` | NestJS REST & SSE Agent service |
+| **Backend Service** | `http://localhost:3000` | NestJS REST & SSE Agent service              |
 
 ### Option B: Individual Service Startup
 
@@ -252,7 +260,7 @@ cd admin && npm run dev
 
 ## 🛠️ Admin Dashboard & Management
 
-AgentsBoard contains a dedicated enterprise administration suite in `./admin`:
+OmniCanvas contains a dedicated enterprise administration suite in `./admin`:
 
 1. **System Dashboard (概览)**: Monitor active sessions, service uptime, and model configuration quotas.
 2. **Upstream Channels (上游渠道)**: Configure OpenAI API, Google Gemini, and custom gateway routes with failover priority.
@@ -265,7 +273,7 @@ AgentsBoard contains a dedicated enterprise administration suite in `./admin`:
 ## 📁 Deep Repository Architecture
 
 ```
-agentsboard/
+omnicanvas/
 ├── src/                        # Main Frontend Application
 │   ├── components/             # UI Components
 │   │   ├── Canvas.vue          # Main infinite canvas container & event layer
@@ -304,7 +312,83 @@ agentsboard/
 
 ## 🗺️ Vision & Future Roadmap (2026 - 2027)
 
-AgentsBoard is advancing towards a comprehensive spatial AI ecosystem. Our strategic roadmap includes:
+OmniCanvas is advancing towards a comprehensive spatial AI ecosystem. Our strategic roadmap includes:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            OMNICANVAS ROADMAP                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Phase 1 (Q3 2026)      Phase 2 (Q4 2026)      Phase 3 (Q1 2027)      Phase 4 (Q2 2027)
+  Multi-Agent Network  ──► Code-to-Canvas UI ──► Spatial 3D & Vector ──► Open Plugin Ecosystem
+```
+
+- [x] **Phase 1: Real-time Multi-Agent Collaborative Network**
+  - Multi-agent orchestration (e.g. Design Agent + Critic Agent + Layout Specialist Agent working concurrently on one canvas).
+  - WebSockets / WebRTC real-time multi-user & multi-agent collaborative editing.
+- [ ] **Phase 2: Bidirectional Code-to-Canvas & UI Component Export**
+  - One-click transformation of canvas vector components into Vue 3 / React / Tailwind CSS production code.
+  - Live preview of running frontend components directly embedded in canvas artboards.
+- [ ] **Phase 3: Spatial 3D & Generative Vector Intelligence**
+  - Integration of 3D Gaussian Splatting & WebGL 3D canvas viewports alongside Leafer 2D vector elements.
+  - Fine-tuned local Diffusion Models for native SVG vector icon and illustration generation.
+- [ ] **Phase 4: Autonomous Design Workflow Plugin Ecosystem**
+  - Open-source SDK for third-party developers to register custom Agent tools, canvas nodes, and AI workflows.
+  - Marketplace for sharing Agent prompts, design knowledge bases, and custom UI components.
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions from developers, designers, and AI enthusiasts around the globe!
+
+1. Fork the Repository
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+Please refer to our [Contributing Guide](CONTRIBUTING.md) for detailed guidelines.
+
+---
+
+## 📄 License
+
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ by the OmniCanvas Open Source Team & Community.</sub>
+</div>            # Vue Composition Hooks
+│   │   ├── useCanvas.ts        # Core element management & Leafer UI bindings
+│   │   ├── useAgent.ts         # Agent SSE streaming & execution dispatcher
+│   │   ├── useCanvasCrop.ts    # Interactive image cropping hook
+│   │   ├── useCanvasHistory.ts # State snapshots & Undo/Redo pipeline
+│   │   └── useCanvasFrame.ts   # Artboard containers & Frame management
+│   ├── types/                  # Shared TypeScript data models
+│   └── views/                  # Application views
+├── server/                     # Backend NestJS Engine
+│   └── src/
+│       ├── agent/              # Autonomous Agent Core
+│       │   ├── agent.service.ts    # ReAct agent execution loop & tool runner
+│       │   ├── canvas-state.ts     # Canvas JSON state parser & serializer
+│       │   ├── mcot-graph.ts       # MCOT reasoning graph generator
+│       │   ├── system-prompt.ts    # Domain-aware prompt templates
+│       │   └── tools/              # 10+ Tool Calling implementations
+│       ├── ai/                 # Multi-provider LLM, Image & Video adapters
+│       ├── workspaces/         # Workspace persistence & session management
+│       ├── channels/           # Gateway channel router & failover manager
+│       └── model-config/       # Dynamic model directory service
+├── admin/                      # Vue 3 + Element Plus Admin Dashboard
+├── run-all.js                  # Cross-platform concurrent task orchestrator
+└── agent-integration/          # Integration specs & developer guides
+```
+
+---
+
+## 🗺️ Vision & Future Roadmap (2026 - 2027)
+
+OmniCanvas is advancing towards a comprehensive spatial AI ecosystem. Our strategic roadmap includes:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -350,6 +434,5 @@ Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more informa
 ---
 
 <div align="center">
-  <sub>Built with ❤️ by the AgentsBoard Open Source Team & Community.</sub>
+  <sub>Built with ❤️ by the OmniCanvas Open Source Team & Community.</sub>
 </div>
-

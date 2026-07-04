@@ -11,7 +11,7 @@ import ToolCallCard from "./ToolCallCard.vue";
 import ToolCallGroup from "./ToolCallGroup.vue";
 import OptionPreviewCard from "./OptionPreviewCard.vue";
 import { Image } from "primevue";
-import plotTwistAvatar from "@/assets/plot_twist_avatar.jpg";
+import OmniCanvasAvatar from "@/assets/plot_twist_avatar.jpg";
 import logoImg from "@/assets/logo.jpg";
 import type { ChatMessage, ToolCallItem } from "@/composables/useAgent";
 import { stripInternalToolErrors } from "@/composables/useAgent";
@@ -313,7 +313,7 @@ function copyText(txt: string) {
         <div class="agent-empty-logo">
           <img
             :src="logoImg"
-            alt="PlotTwist"
+            alt="OmniCanvas"
             class="agent-empty-logo-img float-logo"
           />
         </div>
@@ -380,8 +380,8 @@ function copyText(txt: string) {
             >
               <img
                 class="agent-avatar"
-                :src="plotTwistAvatar"
-                alt="PlotTwist"
+                :src="OmniCanvasAvatar"
+                alt="OmniCanvas"
               />
             </div>
             <div class="flex-1 min-w-0">
@@ -417,7 +417,11 @@ function copyText(txt: string) {
                 <template v-for="blk in filterBlocks(m.blocks)" :key="blk.id">
                   <!-- Text Block -->
                   <div
-                    v-if="blk.type === 'text' && blk.text && stripInternalToolErrors(blk.text).trim()"
+                    v-if="
+                      blk.type === 'text' &&
+                      blk.text &&
+                      stripInternalToolErrors(blk.text).trim()
+                    "
                     class="agent-bubble-ai"
                   >
                     <template
@@ -491,7 +495,10 @@ function copyText(txt: string) {
               </div>
 
               <!-- Legacy Fallback -->
-              <div v-else-if="m.text && stripInternalToolErrors(m.text).trim()" class="agent-bubble-ai">
+              <div
+                v-else-if="m.text && stripInternalToolErrors(m.text).trim()"
+                class="agent-bubble-ai"
+              >
                 <template
                   v-for="(part, idx) in parseMessageText(m.text)"
                   :key="idx"
@@ -1595,8 +1602,6 @@ function copyText(txt: string) {
 :global(.p-dark .thinking-label) {
   color: #f4f4f5;
 }
-
-
 
 :global(.p-dark .user-image-wrapper) {
   border-color: #27272a;
