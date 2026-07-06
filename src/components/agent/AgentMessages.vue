@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from "vue";
-import { Sparkles, RotateCcw, ChevronDown } from "lucide-vue-next";
+import { ref, watch, nextTick } from "vue";
+import { RotateCcw, ChevronDown } from "lucide-vue-next";
 import {
   IncremarkContent,
   AutoScrollContainer,
@@ -25,13 +25,6 @@ const props = defineProps<{
   running?: boolean;
   elapsedTime?: number;
 }>();
-
-const formattedTimer = computed(() => {
-  const time = props.elapsedTime ?? 0;
-  const m = Math.floor(time / 60);
-  const s = time % 60;
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-});
 
 const emit = defineEmits<{
   (e: "useSuggestion", s: string): void;
@@ -280,12 +273,6 @@ function parseUserText(text: string) {
   }
   return parts.length > 0 ? parts : [{ type: "text", content: text }];
 }
-
-function copyText(txt: string) {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(txt);
-  }
-}
 </script>
 
 <template>
@@ -322,7 +309,7 @@ function copyText(txt: string) {
             alt="OmniCanvas"
             width="56"
             height="56"
-            style="width: 56px; height: 56px; object-fit: cover;"
+            style="width: 56px; height: 56px; object-fit: cover"
             class="agent-empty-logo-img float-logo"
           />
         </div>
@@ -393,7 +380,7 @@ function copyText(txt: string) {
                 alt="OmniCanvas"
                 width="28"
                 height="28"
-                style="width: 28px; height: 28px; object-fit: cover;"
+                style="width: 28px; height: 28px; object-fit: cover"
               />
             </div>
             <div class="flex-1 min-w-0">
@@ -404,12 +391,11 @@ function copyText(txt: string) {
                   m.streaming &&
                   (!m.text || !m.text.trim() || m.tools?.some((t) => !t.done))
                 "
+                role="status"
+                aria-live="polite"
+                aria-label="AI 正在思考"
               >
-                <span class="gemini-sparkle-icon">
-                  <Sparkles :size="16" />
-                </span>
                 <span class="thinking-label">思考中</span>
-                <!-- <span class="thinking-timer">{{ formattedTimer }}</span> -->
               </div>
 
               <!-- Interleaved Blocks Rendering (Text -> Tool -> Text -> Tool) -->
@@ -1274,47 +1260,94 @@ function copyText(txt: string) {
 
 /* ── AI inline thinking indicator (Right next to Avatar, Gemini/ChatGPT Style) ── */
 .inline-thinking-header {
+  --thinking-ink: var(--p-text-color, #18181b);
+  --thinking-muted: var(--p-text-muted-color, #71717a);
+  --thinking-faint: rgba(24, 24, 27, 0.16);
+
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 2px 0 6px;
-  background: transparent;
-  border: none;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--p-text-muted-color, #71717a);
+  width: fit-content;
+  max-width: 100%;
+  min-height: 24px;
+  margin: 0 0 5px;
+  padding: 1px 0 5px;
+  color: var(--thinking-muted);
   user-select: none;
-}
-
-.gemini-sparkle-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--p-text-color, #18181b);
-  animation: gemini-spin-pulse 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  flex-shrink: 0;
-}
-
-@keyframes gemini-spin-pulse {
-  0% {
-    transform: rotate(0deg) scale(0.9);
-    opacity: 0.7;
-  }
-  50% {
-    transform: rotate(180deg) scale(1.18);
-    opacity: 1;
-  }
-  100% {
-    transform: rotate(360deg) scale(0.9);
-    opacity: 0.7;
-  }
+  transform: translateZ(0);
 }
 
 .thinking-label {
+  position: relative;
   font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.15px;
-  color: var(--p-text-color, #18181b);
+  font-size: 13px;
+  line-height: 1.3;
+  letter-spacing: 0;
+  white-space: nowrap;
+  color: transparent;
+  background: linear-gradient(
+    90deg,
+    var(--thinking-muted) 0%,
+    var(--thinking-muted) 28%,
+    var(--thinking-ink) 46%,
+    var(--thinking-muted) 64%,
+    var(--thinking-muted) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: thinking-text-sheen 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.thinking-label::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: -5px;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--thinking-faint),
+    transparent
+  );
+  opacity: 0.7;
+  animation: thinking-line-breathe 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes thinking-text-sheen {
+  0%,
+  100% {
+    background-position: 120% 0;
+  }
+  50% {
+    background-position: -20% 0;
+  }
+}
+
+@keyframes thinking-line-breathe {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: scaleX(0.55);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-label,
+  .thinking-label::after {
+    animation: none;
+  }
+
+  .thinking-label {
+    color: var(--thinking-muted);
+    background: none;
+  }
 }
 
 .thinking-timer {
@@ -1577,14 +1610,14 @@ function copyText(txt: string) {
 }
 
 :global(.p-dark .inline-thinking-header) {
-  background: transparent;
-  border: none;
-  color: #a1a1aa;
+  --thinking-ink: #fafafa;
+  --thinking-muted: #a1a1aa;
+  --thinking-faint: rgba(250, 250, 250, 0.18);
+  color: var(--thinking-muted);
 }
 
-:global(.p-dark .gemini-sparkle-icon),
 :global(.p-dark .thinking-label) {
-  color: #f4f4f5;
+  color: transparent;
 }
 
 :global(.p-dark .user-image-wrapper) {

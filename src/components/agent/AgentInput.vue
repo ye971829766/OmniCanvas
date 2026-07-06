@@ -333,29 +333,46 @@ function triggerFileInput() {
 }
 
 function handleFileChange(e: Event) {
-  const files = (e.target as HTMLInputElement).files;
-  if (!files) return;
+  const target = e.target as HTMLInputElement;
+  const files = target.files;
+  if (!files || files.length === 0) return;
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    if (file.type.indexOf("image") !== -1) {
-      compressImage(file).then((compressed) => {
-        attachments.value.push(compressed);
-      });
+    const isImage =
+      file.type.startsWith("image/") ||
+      /\.(png|jpe?g|webp|gif|bmp|svg|tiff?)$/i.test(file.name);
+    if (isImage) {
+      compressImage(file)
+        .then((compressed) => {
+          attachments.value.push(compressed);
+        })
+        .catch((err) => {
+          console.error("Failed to process image attachment:", err);
+        });
     }
   }
+  // Reset value so re-selecting the same file triggers change event
+  target.value = "";
 }
 
 function handleDrop(e: DragEvent) {
   e.preventDefault();
   isDragging.value = false;
   const files = e.dataTransfer?.files;
-  if (!files) return;
+  if (!files || files.length === 0) return;
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    if (file.type.indexOf("image") !== -1) {
-      compressImage(file).then((compressed) => {
-        attachments.value.push(compressed);
-      });
+    const isImage =
+      file.type.startsWith("image/") ||
+      /\.(png|jpe?g|webp|gif|bmp|svg|tiff?)$/i.test(file.name);
+    if (isImage) {
+      compressImage(file)
+        .then((compressed) => {
+          attachments.value.push(compressed);
+        })
+        .catch((err) => {
+          console.error("Failed to process dropped image attachment:", err);
+        });
     }
   }
 }
