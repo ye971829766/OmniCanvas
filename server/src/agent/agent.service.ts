@@ -40,6 +40,8 @@ interface TurnUsage {
   startedAt: number;
 }
 
+import { TokensService } from "../tokens/tokens.service";
+
 @Injectable()
 export class AgentService {
   private readonly logger = new Logger(AgentService.name);
@@ -62,6 +64,7 @@ export class AgentService {
     private readonly ai: AiService,
     private readonly memory: AgentMemory,
     private readonly modelConfigService: ModelConfigService,
+    private readonly tokensService: TokensService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -75,6 +78,7 @@ export class AgentService {
     origin: string,
     images?: string[],
     canvasState?: any[],
+    userInfo?: { userId?: string; username?: string },
   ): EventSink {
     const sink = new EventSink();
     const abortController = new AbortController();
@@ -89,6 +93,7 @@ export class AgentService {
           images,
           canvasState,
           abortController.signal,
+          userInfo,
         ),
       );
     };
@@ -156,6 +161,7 @@ export class AgentService {
     images?: string[],
     canvasState?: any[],
     abortSignal?: AbortSignal,
+    userInfo?: { userId?: string; username?: string },
   ): Promise<void> {
     const usage: TurnUsage = {
       promptTokens: 0,
@@ -192,6 +198,16 @@ export class AgentService {
           `tokens=${usage.promptTokens}+${usage.completionTokens} ` +
           `elapsed=${elapsedMs}ms`,
       );
+      if (usage.promptTokens > 0 || usage.completionTokens > 0) {
+        this.tokensService.recordTokenUsage({
+          userId: userInfo?.userId,
+          username: userInfo?.username,
+          model: this.chatModel,
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          type: "agent",
+        });
+      }
       sink.emit({
         type: "usage",
         promptTokens: usage.promptTokens,

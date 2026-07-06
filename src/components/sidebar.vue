@@ -23,6 +23,9 @@
                 src="@/assets/logo.jpg"
                 alt="OmniCanvas"
                 key="logo"
+                width="30"
+                height="30"
+                style="width: 30px; height: 30px; object-fit: cover"
                 class="w-30px h-30px rounded-full shadow-sm shrink-0"
               />
               <!-- Show Expand Button when collapsed and hovered -->
@@ -212,19 +215,38 @@
             key="expanded"
             class="flex items-center justify-between w-full px-1"
           >
-            <div class="flex items-center gap-2.5">
+            <div
+              class="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity min-w-0 flex-1 mr-1"
+              @click="isLoggedIn ? openProfileModal() : openAuthModal('login')"
+            >
               <div
-                class="w-30px h-30px rounded-full bg-[var(--p-primary-color)] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0"
+                class="w-30px h-30px rounded-full bg-[var(--p-primary-color)] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0 shadow-sm overflow-hidden"
               >
-                PT
+                <img
+                  v-if="currentUser?.avatarUrl"
+                  :src="currentUser.avatarUrl"
+                  alt="Avatar"
+                  class="w-full h-full object-cover"
+                />
+                <template v-else>{{ userInitials }}</template>
               </div>
               <span
-                class="text-sm font-medium text-[var(--p-text-color)] whitespace-nowrap"
+                class="text-sm font-medium text-[var(--p-text-color)] whitespace-nowrap overflow-hidden text-ellipsis"
               >
-                Guest Designer
+                {{ displayName }}
               </span>
             </div>
             <div class="flex items-center gap-0.5">
+              <Button
+                v-if="!isLoggedIn"
+                variant="text"
+                rounded
+                size="small"
+                class="!px-2 !py-1 text-xs text-[var(--p-primary-color)] font-semibold shrink-0"
+                @click="openAuthModal('login')"
+              >
+                登录
+              </Button>
               <Button
                 variant="text"
                 rounded
@@ -236,10 +258,12 @@
                 <Moon v-else :size="18" />
               </Button>
               <Button
+                v-if="isLoggedIn"
                 variant="text"
                 rounded
                 class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
-                @click="openSettings"
+                title="个人中心"
+                @click="openProfileModal"
               >
                 <Settings :size="18" />
               </Button>
@@ -263,17 +287,27 @@
               <Moon v-else :size="18" />
             </Button>
             <Button
+              v-if="isLoggedIn"
               variant="text"
               rounded
               class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
-              @click="openSettings"
+              title="个人中心"
+              @click="openProfileModal"
             >
               <Settings :size="18" />
             </Button>
             <div
-              class="w-30px h-30px rounded-full bg-[var(--p-primary-color)] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0"
+              class="w-30px h-30px rounded-full bg-[var(--p-primary-color)] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0 cursor-pointer shadow-sm overflow-hidden"
+              :title="displayName"
+              @click="isLoggedIn ? openProfileModal() : openAuthModal('login')"
             >
-              PT
+              <img
+                v-if="currentUser?.avatarUrl"
+                :src="currentUser.avatarUrl"
+                alt="Avatar"
+                class="w-full h-full object-cover"
+              />
+              <template v-else>{{ userInitials }}</template>
             </div>
           </div>
         </div>
@@ -330,15 +364,14 @@
         />
       </div>
       <template #footer>
-        <Button
-          label="取消"
-          text
-          severity="secondary"
-          @click="renameDialogVisible = false"
-        />
+        <Button label="取消" text @click="renameDialogVisible = false" />
         <Button label="确定" @click="submitRename" />
       </template>
     </Dialog>
+
+    <!-- Auth and Profile Modals -->
+    <AuthModal />
+    <UserProfileModal />
   </div>
 </template>
 
@@ -361,8 +394,20 @@ import vTooltip from "primevue/tooltip";
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import { useTheme } from "@/composables/useTheme";
+import { useUser } from "@/composables/useUser";
+import AuthModal from "@/components/auth/AuthModal.vue";
+import UserProfileModal from "@/components/auth/UserProfileModal.vue";
 
 const { isDark, toggleTheme } = useTheme();
+const {
+  currentUser,
+  isLoggedIn,
+  userInitials,
+  displayName,
+  openAuthModal,
+  openProfileModal,
+  fetchProfile,
+} = useUser();
 
 const props = defineProps<{
   activeWorkspaceId: string | number | null;
@@ -391,21 +436,23 @@ const workspaces = ref<any[]>([]);
 const loadWorkspaces = async () => {
   try {
     workspaces.value = await getWorkspaces();
-    if (workspaces.value.length > 0) {
-      const exists = workspaces.value.some(
-        (w) => String(w.id) === String(props.activeWorkspaceId),
-      );
-      if (!exists) {
-        emit("update:activeWorkspaceId", workspaces.value[0].id);
-      }
-    }
   } catch (err) {
     console.error("Failed to load workspaces:", err);
   }
 };
 
-onMounted(() => {
-  loadWorkspaces();
+onMounted(async () => {
+  await fetchProfile();
+  await loadWorkspaces();
+});
+
+watch(isLoggedIn, async () => {
+  await loadWorkspaces();
+  if (workspaces.value.length > 0) {
+    emit("update:activeWorkspaceId", workspaces.value[0].id);
+  } else {
+    emit("update:activeWorkspaceId", null);
+  }
 });
 
 const selectWorkspace = (item: any) => {
@@ -541,7 +588,7 @@ const confirmDelete = async () => {
 
   confirm.require({
     message: `确定要删除工作空间 "${selectedWorkspace.value.name}" 吗？`,
-    header: "Confirmation",
+    header: "提示",
     icon: "pi pi-exclamation-triangle",
     rejectProps: {
       label: "取消",

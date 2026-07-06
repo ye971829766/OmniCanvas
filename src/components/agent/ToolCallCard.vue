@@ -4,32 +4,18 @@
     <div class="tool-badge-pill">
       <!-- Running spinner -->
       <span v-if="!tool.done" class="badge-spinner">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" class="spin">
-          <path d="M8 2 A6 6 0 0 1 14 8" stroke-linecap="round"/>
-        </svg>
+        <Loader2 :size="13" class="spin" />
       </span>
       <!-- Completed Tool Micro-Icons -->
       <span v-else class="badge-icon">
         <!-- 收集图片灵感 (Search Icon) -->
-        <svg v-if="tool.name === 'collect_inspiration'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
+        <Search v-if="tool.name === 'collect_inspiration'" :size="13" />
         <!-- 生图 (Sparkles AI Icon) -->
-        <svg v-else-if="tool.name === 'generate_image'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13">
-          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-        </svg>
+        <Sparkles v-else-if="tool.name === 'generate_image'" :size="13" />
         <!-- 视频 (Video Icon) -->
-        <svg v-else-if="tool.name === 'generate_video'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13">
-          <polygon points="23 7 16 12 23 17 23 7"></polygon>
-          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-        </svg>
+        <Video v-else-if="tool.name === 'generate_video'" :size="13" />
         <!-- 排版设计 / Canvas Operations (Layout Template Icon) -->
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13">
-          <rect x="3" y="3" width="18" height="18" rx="2.5"/>
-          <line x1="3" y1="9" x2="21" y2="9"/>
-          <line x1="9" y1="21" x2="9" y2="9"/>
-        </svg>
+        <LayoutGrid v-else :size="13" />
       </span>
 
       <span class="badge-label">{{ displayTitle }}</span>
@@ -40,6 +26,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { Loader2, Search, Sparkles, Video, LayoutGrid } from 'lucide-vue-next';
 import { getToolLabel } from './tool-labels';
 import type { ToolCallItem } from '@/composables/useAgent';
 

@@ -89,13 +89,17 @@ export class WorkspacesService implements OnModuleInit {
     }
   }
 
-  async getAll(): Promise<WorkspaceMetadata[]> {
+  async getAll(userId?: string): Promise<WorkspaceMetadata[]> {
     try {
+      if (!userId) {
+        return [];
+      }
       const query = this.db.query(`
         SELECT id, name, createdAt, updatedAt FROM workspaces 
+        WHERE userId = $userId
         ORDER BY updatedAt DESC
       `);
-      return query.all() as WorkspaceMetadata[];
+      return query.all({ $userId: userId }) as WorkspaceMetadata[];
     } catch (err) {
       console.error("Failed to query workspaces from database:", err);
       return [];
@@ -135,7 +139,11 @@ export class WorkspacesService implements OnModuleInit {
     }
   }
 
-  async create(name: string): Promise<WorkspaceMetadata> {
+  async create(name: string, userId?: string): Promise<WorkspaceMetadata> {
+    if (!userId) {
+      throw new HttpException("请先登录后再创建工作区", HttpStatus.UNAUTHORIZED);
+    }
+
     try {
       const id = crypto.randomUUID().replace(/-/g, "");
       const now = new Date().toISOString();
@@ -147,15 +155,16 @@ export class WorkspacesService implements OnModuleInit {
       };
 
       const stmt = this.db.prepare(`
-        INSERT INTO workspaces (id, name, canvasData, createdAt, updatedAt)
-        VALUES ($id, $name, $canvasData, $createdAt, $updatedAt)
+        INSERT INTO workspaces (id, name, canvasData, createdAt, updatedAt, userId)
+        VALUES ($id, $name, $canvasData, $createdAt, $updatedAt, $userId)
       `);
       stmt.run({
         $id: id,
         $name: name,
         $canvasData: "[]",
         $createdAt: now,
-        $updatedAt: now
+        $updatedAt: now,
+        $userId: userId,
       });
 
       return newWs;

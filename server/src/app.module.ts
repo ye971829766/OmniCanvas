@@ -7,10 +7,14 @@ import { ModelConfigModule } from "./model-config/model-config.module";
 import { AgentModule } from "./agent/agent.module";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
 import { DatabaseModule } from "./database/database.module";
+import { UsersModule } from "./users/users.module";
+import { TokensModule } from "./tokens/tokens.module";
 
 @Module({
   imports: [
     DatabaseModule,
+    UsersModule,
+    TokensModule,
     FilesModule,
     AiModule,
     ChannelsModule,

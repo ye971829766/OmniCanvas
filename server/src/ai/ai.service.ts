@@ -22,6 +22,8 @@ import type {
 } from "../types";
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
+import { TokensService } from "../tokens/tokens.service";
+
 @Injectable()
 export class AiService {
   private YUNWU_BASE_URL = (
@@ -40,6 +42,7 @@ export class AiService {
     private readonly channelsService: ChannelsService,
     private readonly modelConfigService: ModelConfigService,
     private readonly dbService: DatabaseService,
+    private readonly tokensService: TokensService,
   ) {}
 
   getOutputFormat(format: unknown): GenerateImageOutputFormat {
@@ -1033,6 +1036,20 @@ export class AiService {
     );
 
     const message = providerResponseBody?.choices?.[0]?.message ?? null;
+    const usage = providerResponseBody?.usage;
+
+    if (usage) {
+      this.tokensService.recordTokenUsage({
+        userId: body?.userId,
+        username: body?.username,
+        model: typeof providerResponseBody?.model === "string" ? providerResponseBody.model : model,
+        promptTokens: usage.prompt_tokens || 0,
+        completionTokens: usage.completion_tokens || 0,
+        totalTokens: usage.total_tokens || 0,
+        type: "chat",
+      });
+    }
+
     return {
       type: "chat",
       model:

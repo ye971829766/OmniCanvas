@@ -14,6 +14,8 @@ import { gsap } from "gsap";
 import AgentHeader from "./agent/AgentHeader.vue";
 import AgentMessages from "./agent/AgentMessages.vue";
 import AgentInput from "./agent/AgentInput.vue";
+import { useConfirm } from "primevue/useconfirm";
+const confirm = useConfirm();
 
 const props = defineProps<{
   canvasApp: Ref<any> | any;
@@ -67,9 +69,23 @@ function onScroll() {
 
 function handleReset() {
   if (messages.value.length === 0) return;
-  if (confirm("确定要清空当前会话吗？")) {
-    reset();
-  }
+  confirm.require({
+    message: "确定要清空当前会话吗？",
+    header: "提示",
+    icon: "pi pi-exclamation-triangle",
+
+    rejectProps: {
+      label: "取消",
+      severity: "secondary",
+      outlined: true,
+    },
+    acceptProps: {
+      label: "确认",
+    },
+    accept: () => {
+      reset();
+    },
+  });
 }
 
 const containerRef = ref<HTMLElement | null>(null);

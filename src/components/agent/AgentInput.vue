@@ -15,6 +15,7 @@ import {
   Type as TypeIcon,
   Circle as CircleIcon,
   Play as PlayIcon,
+  Cpu,
 } from "lucide-vue-next";
 import { getModelConfig } from "@/utils/api";
 
@@ -493,20 +494,9 @@ function handleSubmit() {
                 <!-- For model fallback icon -->
                 <div
                   v-else-if="item.itemType === 'model'"
-                  class="mention-item-model-icon"
+                  class="mention-item-model-icon flex items-center justify-center"
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    class="model-clover-icon"
-                  >
-                    <rect x="9" y="3" width="6" height="18" rx="3" />
-                    <rect x="3" y="9" width="18" height="6" rx="3" />
-                  </svg>
+                  <Cpu :size="16" class="model-clover-icon" />
                 </div>
               </div>
 

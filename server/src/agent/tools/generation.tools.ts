@@ -62,7 +62,7 @@ async function resolveRefImagesToBase64(refImages: string[] | undefined, ctx: To
 
     if (isLocalUrl) {
       const match = imageUrl.match(/\/files\/([^/]+)$/);
-      if (match) {
+      if (match && match[1]) {
         localPath = path.join(process.cwd(), 'files', match[1]);
       }
     } else if (imageUrl.startsWith('files/')) {

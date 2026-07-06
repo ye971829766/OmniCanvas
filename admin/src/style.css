@@ -1,11 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 html, body {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
-  background-color: #09090b;
-  color: #fafafa;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #f1f3f5;
+  color: #1e293b;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow: hidden;
 }
 
@@ -16,91 +18,209 @@ html, body {
   padding: 0;
   display: flex;
   overflow: hidden;
+  background-color: #f1f3f5;
 }
 
-/* Override Element Plus Dark Theme Variables for Premium Vibration Theme */
-html.dark {
-  --el-bg-color: #09090b;
-  --el-bg-color-page: #09090b;
-  --el-bg-color-overlay: #141416;
-  --el-border-color-light: #27272a;
-  --el-border-color: #27272a;
-  --el-text-color-primary: #fafafa;
-  --el-text-color-regular: #a1a1aa;
-  --el-text-color-secondary: #71717a;
+.el-aside {
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+}
+
+.el-aside .el-icon,
+.el-aside svg {
+  width: 18px !important;
+  height: 18px !important;
+  font-size: 18px !important;
+  display: inline-block !important;
+}
+
+/* --- Element Plus Light Theme Theme Overrides --- */
+:root {
+  --el-color-primary: #0f172a;
+  --el-color-primary-light-3: #1e293b;
+  --el-color-primary-light-5: #334155;
+  --el-color-primary-light-7: #64748b;
+  --el-color-primary-light-8: #e2e8f0;
+  --el-color-primary-light-9: #f1f5f9;
+  --el-color-primary-dark-2: #020617;
   
-  /* Brand color (Orange-ish / viboard themed) */
-  --el-color-primary: #f97316;
-  --el-color-primary-light-3: #fb923c;
-  --el-color-primary-light-5: #fdba74;
-  --el-color-primary-light-7: #fed7aa;
-  --el-color-primary-light-9: #ffedd5;
-  --el-color-primary-dark-2: #ea580c;
+  --el-switch-on-color: #0f172a;
+  --el-radio-button-checked-bg-color: #0f172a;
+  --el-radio-button-checked-border-color: #0f172a;
+  --el-checkbox-checked-bg-color: #0f172a;
+  --el-checkbox-checked-border-color: #0f172a;
+
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f1f3f5;
+  --el-bg-color-overlay: #ffffff;
+  --el-border-color-light: #e2e8f0;
+  --el-border-color: #cbd5e1;
+  --el-text-color-primary: #0f172a;
+  --el-text-color-regular: #475569;
+  --el-text-color-secondary: #64748b;
+  --el-font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
-/* Dashboard Premium Styles */
-.dashboard-stat-card {
-  background: linear-gradient(145deg, #141416, #1c1c1e) !important;
-  border: 1px solid #27272a !important;
+/* Radio & Checkbox & Switch Overrides to Black */
+.el-radio-button__orig-radio:checked + .el-radio-button__inner {
+  background-color: #0f172a !important;
+  border-color: #0f172a !important;
+  color: #ffffff !important;
+  box-shadow: -1px 0 0 0 #0f172a !important;
+}
+
+.el-checkbox__input.is-checked .el-checkbox__inner {
+  background-color: #0f172a !important;
+  border-color: #0f172a !important;
+}
+.el-checkbox__input.is-checked + .el-checkbox__label {
+  color: #0f172a !important;
+}
+
+.el-radio__input.is-checked .el-radio__inner {
+  background-color: #0f172a !important;
+  border-color: #0f172a !important;
+}
+.el-radio__input.is-checked + .el-radio__label {
+  color: #0f172a !important;
+}
+
+.el-switch.is-checked .el-switch__core {
+  background-color: #0f172a !important;
+  border-color: #0f172a !important;
+}
+
+/* Tabs Active State Overrides */
+.el-tabs__active-bar {
+  background-color: #0f172a !important;
+  height: 3px !important;
+  border-radius: 2px !important;
+}
+.el-tabs__item.is-active {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+.el-tabs__item:hover {
+  color: #0f172a !important;
+}
+
+/* Card Overrides */
+.el-card {
+  background-color: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 20px !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.el-card:hover {
+  box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.06) !important;
+}
+.el-card__header {
+  border-bottom: 1px solid #f1f5f9 !important;
+  padding: 18px 24px !important;
+}
+.el-card__body {
+  padding: 24px !important;
+}
+
+/* Input & Form Control Overrides */
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  background-color: #f8fafc !important;
   border-radius: 12px !important;
-  transition: all 0.3s ease;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: none !important;
+  color: #0f172a !important;
+  transition: all 0.2s ease;
 }
-.dashboard-stat-card:hover {
-  border-color: #f97316 !important;
-  box-shadow: 0 8px 30px rgba(249, 115, 22, 0.15);
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  border-color: #cbd5e1 !important;
 }
-.dashboard-stat-icon {
-  font-size: 28px;
-  opacity: 0.85;
-}
-
-/* Chat bubble styling for sandbox */
-.sandbox-chat-container {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background-color: #0c0c0e;
-  border: 1px solid #27272a;
-  border-radius: 8px;
-  padding: 16px;
-  width: 100%;
-  min-height: 250px;
-  box-sizing: border-box;
-}
-.chat-bubble {
-  max-width: 80%;
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 1.5;
-}
-.chat-bubble.user {
-  align-self: flex-end;
-  background-color: #f97316;
-  color: #fff;
-  border-bottom-right-radius: 2px;
-}
-.chat-bubble.assistant {
-  align-self: flex-start;
-  background-color: #1e1e20;
-  color: #e4e4e7;
-  border-top-left-radius: 2px;
-  border: 1px solid #27272a;
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  border-color: #0f172a !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08) !important;
 }
 
-/* Diagnostic code terminal */
-.diagnostic-terminal {
-  background-color: #0c0c0e;
-  border: 1px solid #27272a;
-  border-radius: 6px;
-  padding: 12px;
-  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-  font-size: 11px;
-  color: #10b981;
-  max-height: 180px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  box-sizing: border-box;
+/* Table Overrides */
+.el-table {
+  --el-table-bg-color: #ffffff;
+  --el-table-tr-bg-color: #ffffff;
+  --el-table-header-bg-color: #f8fafc;
+  --el-table-border-color: #f1f5f9;
+  --el-table-text-color: #1e293b;
+  --el-table-header-text-color: #64748b;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.el-table th.el-table__cell {
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.el-table td.el-table__cell {
+  padding: 14px 0 !important;
+}
+
+/* Button Overrides */
+.el-button {
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+}
+.el-button--primary {
+  background-color: #0f172a !important;
+  border-color: #0f172a !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15) !important;
+}
+.el-button--primary:hover {
+  background-color: #1e293b !important;
+  border-color: #1e293b !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2) !important;
+}
+
+/* Dialog Overrides */
+.el-dialog {
+  border-radius: 24px !important;
+  padding: 8px 12px !important;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.12) !important;
+  background-color: #ffffff !important;
+}
+.el-dialog__title {
+  font-weight: 700 !important;
+  color: #0f172a !important;
+}
+
+/* Tag Overrides */
+.el-tag {
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  border: none !important;
+  padding: 4px 10px !important;
+}
+.el-tag--success {
+  background-color: #dcfce7 !important;
+  color: #15803d !important;
+}
+.el-tag--warning {
+  background-color: #ffedd5 !important;
+  color: #c2410c !important;
+}
+.el-tag--danger {
+  background-color: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+.el-tag--info {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
 }
 
 /* Custom Scrollbars */
@@ -112,10 +232,9 @@ html.dark {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
-  border-radius: 3px;
+  background: #cbd5e1;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: #94a3b8;
 }
-

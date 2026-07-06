@@ -1,545 +1,1305 @@
 <template>
   <div style="display: flex; flex-direction: column; gap: 16px">
-    <el-tabs v-model="modelsSubTab" class="custom-models-tabs">
-      <!-- Tab 1: Model Mappings -->
-      <el-tab-pane label="模型映射映射表" name="mappings">
-        <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 12px">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap">
-            <el-input
-              v-model="modelSearchQuery"
-              placeholder="搜索模型名称 / 上游模型 / 渠道..."
-              style="width: 300px"
-              clearable
-            >
-              <template #prefix>
-                <el-icon><Search /></el-icon>
-              </template>
-            </el-input>
-          </div>
-
-          <el-table
-            v-loading="mappingsLoading"
-            :data="filteredMappings"
-            style="width: 100%"
-            border
-          >
-            <el-table-column label="图标" width="80" align="center">
-              <template #default="{ row }">
-                <img
-                  v-if="row.iconUrl"
-                  :src="row.iconUrl"
-                  class="channel-avatar"
-                  style="
-                    width: 28px;
-                    height: 28px;
-                    object-fit: cover;
-                    margin: 0 auto;
-                    display: block;
-                  "
-                />
-                <span
-                  v-else-if="row.brandInitial"
-                  class="channel-avatar"
-                  :style="{
-                    background: row.brandColor || 'linear-gradient(135deg, #475569, #94a3b8)',
-                  }"
-                  style="width: 28px; height: 28px; margin: 0 auto; display: flex; font-size: 11px"
-                >
-                  {{ row.brandInitial }}
-                </span>
-                <span
-                  v-else
-                  class="channel-avatar"
-                  style="
-                    background: linear-gradient(135deg, #475569, #94a3b8);
-                    width: 28px;
-                    height: 28px;
-                    margin: 0 auto;
-                    display: flex;
-                    font-size: 11px;
-                  "
-                >
-                  {{ row.label ? row.label.charAt(0).toUpperCase() : "M" }}
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column label="显示名称" prop="label" min-width="160" sortable>
-              <template #default="{ row }">
-                <span style="font-weight: 600; color: #fff">{{ row.label }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="前端 ID" prop="id" min-width="160" sortable>
-              <template #default="{ row }">
-                <span style="font-family: monospace; display: flex; align-items: center; gap: 6px">
-                  {{ row.id }}
-                  <el-button
-                    type="info"
-                    :icon="CopyDocument"
-                    link
-                    @click="copyToClipboard(row.id)"
-                  />
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column label="类型" width="110" align="center">
-              <template #default="{ row }">
-                <el-tag :type="getPurposeTagType(row.purpose)">{{ getPurposeText(row.purpose) }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="关联公共模板" min-width="150" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span v-if="row.imageConfigId" style="color: #f97316; font-weight: 500">
-                  模板: {{ row.imageConfigId }}
-                </span>
-                <span v-else style="color: #71717a">-</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="上游渠道" min-width="160" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ channelNameById(row.channelId) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="上游模型名" prop="upstreamModel" min-width="160" show-overflow-tooltip />
-            <el-table-column label="启用" width="95" align="center">
-              <template #default="{ row }">
-                <el-switch
-                  :model-value="row.enabled"
-                  @change="toggleMappingEnabled(row)"
-                  :loading="mappingToggling[row.id]"
-                  active-color="#f97316"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="160" align="center" fixed="right">
-              <template #default="{ row }">
-                <div style="display: flex; justify-content: center; gap: 8px">
-                  <el-button size="small" type="primary" plain @click="openMappingModal(row)">
-                    编辑
-                  </el-button>
-                  <el-popconfirm title="确定删除该模型映射吗？" @confirm="confirmDeleteMapping(row)">
-                    <template #reference>
-                      <el-button size="small" type="danger" plain>删除</el-button>
-                    </template>
-                  </el-popconfirm>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-tab-pane>
-
-      <!-- Tab 2: Config Templates -->
-      <el-tab-pane label="图像配置模板" name="templates">
-        <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 12px">
-          <el-table v-loading="mappingsLoading" :data="imageConfigs" style="width: 100%" border>
-            <el-table-column label="模板 ID (配置 ID)" prop="id" min-width="150" sortable>
-              <template #default="{ row }">
-                <span style="font-family: monospace; font-weight: bold; color: #f97316">{{ row.id }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="模板名称" prop="label" min-width="150">
-              <template #default="{ row }">
-                <span style="font-weight: 600; color: #fff">{{ row.label }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="分辨率选项 (Sizes)" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.sizes && row.sizes.length ? row.sizes.join(', ') : '未配置' }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="宽高比选项 (Ratios)" min-width="150" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.aspectRatios && row.aspectRatios.length ? row.aspectRatios.join(', ') : '未配置' }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="质量/尺寸档位" min-width="150" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.qualities && row.qualities.length ? row.qualities.join(', ') : '未配置' }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="质量模式" prop="qualityMode" width="120" align="center" />
-            <el-table-column label="最大生成数量" prop="maxGenerationCount" width="130" align="center">
-              <template #default="{ row }">
-                <span>{{ row.maxGenerationCount ?? 1 }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="160" align="center" fixed="right">
-              <template #default="{ row }">
-                <div style="display: flex; justify-content: center; gap: 8px">
-                  <el-button size="small" type="primary" plain @click="openTemplateModal(row)">
-                    编辑
-                  </el-button>
-                  <el-popconfirm
-                    title="确定删除该配置模板吗？关联了此模板的映射将失效。"
-                    @confirm="confirmDeleteTemplate(row)"
-                  >
-                    <template #reference>
-                      <el-button size="small" type="danger" plain>删除</el-button>
-                    </template>
-                  </el-popconfirm>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-tab-pane>
-
-      <!-- Tab 2.5: Video Config Templates -->
-      <el-tab-pane label="视频配置模板" name="videoTemplates">
-        <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 12px">
-          <el-table v-loading="mappingsLoading" :data="videoConfigs" style="width: 100%" border>
-            <el-table-column label="模板 ID" prop="id" min-width="150" sortable>
-              <template #default="{ row }">
-                <span style="font-family: monospace; font-weight: bold; color: #ef4444">{{ row.id }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="模板名称" prop="label" min-width="150">
-              <template #default="{ row }">
-                <span style="font-weight: 600; color: #fff">{{ row.label }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="比例选项 (Sizes)" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.sizes && row.sizes.length ? row.sizes.join(', ') : '未配置' }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="时长范围 (秒)" min-width="150" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span v-if="row.minSeconds !== undefined && row.maxSeconds !== undefined">
-                  {{ row.minSeconds }} - {{ row.maxSeconds }} 秒
-                </span>
-                <span v-else-if="row.minSeconds !== undefined">>= {{ row.minSeconds }} 秒</span>
-                <span v-else-if="row.maxSeconds !== undefined"><= {{ row.maxSeconds }} 秒</span>
-                <span v-else>未配置</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="默认分辨率/比例" prop="defaultSize" width="150" align="center" />
-            <el-table-column label="默认时长" prop="defaultSeconds" width="120" align="center">
-              <template #default="{ row }">
-                <span v-if="row.defaultSeconds !== undefined">{{ row.defaultSeconds }} 秒</span>
-                <span v-else>-</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="参考帧支持" prop="supportReferenceType" width="130" align="center">
-              <template #default="{ row }">
-                <span>{{ row.supportReferenceType === 'none' ? '不支持' : row.supportReferenceType === 'first' ? '仅首帧' : '首尾帧' }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="160" align="center" fixed="right">
-              <template #default="{ row }">
-                <div style="display: flex; justify-content: center; gap: 8px">
-                  <el-button size="small" type="primary" plain @click="openVideoTemplateModal(row)">
-                    编辑
-                  </el-button>
-                  <el-popconfirm
-                    title="确定删除该视频配置模板吗？关联了此模板的映射将失效。"
-                    @confirm="confirmDeleteVideoTemplate(row)"
-                  >
-                    <template #reference>
-                      <el-button size="small" type="danger" plain>删除</el-button>
-                    </template>
-                  </el-popconfirm>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-tab-pane>
-
-      <!-- Tab 3: Configuration Dictionaries -->
-      <el-tab-pane label="参数配置字典" name="dictionaries">
-        <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 20px">
-          <el-row :gutter="20">
-            <!-- Sizes Dictionary -->
-            <el-col :span="8">
-              <el-card
-                style="background-color: #141416; border: 1px solid #27272a; border-radius: 12px"
-              >
-                <template #header>
-                  <span style="font-size: 14px; font-weight: 600; color: #fff">可选分辨率字典 (Sizes)</span>
-                </template>
-                <div style="display: flex; flex-direction: column; gap: 12px">
-                  <div style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 120px; align-content: flex-start; border: 1px solid #27272a; border-radius: 8px; padding: 12px; background-color: #09090b">
-                    <el-tag
-                      v-for="size in localDict.sizes"
-                      :key="size"
-                      closable
-                      type="primary"
-                      @close="removeDictItem('sizes', size)"
-                    >
-                      {{ size }}
-                    </el-tag>
-                    <span v-if="!localDict.sizes.length" style="color: #71717a; font-size: 13px">字典为空</span>
-                  </div>
-                  <div style="display: flex; gap: 8px">
-                    <el-input
-                      v-model="newDictItemInput.sizes"
-                      placeholder="例如: 1024x1024"
-                      size="small"
-                      @keyup.enter="addDictItem('sizes')"
-                    />
-                    <el-button type="primary" size="small" @click="addDictItem('sizes')">添加</el-button>
-                  </div>
-                </div>
-              </el-card>
-            </el-col>
-
-            <!-- Aspect Ratios Dictionary -->
-            <el-col :span="8">
-              <el-card
-                style="background-color: #141416; border: 1px solid #27272a; border-radius: 12px"
-              >
-                <template #header>
-                  <span style="font-size: 14px; font-weight: 600; color: #fff">可选宽高比字典 (Aspect Ratios)</span>
-                </template>
-                <div style="display: flex; flex-direction: column; gap: 12px">
-                  <div style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 120px; align-content: flex-start; border: 1px solid #27272a; border-radius: 8px; padding: 12px; background-color: #09090b">
-                    <el-tag
-                      v-for="ratio in localDict.aspectRatios"
-                      :key="ratio"
-                      closable
-                      type="warning"
-                      @close="removeDictItem('aspectRatios', ratio)"
-                    >
-                      {{ ratio }}
-                    </el-tag>
-                    <span v-if="!localDict.aspectRatios.length" style="color: #71717a; font-size: 13px">字典为空</span>
-                  </div>
-                  <div style="display: flex; gap: 8px">
-                    <el-input
-                      v-model="newDictItemInput.aspectRatios"
-                      placeholder="例如: 16:9"
-                      size="small"
-                      @keyup.enter="addDictItem('aspectRatios')"
-                    />
-                    <el-button type="primary" size="small" @click="addDictItem('aspectRatios')">添加</el-button>
-                  </div>
-                </div>
-              </el-card>
-            </el-col>
-
-            <!-- Qualities Dictionary -->
-            <el-col :span="8">
-              <el-card
-                style="background-color: #141416; border: 1px solid #27272a; border-radius: 12px"
-              >
-                <template #header>
-                  <span style="font-size: 14px; font-weight: 600; color: #fff">可选质量/尺寸字典 (Qualities)</span>
-                </template>
-                <div style="display: flex; flex-direction: column; gap: 12px">
-                  <div style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 120px; align-content: flex-start; border: 1px solid #27272a; border-radius: 8px; padding: 12px; background-color: #09090b">
-                    <el-tag
-                      v-for="q in localDict.qualities"
-                      :key="q"
-                      closable
-                      type="success"
-                      @close="removeDictItem('qualities', q)"
-                    >
-                      {{ q }}
-                    </el-tag>
-                    <span v-if="!localDict.qualities.length" style="color: #71717a; font-size: 13px">字典为空</span>
-                  </div>
-                  <div style="display: flex; gap: 8px">
-                    <el-input
-                      v-model="newDictItemInput.qualities"
-                      placeholder="例如: standard"
-                      size="small"
-                      @keyup.enter="addDictItem('qualities')"
-                    />
-                    <el-button type="primary" size="small" @click="addDictItem('qualities')">添加</el-button>
-                  </div>
-                </div>
-              </el-card>
-            </el-col>
-          </el-row>
-
-          <el-row :gutter="20" style="margin-top: 16px">
-            <!-- Video Sizes Dictionary -->
-            <el-col :span="24">
-              <el-card
-                style="background-color: #141416; border: 1px solid #27272a; border-radius: 12px"
-              >
-                <template #header>
-                  <span style="font-size: 14px; font-weight: 600; color: #fff">可选视频分辨率/比例字典 (Video Sizes)</span>
-                </template>
-                <div style="display: flex; flex-direction: column; gap: 12px">
-                  <div style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 120px; align-content: flex-start; border: 1px solid #27272a; border-radius: 8px; padding: 12px; background-color: #09090b">
-                    <el-tag
-                      v-for="size in localDict.videoSizes"
-                      :key="size"
-                      closable
-                      type="danger"
-                      @close="removeDictItem('videoSizes', size)"
-                    >
-                      {{ size }}
-                    </el-tag>
-                    <span v-if="!localDict.videoSizes?.length" style="color: #71717a; font-size: 13px">字典为空</span>
-                  </div>
-                  <div style="display: flex; gap: 8px">
-                    <el-input
-                      v-model="newDictItemInput.videoSizes"
-                      placeholder="例如: 16x9"
-                      size="small"
-                      @keyup.enter="addDictItem('videoSizes')"
-                    />
-                    <el-button type="primary" size="small" @click="addDictItem('videoSizes')">添加</el-button>
-                  </div>
-                </div>
-              </el-card>
-            </el-col>
-          </el-row>
-
-          <div style="display: flex; justify-content: flex-end">
-            <el-button type="primary" :loading="savingDict" @click="saveDictionaries">保存字典配置</el-button>
-          </div>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
-
-    <!-- Model Mapping Form Dialog -->
-    <el-dialog
-      v-model="mappingModalOpen"
-      :title="editingMappingId ? '编辑模型映射' : '新增模型映射'"
-      width="540px"
-      destroy-on-close
-      style="border-radius: 12px; background-color: #141416"
+    <el-card
+      shadow="none"
+      style="
+        border-radius: 20px;
+        background-color: #ffffff;
+        border: 1px solid #e5e7eb;
+      "
     >
-      <el-form :model="mappingForm" label-position="top">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="前端 ID" required>
-              <el-input
-                v-model="mappingForm.id"
-                placeholder="如 gpt-image-2"
-                :disabled="!!editingMappingId"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="显示名称" required>
-              <el-input v-model="mappingForm.label" placeholder="如 GPT Image 2" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="模型类型">
-              <el-select v-model="mappingForm.purpose" style="width: 100%">
-                <el-option label="对话" value="chat" />
-                <el-option label="图片" value="image" />
-                <el-option label="视频" value="video" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="上游渠道" required>
-              <el-select
-                v-model="mappingForm.channelId"
-                style="width: 100%"
-                placeholder="选择渠道"
-                @change="onChannelChange"
-              >
-                <el-option
-                  v-for="channel in channels"
-                  :key="channel.id"
-                  :label="channel.name"
-                  :value="channel.id"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-form-item label="上游模型名" required>
-          <el-select
-            v-model="mappingForm.upstreamModel"
-            filterable
-            allow-create
-            default-first-option
-            placeholder="请选择或直接输入上游模型名"
-            :loading="loadingUpstreamModels"
-            style="width: 100%"
+      <el-tabs v-model="modelsSubTab" class="custom-models-tabs">
+        <!-- Tab 1: Model Mappings -->
+        <el-tab-pane label="模型映射映射表" name="mappings">
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
+              margin-top: 12px;
+            "
           >
-            <el-option
-              v-for="modelId in availableUpstreamModels"
-              :key="modelId"
-              :label="modelId"
-              :value="modelId"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="图标简称 (1-2字符)">
-              <el-input v-model="mappingForm.brandInitial" placeholder="如 M" maxlength="2" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="背景色 (Hex或渐变值)">
-              <el-input v-model="mappingForm.brandColor" placeholder="如 #f97316 或 linear-gradient(...)" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-form-item label="图标图片 / 远程 URL">
-          <div style="display: flex; gap: 8px; width: 100%">
-            <el-input
-              v-model="mappingForm.iconUrl"
-              placeholder="输入远程图片 URL，或点击右侧上传"
-              style="flex: 1"
-            />
-            <el-upload
-              action=""
-              :before-upload="beforeIconUpload"
-              :show-file-list="false"
-              accept="image/*"
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+              "
             >
-              <el-button type="info" plain>上传图片</el-button>
-            </el-upload>
-          </div>
-        </el-form-item>
-
-        <!-- Image Generation Advanced Custom Config (Only when purpose is 'image') -->
-        <div v-if="mappingForm.purpose === 'image'" style="border-top: 1px dashed #27272a; margin-top: 16px; padding-top: 16px">
-          <h4 style="margin: 0 0 12px 0; color: #fff; font-size: 13px; font-weight: 600">图像生成高级配置</h4>
-          
-          <el-form-item label="配置方式">
-            <el-radio-group v-model="mappingFormConfigType" size="small">
-              <el-radio-button label="template">使用公共模板</el-radio-button>
-              <el-radio-button label="custom">手动自定义配置</el-radio-button>
-            </el-radio-group>
-          </el-form-item>
-
-          <!-- Choice A: Use shared configuration template -->
-          <div v-if="mappingFormConfigType === 'template'">
-            <el-form-item label="绑定公共配置模板" required>
-              <el-select
-                v-model="mappingForm.imageConfigId"
-                placeholder="请选择配置模板"
-                style="width: 100%"
+              <el-input
+                v-model="modelSearchQuery"
+                placeholder="搜索模型名称 / 上游模型 / 渠道..."
+                style="width: 300px"
                 clearable
               >
-                <el-option
-                  v-for="cfg in imageConfigs"
-                  :key="cfg.id"
-                  :label="`${cfg.label} (${cfg.id})`"
-                  :value="cfg.id"
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+            </div>
+
+            <el-table
+              v-loading="mappingsLoading"
+              :data="filteredMappings"
+              style="width: 100%"
+              border
+            >
+              <el-table-column label="图标" width="80" align="center">
+                <template #default="{ row }">
+                  <img
+                    v-if="row.iconUrl"
+                    :src="row.iconUrl"
+                    class="channel-avatar"
+                    style="
+                      width: 28px;
+                      height: 28px;
+                      object-fit: cover;
+                      margin: 0 auto;
+                      display: block;
+                    "
+                  />
+                  <span
+                    v-else-if="row.brandInitial"
+                    class="channel-avatar"
+                    :style="{
+                      background:
+                        row.brandColor ||
+                        'linear-gradient(135deg, #475569, #94a3b8)',
+                    }"
+                    style="
+                      width: 28px;
+                      height: 28px;
+                      margin: 0 auto;
+                      display: flex;
+                      font-size: 11px;
+                    "
+                  >
+                    {{ row.brandInitial }}
+                  </span>
+                  <span
+                    v-else
+                    class="channel-avatar"
+                    style="
+                      background: linear-gradient(135deg, #475569, #94a3b8);
+                      width: 28px;
+                      height: 28px;
+                      margin: 0 auto;
+                      display: flex;
+                      font-size: 11px;
+                    "
+                  >
+                    {{ row.label ? row.label.charAt(0).toUpperCase() : "M" }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="显示名称"
+                prop="label"
+                min-width="160"
+                sortable
+              >
+                <template #default="{ row }">
+                  <span style="font-weight: 600">{{ row.label }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="前端 ID"
+                prop="id"
+                min-width="160"
+                sortable
+              >
+                <template #default="{ row }">
+                  <span
+                    style="
+                      font-family: monospace;
+                      display: flex;
+                      align-items: center;
+                      gap: 6px;
+                    "
+                  >
+                    {{ row.id }}
+                    <el-button
+                      type="info"
+                      :icon="CopyDocument"
+                      link
+                      @click="copyToClipboard(row.id)"
+                    />
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column label="类型" width="110" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="getPurposeTagType(row.purpose)">{{
+                    getPurposeText(row.purpose)
+                  }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="关联公共模板"
+                min-width="150"
+                show-overflow-tooltip
+              >
+                <template #default="{ row }">
+                  <span
+                    v-if="row.imageConfigId"
+                    style="color: #f97316; font-weight: 500"
+                  >
+                    模板: {{ row.imageConfigId }}
+                  </span>
+                  <span v-else style="color: #71717a">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="上游渠道"
+                min-width="160"
+                show-overflow-tooltip
+              >
+                <template #default="{ row }">
+                  <span>{{ channelNameById(row.channelId) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="上游模型名"
+                prop="upstreamModel"
+                min-width="160"
+                show-overflow-tooltip
+              />
+              <el-table-column label="启用" width="95" align="center">
+                <template #default="{ row }">
+                  <el-switch
+                    :model-value="row.enabled"
+                    @change="toggleMappingEnabled(row)"
+                    :loading="mappingToggling[row.id]"
+                    active-color="#f97316"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="操作"
+                width="160"
+                align="center"
+                fixed="right"
+              >
+                <template #default="{ row }">
+                  <div style="display: flex; justify-content: center; gap: 8px">
+                    <el-button
+                      size="small"
+                      type="primary"
+                      plain
+                      @click="openMappingModal(row)"
+                    >
+                      编辑
+                    </el-button>
+                    <el-popconfirm
+                      title="确定删除该模型映射吗？"
+                      @confirm="confirmDeleteMapping(row)"
+                    >
+                      <template #reference>
+                        <el-button size="small" type="danger" plain
+                          >删除</el-button
+                        >
+                      </template>
+                    </el-popconfirm>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
+
+        <!-- Tab 2: Config Templates -->
+        <el-tab-pane label="图像配置模板" name="templates">
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
+              margin-top: 12px;
+            "
+          >
+            <el-table
+              v-loading="mappingsLoading"
+              :data="imageConfigs"
+              style="width: 100%"
+              border
+            >
+              <el-table-column
+                label="模板 ID (配置 ID)"
+                prop="id"
+                min-width="150"
+                sortable
+              >
+                <template #default="{ row }">
+                  <span
+                    style="
+                      font-family: monospace;
+                      font-weight: bold;
+                      color: #f97316;
+                    "
+                    >{{ row.id }}</span
+                  >
+                </template>
+              </el-table-column>
+              <el-table-column label="模板名称" prop="label" min-width="150">
+                <template #default="{ row }">
+                  <span style="font-weight: 600; color: #fff">{{
+                    row.label
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="分辨率选项 (Sizes)"
+                min-width="180"
+                show-overflow-tooltip
+              >
+                <template #default="{ row }">
+                  <span>{{
+                    row.sizes && row.sizes.length
+                      ? row.sizes.join(", ")
+                      : "未配置"
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="宽高比选项 (Ratios)"
+                min-width="150"
+                show-overflow-tooltip
+              >
+                <template #default="{ row }">
+                  <span>{{
+                    row.aspectRatios && row.aspectRatios.length
+                      ? row.aspectRatios.join(", ")
+                      : "未配置"
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="质量/尺寸档位"
+                min-width="150"
+                show-overflow-tooltip
+              >
+                <template #default="{ row }">
+                  <span>{{
+                    row.qualities && row.qualities.length
+                      ? row.qualities.join(", ")
+                      : "未配置"
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="质量模式"
+                prop="qualityMode"
+                width="120"
+                align="center"
+              />
+              <el-table-column
+                label="最大生成数量"
+                prop="maxGenerationCount"
+                width="130"
+                align="center"
+              >
+                <template #default="{ row }">
+                  <span>{{ row.maxGenerationCount ?? 1 }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="操作"
+                width="160"
+                align="center"
+                fixed="right"
+              >
+                <template #default="{ row }">
+                  <div style="display: flex; justify-content: center; gap: 8px">
+                    <el-button
+                      size="small"
+                      type="primary"
+                      plain
+                      @click="openTemplateModal(row)"
+                    >
+                      编辑
+                    </el-button>
+                    <el-popconfirm
+                      title="确定删除该配置模板吗？关联了此模板的映射将失效。"
+                      @confirm="confirmDeleteTemplate(row)"
+                    >
+                      <template #reference>
+                        <el-button size="small" type="danger" plain
+                          >删除</el-button
+                        >
+                      </template>
+                    </el-popconfirm>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
+
+        <!-- Tab 2.5: Video Config Templates -->
+        <el-tab-pane label="视频配置模板" name="videoTemplates">
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
+              margin-top: 12px;
+            "
+          >
+            <el-table
+              v-loading="mappingsLoading"
+              :data="videoConfigs"
+              style="width: 100%"
+              border
+            >
+              <el-table-column
+                label="模板 ID"
+                prop="id"
+                min-width="150"
+                sortable
+              >
+                <template #default="{ row }">
+                  <span
+                    style="
+                      font-family: monospace;
+                      font-weight: bold;
+                      color: #ef4444;
+                    "
+                    >{{ row.id }}</span
+                  >
+                </template>
+              </el-table-column>
+              <el-table-column label="模板名称" prop="label" min-width="150">
+                <template #default="{ row }">
+                  <span style="font-weight: 600; color: #fff">{{
+                    row.label
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="比例选项 (Sizes)"
+                min-width="180"
+                show-overflow-tooltip
+              >
+                <template #default="{ row }">
+                  <span>{{
+                    row.sizes && row.sizes.length
+                      ? row.sizes.join(", ")
+                      : "未配置"
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="时长范围 (秒)"
+                min-width="150"
+                show-overflow-tooltip
+              >
+                <template #default="{ row }">
+                  <span
+                    v-if="
+                      row.minSeconds !== undefined &&
+                      row.maxSeconds !== undefined
+                    "
+                  >
+                    {{ row.minSeconds }} - {{ row.maxSeconds }} 秒
+                  </span>
+                  <span v-else-if="row.minSeconds !== undefined"
+                    >>= {{ row.minSeconds }} 秒</span
+                  >
+                  <span v-else-if="row.maxSeconds !== undefined"
+                    ><= {{ row.maxSeconds }} 秒</span
+                  >
+                  <span v-else>未配置</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="默认分辨率/比例"
+                prop="defaultSize"
+                width="150"
+                align="center"
+              />
+              <el-table-column
+                label="默认时长"
+                prop="defaultSeconds"
+                width="120"
+                align="center"
+              >
+                <template #default="{ row }">
+                  <span v-if="row.defaultSeconds !== undefined"
+                    >{{ row.defaultSeconds }} 秒</span
+                  >
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="参考帧支持"
+                prop="supportReferenceType"
+                width="130"
+                align="center"
+              >
+                <template #default="{ row }">
+                  <span>{{
+                    row.supportReferenceType === "none"
+                      ? "不支持"
+                      : row.supportReferenceType === "first"
+                        ? "仅首帧"
+                        : "首尾帧"
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="操作"
+                width="160"
+                align="center"
+                fixed="right"
+              >
+                <template #default="{ row }">
+                  <div style="display: flex; justify-content: center; gap: 8px">
+                    <el-button
+                      size="small"
+                      type="primary"
+                      plain
+                      @click="openVideoTemplateModal(row)"
+                    >
+                      编辑
+                    </el-button>
+                    <el-popconfirm
+                      title="确定删除该视频配置模板吗？关联了此模板的映射将失效。"
+                      @confirm="confirmDeleteVideoTemplate(row)"
+                    >
+                      <template #reference>
+                        <el-button size="small" type="danger" plain
+                          >删除</el-button
+                        >
+                      </template>
+                    </el-popconfirm>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
+
+        <!-- Tab 3: Configuration Dictionaries -->
+        <el-tab-pane label="参数配置字典" name="dictionaries">
+          <div
+            style="
+              margin-top: 12px;
+              display: flex;
+              flex-direction: column;
+              gap: 20px;
+            "
+          >
+            <el-row :gutter="20">
+              <!-- Sizes Dictionary -->
+              <el-col :span="8">
+                <el-card
+                  style="
+                    background-color: #141416;
+                    border: 1px solid #27272a;
+                    border-radius: 12px;
+                  "
+                >
+                  <template #header>
+                    <span style="font-size: 14px; font-weight: 600; color: #fff"
+                      >可选分辨率字典 (Sizes)</span
+                    >
+                  </template>
+                  <div style="display: flex; flex-direction: column; gap: 12px">
+                    <div
+                      style="
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                        min-height: 120px;
+                        align-content: flex-start;
+                        border: 1px solid #27272a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        background-color: #09090b;
+                      "
+                    >
+                      <el-tag
+                        v-for="size in localDict.sizes"
+                        :key="size"
+                        closable
+                        type="primary"
+                        @close="removeDictItem('sizes', size)"
+                      >
+                        {{ size }}
+                      </el-tag>
+                      <span
+                        v-if="!localDict.sizes.length"
+                        style="color: #71717a; font-size: 13px"
+                        >字典为空</span
+                      >
+                    </div>
+                    <div style="display: flex; gap: 8px">
+                      <el-input
+                        v-model="newDictItemInput.sizes"
+                        placeholder="例如: 1024x1024"
+                        size="small"
+                        @keyup.enter="addDictItem('sizes')"
+                      />
+                      <el-button
+                        type="primary"
+                        size="small"
+                        @click="addDictItem('sizes')"
+                        >添加</el-button
+                      >
+                    </div>
+                  </div>
+                </el-card>
+              </el-col>
+
+              <!-- Aspect Ratios Dictionary -->
+              <el-col :span="8">
+                <el-card
+                  style="
+                    background-color: #141416;
+                    border: 1px solid #27272a;
+                    border-radius: 12px;
+                  "
+                >
+                  <template #header>
+                    <span style="font-size: 14px; font-weight: 600; color: #fff"
+                      >可选宽高比字典 (Aspect Ratios)</span
+                    >
+                  </template>
+                  <div style="display: flex; flex-direction: column; gap: 12px">
+                    <div
+                      style="
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                        min-height: 120px;
+                        align-content: flex-start;
+                        border: 1px solid #27272a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        background-color: #09090b;
+                      "
+                    >
+                      <el-tag
+                        v-for="ratio in localDict.aspectRatios"
+                        :key="ratio"
+                        closable
+                        type="warning"
+                        @close="removeDictItem('aspectRatios', ratio)"
+                      >
+                        {{ ratio }}
+                      </el-tag>
+                      <span
+                        v-if="!localDict.aspectRatios.length"
+                        style="color: #71717a; font-size: 13px"
+                        >字典为空</span
+                      >
+                    </div>
+                    <div style="display: flex; gap: 8px">
+                      <el-input
+                        v-model="newDictItemInput.aspectRatios"
+                        placeholder="例如: 16:9"
+                        size="small"
+                        @keyup.enter="addDictItem('aspectRatios')"
+                      />
+                      <el-button
+                        type="primary"
+                        size="small"
+                        @click="addDictItem('aspectRatios')"
+                        >添加</el-button
+                      >
+                    </div>
+                  </div>
+                </el-card>
+              </el-col>
+
+              <!-- Qualities Dictionary -->
+              <el-col :span="8">
+                <el-card
+                  style="
+                    background-color: #141416;
+                    border: 1px solid #27272a;
+                    border-radius: 12px;
+                  "
+                >
+                  <template #header>
+                    <span style="font-size: 14px; font-weight: 600; color: #fff"
+                      >可选质量/尺寸字典 (Qualities)</span
+                    >
+                  </template>
+                  <div style="display: flex; flex-direction: column; gap: 12px">
+                    <div
+                      style="
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                        min-height: 120px;
+                        align-content: flex-start;
+                        border: 1px solid #27272a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        background-color: #09090b;
+                      "
+                    >
+                      <el-tag
+                        v-for="q in localDict.qualities"
+                        :key="q"
+                        closable
+                        type="success"
+                        @close="removeDictItem('qualities', q)"
+                      >
+                        {{ q }}
+                      </el-tag>
+                      <span
+                        v-if="!localDict.qualities.length"
+                        style="color: #71717a; font-size: 13px"
+                        >字典为空</span
+                      >
+                    </div>
+                    <div style="display: flex; gap: 8px">
+                      <el-input
+                        v-model="newDictItemInput.qualities"
+                        placeholder="例如: standard"
+                        size="small"
+                        @keyup.enter="addDictItem('qualities')"
+                      />
+                      <el-button
+                        type="primary"
+                        size="small"
+                        @click="addDictItem('qualities')"
+                        >添加</el-button
+                      >
+                    </div>
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
+
+            <el-row :gutter="20" style="margin-top: 16px">
+              <!-- Video Sizes Dictionary -->
+              <el-col :span="24">
+                <el-card
+                  style="
+                    background-color: #141416;
+                    border: 1px solid #27272a;
+                    border-radius: 12px;
+                  "
+                >
+                  <template #header>
+                    <span style="font-size: 14px; font-weight: 600; color: #fff"
+                      >可选视频分辨率/比例字典 (Video Sizes)</span
+                    >
+                  </template>
+                  <div style="display: flex; flex-direction: column; gap: 12px">
+                    <div
+                      style="
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                        min-height: 120px;
+                        align-content: flex-start;
+                        border: 1px solid #27272a;
+                        border-radius: 8px;
+                        padding: 12px;
+                        background-color: #09090b;
+                      "
+                    >
+                      <el-tag
+                        v-for="size in localDict.videoSizes"
+                        :key="size"
+                        closable
+                        type="danger"
+                        @close="removeDictItem('videoSizes', size)"
+                      >
+                        {{ size }}
+                      </el-tag>
+                      <span
+                        v-if="!localDict.videoSizes?.length"
+                        style="color: #71717a; font-size: 13px"
+                        >字典为空</span
+                      >
+                    </div>
+                    <div style="display: flex; gap: 8px">
+                      <el-input
+                        v-model="newDictItemInput.videoSizes"
+                        placeholder="例如: 16x9"
+                        size="small"
+                        @keyup.enter="addDictItem('videoSizes')"
+                      />
+                      <el-button
+                        type="primary"
+                        size="small"
+                        @click="addDictItem('videoSizes')"
+                        >添加</el-button
+                      >
+                    </div>
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
+
+            <div style="display: flex; justify-content: flex-end">
+              <el-button
+                type="primary"
+                :loading="savingDict"
+                @click="saveDictionaries"
+                >保存字典配置</el-button
+              >
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+
+      <!-- Model Mapping Form Dialog -->
+      <el-dialog
+        v-model="mappingModalOpen"
+        :title="editingMappingId ? '编辑模型映射' : '新增模型映射'"
+        width="540px"
+        destroy-on-close
+        style="border-radius: 12px; background-color: #141416"
+      >
+        <el-form :model="mappingForm" label-position="top">
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="前端 ID" required>
+                <el-input
+                  v-model="mappingForm.id"
+                  placeholder="如 gpt-image-2"
+                  :disabled="!!editingMappingId"
                 />
-              </el-select>
-              <div style="font-size: 11px; color: #71717a; margin-top: 4px">
-                选择已有的公共配置模板，让该模型继承该配置。如果下拉框为空，请先在“图像配置模板”子页签中创建。
-              </div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="显示名称" required>
+                <el-input
+                  v-model="mappingForm.label"
+                  placeholder="如 GPT Image 2"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="模型类型">
+                <el-select v-model="mappingForm.purpose" style="width: 100%">
+                  <el-option label="对话" value="chat" />
+                  <el-option label="图片" value="image" />
+                  <el-option label="视频" value="video" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="上游渠道" required>
+                <el-select
+                  v-model="mappingForm.channelId"
+                  style="width: 100%"
+                  placeholder="选择渠道"
+                  @change="onChannelChange"
+                >
+                  <el-option
+                    v-for="channel in channels"
+                    :key="channel.id"
+                    :label="channel.name"
+                    :value="channel.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-form-item label="上游模型名" required>
+            <el-select
+              v-model="mappingForm.upstreamModel"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="请选择或直接输入上游模型名"
+              :loading="loadingUpstreamModels"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="modelId in availableUpstreamModels"
+                :key="modelId"
+                :label="modelId"
+                :value="modelId"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="图标简称 (1-2字符)">
+                <el-input
+                  v-model="mappingForm.brandInitial"
+                  placeholder="如 M"
+                  maxlength="2"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="背景色 (Hex或渐变值)">
+                <el-input
+                  v-model="mappingForm.brandColor"
+                  placeholder="如 #f97316 或 linear-gradient(...)"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-form-item label="图标图片 / 远程 URL">
+            <div style="display: flex; gap: 8px; width: 100%">
+              <el-input
+                v-model="mappingForm.iconUrl"
+                placeholder="输入远程图片 URL，或点击右侧上传"
+                style="flex: 1"
+              />
+              <el-upload
+                action=""
+                :before-upload="beforeIconUpload"
+                :show-file-list="false"
+                accept="image/*"
+              >
+                <el-button type="info" plain>上传图片</el-button>
+              </el-upload>
+            </div>
+          </el-form-item>
+
+          <!-- Image Generation Advanced Custom Config (Only when purpose is 'image') -->
+          <div
+            v-if="mappingForm.purpose === 'image'"
+            style="
+              border-top: 1px dashed #27272a;
+              margin-top: 16px;
+              padding-top: 16px;
+            "
+          >
+            <h4
+              style="
+                margin: 0 0 12px 0;
+                color: #fff;
+                font-size: 13px;
+                font-weight: 600;
+              "
+            >
+              图像生成高级配置
+            </h4>
+
+            <el-form-item label="配置方式">
+              <el-radio-group v-model="mappingFormConfigType" size="small">
+                <el-radio-button label="template">使用公共模板</el-radio-button>
+                <el-radio-button label="custom">手动自定义配置</el-radio-button>
+              </el-radio-group>
             </el-form-item>
+
+            <!-- Choice A: Use shared configuration template -->
+            <div v-if="mappingFormConfigType === 'template'">
+              <el-form-item label="绑定公共配置模板" required>
+                <el-select
+                  v-model="mappingForm.imageConfigId"
+                  placeholder="请选择配置模板"
+                  style="width: 100%"
+                  clearable
+                >
+                  <el-option
+                    v-for="cfg in imageConfigs"
+                    :key="cfg.id"
+                    :label="`${cfg.label} (${cfg.id})`"
+                    :value="cfg.id"
+                  />
+                </el-select>
+                <div style="font-size: 11px; color: #71717a; margin-top: 4px">
+                  选择已有的公共配置模板，让该模型继承该配置。如果下拉框为空，请先在“图像配置模板”子页签中创建。
+                </div>
+              </el-form-item>
+            </div>
+
+            <!-- Choice B: Manual Customization -->
+            <div v-else>
+              <el-row :gutter="16">
+                <el-col :span="24">
+                  <el-form-item label="可选分辨率列表 (Sizes)">
+                    <el-select
+                      v-model="mappingForm.sizes"
+                      multiple
+                      filterable
+                      allow-create
+                      default-first-option
+                      placeholder="选择预设或直接输入新增"
+                      style="width: 100%"
+                    >
+                      <el-option
+                        v-for="item in dictionaries.sizes"
+                        :key="item"
+                        :label="item"
+                        :value="item"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="默认分辨率">
+                    <el-select
+                      v-model="mappingForm.defaultSize"
+                      filterable
+                      allow-create
+                      placeholder="选择或输入默认值"
+                      style="width: 100%"
+                      clearable
+                    >
+                      <el-option
+                        v-for="item in mappingForm.sizes"
+                        :key="item"
+                        :label="item"
+                        :value="item"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="质量控制模式">
+                    <template #label>
+                      <span
+                        style="
+                          display: inline-flex;
+                          align-items: center;
+                          gap: 4px;
+                        "
+                      >
+                        质量控制模式
+                        <el-tooltip placement="top" effect="dark">
+                          <template #content>
+                            <div style="font-size: 12px; line-height: 1.6">
+                              <b>控制前端第二个下拉框显示的文字：</b><br />
+                              • quality: 显示“质量”（如 DALL-E 的
+                              standard/hd）<br />
+                              • resolution: 显示“清晰度”（如 Grok 的 1k/2k）<br />
+                              • preset: 显示“预设”（如 Flux/Qwen 的预设）<br />
+                              • image_size: 显示“输出档位”（如 Gemini 的
+                              1K/2K/4K）
+                            </div>
+                          </template>
+                          <el-icon style="cursor: help; color: #a1a1aa"
+                            ><QuestionFilled
+                          /></el-icon>
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-select
+                      v-model="mappingForm.qualityMode"
+                      style="width: 100%"
+                    >
+                      <el-option label="质量控制 (quality)" value="quality" />
+                      <el-option
+                        label="分辨率 (resolution)"
+                        value="resolution"
+                      />
+                      <el-option label="预设 (preset)" value="preset" />
+                      <el-option
+                        label="图像尺寸 (image_size)"
+                        value="image_size"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="24">
+                  <el-form-item label="可选质量/尺寸列表 (Qualities)">
+                    <el-select
+                      v-model="mappingForm.qualities"
+                      multiple
+                      filterable
+                      allow-create
+                      default-first-option
+                      placeholder="选择预设或直接输入新增"
+                      style="width: 100%"
+                    >
+                      <el-option
+                        v-for="item in dictionaries.qualities"
+                        :key="item"
+                        :label="item"
+                        :value="item"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="默认质量">
+                    <el-select
+                      v-model="mappingForm.defaultQuality"
+                      filterable
+                      allow-create
+                      placeholder="选择或输入默认值"
+                      style="width: 100%"
+                      clearable
+                    >
+                      <el-option
+                        v-for="item in mappingForm.qualities"
+                        :key="item"
+                        :label="item"
+                        :value="item"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="最大参考图数量">
+                    <el-input-number
+                      v-model="mappingForm.maxReferenceImages"
+                      :min="0"
+                      :max="16"
+                      style="width: 100%"
+                      placeholder="不填则按模型默认"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="24">
+                  <el-form-item label="可选宽高比列表 (Aspect Ratios)">
+                    <el-select
+                      v-model="mappingForm.aspectRatios"
+                      multiple
+                      filterable
+                      allow-create
+                      default-first-option
+                      placeholder="选择预设或直接输入新增"
+                      style="width: 100%"
+                    >
+                      <el-option
+                        v-for="item in dictionaries.aspectRatios"
+                        :key="item"
+                        :label="item"
+                        :value="item"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
           </div>
 
-          <!-- Choice B: Manual Customization -->
-          <div v-else>
+          <!-- Video Generation Advanced Custom Config (Only when purpose is 'video') -->
+          <div
+            v-if="mappingForm.purpose === 'video'"
+            style="
+              border-top: 1px dashed #27272a;
+              margin-top: 16px;
+              padding-top: 16px;
+            "
+          >
+            <h4
+              style="
+                margin: 0 0 12px 0;
+                color: #fff;
+                font-size: 13px;
+                font-weight: 600;
+              "
+            >
+              视频生成高级配置
+            </h4>
+
+            <el-form-item label="配置方式">
+              <el-radio-group v-model="mappingFormConfigType" size="small">
+                <el-radio-button label="template">使用公共模板</el-radio-button>
+                <el-radio-button label="custom">手动自定义配置</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+
+            <!-- Choice A: Use shared configuration template -->
+            <div v-if="mappingFormConfigType === 'template'">
+              <el-form-item label="绑定公共配置模板" required>
+                <el-select
+                  v-model="mappingForm.videoConfigId"
+                  placeholder="请选择配置模板"
+                  style="width: 100%"
+                  clearable
+                >
+                  <el-option
+                    v-for="cfg in videoConfigs"
+                    :key="cfg.id"
+                    :label="`${cfg.label} (${cfg.id})`"
+                    :value="cfg.id"
+                  />
+                </el-select>
+                <div style="font-size: 11px; color: #71717a; margin-top: 4px">
+                  选择已有的公共配置模板，让该模型继承该配置。如果下拉框为空，请先在“视频配置模板”子页签中创建。
+                </div>
+              </el-form-item>
+            </div>
+
+            <!-- Choice B: Manual Customization -->
+            <div v-else>
+              <el-row :gutter="16">
+                <el-col :span="24">
+                  <el-form-item label="可选分辨率/比例列表 (Sizes)">
+                    <el-select
+                      v-model="mappingForm.sizes"
+                      multiple
+                      filterable
+                      allow-create
+                      default-first-option
+                      placeholder="选择预设或直接输入新增，如 16x9"
+                      style="width: 100%"
+                    >
+                      <el-option
+                        v-for="item in dictionaries.videoSizes &&
+                        dictionaries.videoSizes.length
+                          ? dictionaries.videoSizes
+                          : PRESET_VIDEO_SIZES"
+                        :key="item"
+                        :label="item"
+                        :value="item"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="默认分辨率/比例">
+                    <el-select
+                      v-model="mappingForm.defaultSize"
+                      filterable
+                      allow-create
+                      placeholder="选择或输入默认值"
+                      style="width: 100%"
+                      clearable
+                    >
+                      <el-option
+                        v-for="item in mappingForm.sizes"
+                        :key="item"
+                        :label="item"
+                        :value="item"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="参考帧支持">
+                    <el-select
+                      v-model="mappingForm.supportReferenceType"
+                      style="width: 100%"
+                    >
+                      <el-option label="不支持参考帧 (none)" value="none" />
+                      <el-option label="仅支持首帧 (first)" value="first" />
+                      <el-option
+                        label="支持首帧和尾帧 (first_last)"
+                        value="first_last"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="8">
+                  <el-form-item label="最小视频时长 (秒)">
+                    <el-input-number
+                      v-model="mappingForm.minSeconds"
+                      :min="1"
+                      placeholder="最小秒数"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="8">
+                  <el-form-item label="最大视频时长 (秒)">
+                    <el-input-number
+                      v-model="mappingForm.maxSeconds"
+                      :min="mappingForm.minSeconds || 1"
+                      placeholder="最大秒数"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="8">
+                  <el-form-item label="默认视频时长 (秒)">
+                    <el-input-number
+                      v-model="mappingForm.defaultSeconds"
+                      :min="mappingForm.minSeconds || 1"
+                      :max="mappingForm.maxSeconds || 9999"
+                      placeholder="默认秒数"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
+          </div>
+
+          <el-form-item label="备注">
+            <el-input
+              v-model="mappingForm.notes"
+              type="textarea"
+              :rows="2"
+              placeholder="输入模型特定的备注说明..."
+            />
+          </el-form-item>
+          <el-form-item style="margin-bottom: 0">
+            <el-checkbox v-model="mappingForm.enabled">启用此映射</el-checkbox>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <div
+            style="
+              display: flex;
+              justify-content: flex-end;
+              gap: 12px;
+              border-top: 1px solid #27272a;
+              padding-top: 16px;
+            "
+          >
+            <el-button @click="closeMappingModal">取消</el-button>
+            <el-button type="primary" @click="saveMapping">保存</el-button>
+          </div>
+        </template>
+      </el-dialog>
+
+      <!-- Image Config Template Dialog -->
+      <el-dialog
+        v-model="templateModalOpen"
+        :title="editingTemplateId ? '编辑图像配置模板' : '新增图像配置模板'"
+        width="540px"
+        destroy-on-close
+        style="border-radius: 12px; background-color: #141416"
+      >
+        <el-form :model="templateForm" label-position="top">
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="模板 ID (英文标识)" required>
+                <el-input
+                  v-model="templateForm.id"
+                  placeholder="如: gemini-preset, flux-preset"
+                  :disabled="!!editingTemplateId"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="模板显示名称" required>
+                <el-input
+                  v-model="templateForm.label"
+                  placeholder="如: Gemini 标准配置"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <div
+            style="
+              border-top: 1px dashed #27272a;
+              margin-top: 8px;
+              padding-top: 16px;
+            "
+          >
             <el-row :gutter="16">
               <el-col :span="24">
                 <el-form-item label="可选分辨率列表 (Sizes)">
                   <el-select
-                    v-model="mappingForm.sizes"
+                    v-model="templateForm.sizes"
                     multiple
                     filterable
                     allow-create
@@ -561,7 +1321,7 @@
               <el-col :span="12">
                 <el-form-item label="默认分辨率">
                   <el-select
-                    v-model="mappingForm.defaultSize"
+                    v-model="templateForm.defaultSize"
                     filterable
                     allow-create
                     placeholder="选择或输入默认值"
@@ -569,7 +1329,7 @@
                     clearable
                   >
                     <el-option
-                      v-for="item in mappingForm.sizes"
+                      v-for="item in templateForm.sizes"
                       :key="item"
                       :label="item"
                       :value="item"
@@ -580,7 +1340,13 @@
               <el-col :span="12">
                 <el-form-item label="质量控制模式">
                   <template #label>
-                    <span style="display: inline-flex; align-items: center; gap: 4px">
+                    <span
+                      style="
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 4px;
+                      "
+                    >
                       质量控制模式
                       <el-tooltip placement="top" effect="dark">
                         <template #content>
@@ -589,18 +1355,27 @@
                             • quality: 显示“质量”（如 DALL-E 的 standard/hd）<br />
                             • resolution: 显示“清晰度”（如 Grok 的 1k/2k）<br />
                             • preset: 显示“预设”（如 Flux/Qwen 的预设）<br />
-                            • image_size: 显示“输出档位”（如 Gemini 的 1K/2K/4K）
+                            • image_size: 显示“输出档位”（如 Gemini 的
+                            1K/2K/4K）
                           </div>
                         </template>
-                        <el-icon style="cursor: help; color: #a1a1aa"><QuestionFilled /></el-icon>
+                        <el-icon style="cursor: help; color: #a1a1aa"
+                          ><QuestionFilled
+                        /></el-icon>
                       </el-tooltip>
                     </span>
                   </template>
-                  <el-select v-model="mappingForm.qualityMode" style="width: 100%">
+                  <el-select
+                    v-model="templateForm.qualityMode"
+                    style="width: 100%"
+                  >
                     <el-option label="质量控制 (quality)" value="quality" />
                     <el-option label="分辨率 (resolution)" value="resolution" />
                     <el-option label="预设 (preset)" value="preset" />
-                    <el-option label="图像尺寸 (image_size)" value="image_size" />
+                    <el-option
+                      label="图像尺寸 (image_size)"
+                      value="image_size"
+                    />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -609,7 +1384,7 @@
               <el-col :span="24">
                 <el-form-item label="可选质量/尺寸列表 (Qualities)">
                   <el-select
-                    v-model="mappingForm.qualities"
+                    v-model="templateForm.qualities"
                     multiple
                     filterable
                     allow-create
@@ -631,7 +1406,7 @@
               <el-col :span="12">
                 <el-form-item label="默认质量">
                   <el-select
-                    v-model="mappingForm.defaultQuality"
+                    v-model="templateForm.defaultQuality"
                     filterable
                     allow-create
                     placeholder="选择或输入默认值"
@@ -639,7 +1414,7 @@
                     clearable
                   >
                     <el-option
-                      v-for="item in mappingForm.qualities"
+                      v-for="item in templateForm.qualities"
                       :key="item"
                       :label="item"
                       :value="item"
@@ -650,7 +1425,7 @@
               <el-col :span="12">
                 <el-form-item label="最大参考图数量">
                   <el-input-number
-                    v-model="mappingForm.maxReferenceImages"
+                    v-model="templateForm.maxReferenceImages"
                     :min="0"
                     :max="16"
                     style="width: 100%"
@@ -660,10 +1435,23 @@
               </el-col>
             </el-row>
             <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="最大生成数量">
+                  <el-input-number
+                    v-model="templateForm.maxGenerationCount"
+                    :min="1"
+                    :max="100"
+                    style="width: 100%"
+                    placeholder="单次请求最大生成数量"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="16">
               <el-col :span="24">
                 <el-form-item label="可选宽高比列表 (Aspect Ratios)">
                   <el-select
-                    v-model="mappingForm.aspectRatios"
+                    v-model="templateForm.aspectRatios"
                     multiple
                     filterable
                     allow-create
@@ -682,48 +1470,75 @@
               </el-col>
             </el-row>
           </div>
-        </div>
 
-        <!-- Video Generation Advanced Custom Config (Only when purpose is 'video') -->
-        <div v-if="mappingForm.purpose === 'video'" style="border-top: 1px dashed #27272a; margin-top: 16px; padding-top: 16px">
-          <h4 style="margin: 0 0 12px 0; color: #fff; font-size: 13px; font-weight: 600">视频生成高级配置</h4>
-          
-          <el-form-item label="配置方式">
-            <el-radio-group v-model="mappingFormConfigType" size="small">
-              <el-radio-button label="template">使用公共模板</el-radio-button>
-              <el-radio-button label="custom">手动自定义配置</el-radio-button>
-            </el-radio-group>
+          <el-form-item label="备注说明 (Notes)">
+            <el-input
+              v-model="templateForm.notes"
+              type="textarea"
+              :rows="2"
+              placeholder="输入此配置模板的描述或说明..."
+            />
           </el-form-item>
-
-          <!-- Choice A: Use shared configuration template -->
-          <div v-if="mappingFormConfigType === 'template'">
-            <el-form-item label="绑定公共配置模板" required>
-              <el-select
-                v-model="mappingForm.videoConfigId"
-                placeholder="请选择配置模板"
-                style="width: 100%"
-                clearable
-              >
-                <el-option
-                  v-for="cfg in videoConfigs"
-                  :key="cfg.id"
-                  :label="`${cfg.label} (${cfg.id})`"
-                  :value="cfg.id"
-                />
-              </el-select>
-              <div style="font-size: 11px; color: #71717a; margin-top: 4px">
-                选择已有的公共配置模板，让该模型继承该配置。如果下拉框为空，请先在“视频配置模板”子页签中创建。
-              </div>
-            </el-form-item>
+        </el-form>
+        <template #footer>
+          <div
+            style="
+              display: flex;
+              justify-content: flex-end;
+              gap: 12px;
+              border-top: 1px solid #27272a;
+              padding-top: 16px;
+            "
+          >
+            <el-button @click="closeTemplateModal">取消</el-button>
+            <el-button type="primary" @click="saveTemplate">保存</el-button>
           </div>
+        </template>
+      </el-dialog>
 
-          <!-- Choice B: Manual Customization -->
-          <div v-else>
+      <!-- Video Config Template Dialog -->
+      <el-dialog
+        v-model="videoTemplateModalOpen"
+        :title="
+          editingVideoTemplateId ? '编辑视频配置模板' : '新增视频配置模板'
+        "
+        width="540px"
+        destroy-on-close
+        style="border-radius: 12px; background-color: #141416"
+      >
+        <el-form :model="videoTemplateForm" label-position="top">
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="模板 ID (英文标识)" required>
+                <el-input
+                  v-model="videoTemplateForm.id"
+                  placeholder="如: luma-preset, veo-preset"
+                  :disabled="!!editingVideoTemplateId"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="模板显示名称" required>
+                <el-input
+                  v-model="videoTemplateForm.label"
+                  placeholder="如: Luma 标准配置"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <div
+            style="
+              border-top: 1px dashed #27272a;
+              margin-top: 8px;
+              padding-top: 16px;
+            "
+          >
             <el-row :gutter="16">
               <el-col :span="24">
                 <el-form-item label="可选分辨率/比例列表 (Sizes)">
                   <el-select
-                    v-model="mappingForm.sizes"
+                    v-model="videoTemplateForm.sizes"
                     multiple
                     filterable
                     allow-create
@@ -732,7 +1547,10 @@
                     style="width: 100%"
                   >
                     <el-option
-                      v-for="item in (dictionaries.videoSizes && dictionaries.videoSizes.length ? dictionaries.videoSizes : PRESET_VIDEO_SIZES)"
+                      v-for="item in dictionaries.videoSizes &&
+                      dictionaries.videoSizes.length
+                        ? dictionaries.videoSizes
+                        : PRESET_VIDEO_SIZES"
                       :key="item"
                       :label="item"
                       :value="item"
@@ -745,7 +1563,7 @@
               <el-col :span="12">
                 <el-form-item label="默认分辨率/比例">
                   <el-select
-                    v-model="mappingForm.defaultSize"
+                    v-model="videoTemplateForm.defaultSize"
                     filterable
                     allow-create
                     placeholder="选择或输入默认值"
@@ -753,7 +1571,7 @@
                     clearable
                   >
                     <el-option
-                      v-for="item in mappingForm.sizes"
+                      v-for="item in videoTemplateForm.sizes"
                       :key="item"
                       :label="item"
                       :value="item"
@@ -763,10 +1581,16 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="参考帧支持">
-                  <el-select v-model="mappingForm.supportReferenceType" style="width: 100%">
+                  <el-select
+                    v-model="videoTemplateForm.supportReferenceType"
+                    style="width: 100%"
+                  >
                     <el-option label="不支持参考帧 (none)" value="none" />
                     <el-option label="仅支持首帧 (first)" value="first" />
-                    <el-option label="支持首帧和尾帧 (first_last)" value="first_last" />
+                    <el-option
+                      label="支持首帧和尾帧 (first_last)"
+                      value="first_last"
+                    />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -775,7 +1599,7 @@
               <el-col :span="8">
                 <el-form-item label="最小视频时长 (秒)">
                   <el-input-number
-                    v-model="mappingForm.minSeconds"
+                    v-model="videoTemplateForm.minSeconds"
                     :min="1"
                     placeholder="最小秒数"
                     style="width: 100%"
@@ -785,8 +1609,8 @@
               <el-col :span="8">
                 <el-form-item label="最大视频时长 (秒)">
                   <el-input-number
-                    v-model="mappingForm.maxSeconds"
-                    :min="mappingForm.minSeconds || 1"
+                    v-model="videoTemplateForm.maxSeconds"
+                    :min="videoTemplateForm.minSeconds || 1"
                     placeholder="最大秒数"
                     style="width: 100%"
                   />
@@ -795,9 +1619,9 @@
               <el-col :span="8">
                 <el-form-item label="默认视频时长 (秒)">
                   <el-input-number
-                    v-model="mappingForm.defaultSeconds"
-                    :min="mappingForm.minSeconds || 1"
-                    :max="mappingForm.maxSeconds || 9999"
+                    v-model="videoTemplateForm.defaultSeconds"
+                    :min="videoTemplateForm.minSeconds || 1"
+                    :max="videoTemplateForm.maxSeconds || 9999"
                     placeholder="默认秒数"
                     style="width: 100%"
                   />
@@ -805,387 +1629,34 @@
               </el-col>
             </el-row>
           </div>
-        </div>
 
-        <el-form-item label="备注">
-          <el-input
-            v-model="mappingForm.notes"
-            type="textarea"
-            :rows="2"
-            placeholder="输入模型特定的备注说明..."
-          />
-        </el-form-item>
-        <el-form-item style="margin-bottom: 0">
-          <el-checkbox v-model="mappingForm.enabled">启用此映射</el-checkbox>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div
-          style="
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-            border-top: 1px solid #27272a;
-            padding-top: 16px;
-          "
-        >
-          <el-button @click="closeMappingModal">取消</el-button>
-          <el-button type="primary" @click="saveMapping">保存</el-button>
-        </div>
-      </template>
-    </el-dialog>
-
-    <!-- Image Config Template Dialog -->
-    <el-dialog
-      v-model="templateModalOpen"
-      :title="editingTemplateId ? '编辑图像配置模板' : '新增图像配置模板'"
-      width="540px"
-      destroy-on-close
-      style="border-radius: 12px; background-color: #141416"
-    >
-      <el-form :model="templateForm" label-position="top">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="模板 ID (英文标识)" required>
-              <el-input
-                v-model="templateForm.id"
-                placeholder="如: gemini-preset, flux-preset"
-                :disabled="!!editingTemplateId"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="模板显示名称" required>
-              <el-input v-model="templateForm.label" placeholder="如: Gemini 标准配置" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <div style="border-top: 1px dashed #27272a; margin-top: 8px; padding-top: 16px">
-          <el-row :gutter="16">
-            <el-col :span="24">
-              <el-form-item label="可选分辨率列表 (Sizes)">
-                <el-select
-                  v-model="templateForm.sizes"
-                  multiple
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="选择预设或直接输入新增"
-                  style="width: 100%"
-                >
-                  <el-option
-                    v-for="item in dictionaries.sizes"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-form-item label="默认分辨率">
-                <el-select
-                  v-model="templateForm.defaultSize"
-                  filterable
-                  allow-create
-                  placeholder="选择或输入默认值"
-                  style="width: 100%"
-                  clearable
-                >
-                  <el-option
-                    v-for="item in templateForm.sizes"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="质量控制模式">
-                <template #label>
-                  <span style="display: inline-flex; align-items: center; gap: 4px">
-                    质量控制模式
-                    <el-tooltip placement="top" effect="dark">
-                      <template #content>
-                        <div style="font-size: 12px; line-height: 1.6">
-                          <b>控制前端第二个下拉框显示的文字：</b><br />
-                          • quality: 显示“质量”（如 DALL-E 的 standard/hd）<br />
-                          • resolution: 显示“清晰度”（如 Grok 的 1k/2k）<br />
-                          • preset: 显示“预设”（如 Flux/Qwen 的预设）<br />
-                          • image_size: 显示“输出档位”（如 Gemini 的 1K/2K/4K）
-                        </div>
-                      </template>
-                      <el-icon style="cursor: help; color: #a1a1aa"><QuestionFilled /></el-icon>
-                    </el-tooltip>
-                  </span>
-                </template>
-                <el-select v-model="templateForm.qualityMode" style="width: 100%">
-                  <el-option label="质量控制 (quality)" value="quality" />
-                  <el-option label="分辨率 (resolution)" value="resolution" />
-                  <el-option label="预设 (preset)" value="preset" />
-                  <el-option label="图像尺寸 (image_size)" value="image_size" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="16">
-            <el-col :span="24">
-              <el-form-item label="可选质量/尺寸列表 (Qualities)">
-                <el-select
-                  v-model="templateForm.qualities"
-                  multiple
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="选择预设或直接输入新增"
-                  style="width: 100%"
-                >
-                  <el-option
-                    v-for="item in dictionaries.qualities"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-form-item label="默认质量">
-                <el-select
-                  v-model="templateForm.defaultQuality"
-                  filterable
-                  allow-create
-                  placeholder="选择或输入默认值"
-                  style="width: 100%"
-                  clearable
-                >
-                  <el-option
-                    v-for="item in templateForm.qualities"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="最大参考图数量">
-                <el-input-number
-                  v-model="templateForm.maxReferenceImages"
-                  :min="0"
-                  :max="16"
-                  style="width: 100%"
-                  placeholder="不填则按模型默认"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-form-item label="最大生成数量">
-                <el-input-number
-                  v-model="templateForm.maxGenerationCount"
-                  :min="1"
-                  :max="100"
-                  style="width: 100%"
-                  placeholder="单次请求最大生成数量"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="16">
-            <el-col :span="24">
-              <el-form-item label="可选宽高比列表 (Aspect Ratios)">
-                <el-select
-                  v-model="templateForm.aspectRatios"
-                  multiple
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="选择预设或直接输入新增"
-                  style="width: 100%"
-                >
-                  <el-option
-                    v-for="item in dictionaries.aspectRatios"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-
-        <el-form-item label="备注说明 (Notes)">
-          <el-input
-            v-model="templateForm.notes"
-            type="textarea"
-            :rows="2"
-            placeholder="输入此配置模板的描述或说明..."
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div
-          style="
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-            border-top: 1px solid #27272a;
-            padding-top: 16px;
-          "
-        >
-          <el-button @click="closeTemplateModal">取消</el-button>
-          <el-button type="primary" @click="saveTemplate">保存</el-button>
-        </div>
-      </template>
-    </el-dialog>
-
-    <!-- Video Config Template Dialog -->
-    <el-dialog
-      v-model="videoTemplateModalOpen"
-      :title="editingVideoTemplateId ? '编辑视频配置模板' : '新增视频配置模板'"
-      width="540px"
-      destroy-on-close
-      style="border-radius: 12px; background-color: #141416"
-    >
-      <el-form :model="videoTemplateForm" label-position="top">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="模板 ID (英文标识)" required>
-              <el-input
-                v-model="videoTemplateForm.id"
-                placeholder="如: luma-preset, veo-preset"
-                :disabled="!!editingVideoTemplateId"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="模板显示名称" required>
-              <el-input v-model="videoTemplateForm.label" placeholder="如: Luma 标准配置" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <div style="border-top: 1px dashed #27272a; margin-top: 8px; padding-top: 16px">
-          <el-row :gutter="16">
-            <el-col :span="24">
-              <el-form-item label="可选分辨率/比例列表 (Sizes)">
-                <el-select
-                  v-model="videoTemplateForm.sizes"
-                  multiple
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="选择预设或直接输入新增，如 16x9"
-                  style="width: 100%"
-                >
-                  <el-option
-                    v-for="item in (dictionaries.videoSizes && dictionaries.videoSizes.length ? dictionaries.videoSizes : PRESET_VIDEO_SIZES)"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-form-item label="默认分辨率/比例">
-                <el-select
-                  v-model="videoTemplateForm.defaultSize"
-                  filterable
-                  allow-create
-                  placeholder="选择或输入默认值"
-                  style="width: 100%"
-                  clearable
-                >
-                  <el-option
-                    v-for="item in videoTemplateForm.sizes"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="参考帧支持">
-                <el-select v-model="videoTemplateForm.supportReferenceType" style="width: 100%">
-                  <el-option label="不支持参考帧 (none)" value="none" />
-                  <el-option label="仅支持首帧 (first)" value="first" />
-                  <el-option label="支持首帧和尾帧 (first_last)" value="first_last" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="16">
-            <el-col :span="8">
-              <el-form-item label="最小视频时长 (秒)">
-                <el-input-number
-                  v-model="videoTemplateForm.minSeconds"
-                  :min="1"
-                  placeholder="最小秒数"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="最大视频时长 (秒)">
-                <el-input-number
-                  v-model="videoTemplateForm.maxSeconds"
-                  :min="videoTemplateForm.minSeconds || 1"
-                  placeholder="最大秒数"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="默认视频时长 (秒)">
-                <el-input-number
-                  v-model="videoTemplateForm.defaultSeconds"
-                  :min="videoTemplateForm.minSeconds || 1"
-                  :max="videoTemplateForm.maxSeconds || 9999"
-                  placeholder="默认秒数"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-
-        <el-form-item label="备注说明 (Notes)">
-          <el-input
-            v-model="videoTemplateForm.notes"
-            type="textarea"
-            :rows="2"
-            placeholder="输入此视频配置模板的描述或说明..."
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div
-          style="
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-            border-top: 1px solid #27272a;
-            padding-top: 16px;
-          "
-        >
-          <el-button @click="closeVideoTemplateModal">取消</el-button>
-          <el-button type="primary" @click="saveVideoTemplate">保存</el-button>
-        </div>
-      </template>
-    </el-dialog>
+          <el-form-item label="备注说明 (Notes)">
+            <el-input
+              v-model="videoTemplateForm.notes"
+              type="textarea"
+              :rows="2"
+              placeholder="输入此视频配置模板的描述或说明..."
+            />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <div
+            style="
+              display: flex;
+              justify-content: flex-end;
+              gap: 12px;
+              border-top: 1px solid #27272a;
+              padding-top: 16px;
+            "
+          >
+            <el-button @click="closeVideoTemplateModal">取消</el-button>
+            <el-button type="primary" @click="saveVideoTemplate"
+              >保存</el-button
+            >
+          </div>
+        </template>
+      </el-dialog>
+    </el-card>
   </div>
 </template>
 
@@ -1222,7 +1693,9 @@ const emit = defineEmits<{
   (e: "refresh-mappings"): void;
 }>();
 
-const modelsSubTab = defineModel<"mappings" | "templates" | "videoTemplates" | "dictionaries">("modelsSubTab", { default: "mappings" });
+const modelsSubTab = defineModel<
+  "mappings" | "templates" | "videoTemplates" | "dictionaries"
+>("modelsSubTab", { default: "mappings" });
 
 const modelSearchQuery = ref("");
 const mappingToggling = ref<Record<string, boolean>>({});
@@ -1267,10 +1740,12 @@ watch(
       };
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true, deep: true },
 );
 
-function addDictItem(type: 'sizes' | 'aspectRatios' | 'qualities' | 'videoSizes') {
+function addDictItem(
+  type: "sizes" | "aspectRatios" | "qualities" | "videoSizes",
+) {
   const val = newDictItemInput.value[type].trim();
   if (!val) return;
   if (!localDict.value[type].includes(val)) {
@@ -1279,7 +1754,10 @@ function addDictItem(type: 'sizes' | 'aspectRatios' | 'qualities' | 'videoSizes'
   newDictItemInput.value[type] = "";
 }
 
-function removeDictItem(type: 'sizes' | 'aspectRatios' | 'qualities' | 'videoSizes', val: string) {
+function removeDictItem(
+  type: "sizes" | "aspectRatios" | "qualities" | "videoSizes",
+  val: string,
+) {
   localDict.value[type] = localDict.value[type].filter((item) => item !== val);
 }
 
@@ -1399,9 +1877,22 @@ function getPurposeTagType(purpose: string) {
 function openMappingModal(item?: ModelMapping) {
   editingMappingId.value = item?.id || null;
   if (item) {
-    const hasInline = Array.isArray(item.sizes) || Array.isArray(item.qualities) || Array.isArray(item.aspectRatios) || typeof item.maxReferenceImages === 'number' || item.minSeconds !== undefined || item.maxSeconds !== undefined || item.defaultSeconds !== undefined || item.supportReferenceType;
-    mappingFormConfigType.value = (item.imageConfigId || item.videoConfigId) ? 'template' : (hasInline ? 'custom' : 'template');
-    
+    const hasInline =
+      Array.isArray(item.sizes) ||
+      Array.isArray(item.qualities) ||
+      Array.isArray(item.aspectRatios) ||
+      typeof item.maxReferenceImages === "number" ||
+      item.minSeconds !== undefined ||
+      item.maxSeconds !== undefined ||
+      item.defaultSeconds !== undefined ||
+      item.supportReferenceType;
+    mappingFormConfigType.value =
+      item.imageConfigId || item.videoConfigId
+        ? "template"
+        : hasInline
+          ? "custom"
+          : "template";
+
     mappingForm.value = {
       ...item,
       imageConfigId: item.imageConfigId || "",
@@ -1412,7 +1903,9 @@ function openMappingModal(item?: ModelMapping) {
       iconUrl: item.iconUrl || "",
       sizes: Array.isArray(item.sizes) ? [...item.sizes] : [],
       qualities: Array.isArray(item.qualities) ? [...item.qualities] : [],
-      aspectRatios: Array.isArray(item.aspectRatios) ? [...item.aspectRatios] : [],
+      aspectRatios: Array.isArray(item.aspectRatios)
+        ? [...item.aspectRatios]
+        : [],
       maxReferenceImages: item.maxReferenceImages,
       defaultSize: item.defaultSize || "",
       defaultQuality: item.defaultQuality || "",
@@ -1423,7 +1916,7 @@ function openMappingModal(item?: ModelMapping) {
       supportReferenceType: item.supportReferenceType || "first",
     };
   } else {
-    mappingFormConfigType.value = 'template';
+    mappingFormConfigType.value = "template";
     mappingForm.value = emptyMappingForm();
   }
   mappingModalOpen.value = true;
@@ -1444,7 +1937,9 @@ function openTemplateModal(item?: ImageConfig) {
         ...item,
         sizes: Array.isArray(item.sizes) ? [...item.sizes] : [],
         qualities: Array.isArray(item.qualities) ? [...item.qualities] : [],
-        aspectRatios: Array.isArray(item.aspectRatios) ? [...item.aspectRatios] : [],
+        aspectRatios: Array.isArray(item.aspectRatios)
+          ? [...item.aspectRatios]
+          : [],
         maxReferenceImages: item.maxReferenceImages,
         defaultSize: item.defaultSize || "",
         defaultQuality: item.defaultQuality || "",
@@ -1558,7 +2053,7 @@ async function saveMapping() {
   // 1. Check duplicate Front-end ID (case-insensitive)
   const newIdLower = next.id.toLowerCase();
   const isDuplicateId = props.mappings.some(
-    (m) => m.id.toLowerCase() === newIdLower && m.id !== editingMappingId.value
+    (m) => m.id.toLowerCase() === newIdLower && m.id !== editingMappingId.value,
   );
   if (isDuplicateId) {
     ElMessage.warning(`前端 ID "${next.id}" 已存在，请使用其他 ID`);
@@ -1572,7 +2067,7 @@ async function saveMapping() {
     (m) =>
       m.channelId === newChannelId &&
       m.upstreamModel.toLowerCase() === newUpstreamModelLower &&
-      m.id !== editingMappingId.value
+      m.id !== editingMappingId.value,
   );
   if (isDuplicateModel) {
     ElMessage.warning(`上游渠道下已配置相同的上游模型 "${next.upstreamModel}"`);
@@ -1584,14 +2079,20 @@ async function saveMapping() {
       next.imageConfigId = mappingForm.value.imageConfigId || undefined;
     } else {
       next.imageConfigId = undefined;
-      
+
       if (mappingForm.value.sizes && mappingForm.value.sizes.length > 0) {
         next.sizes = mappingForm.value.sizes;
       }
-      if (mappingForm.value.qualities && mappingForm.value.qualities.length > 0) {
+      if (
+        mappingForm.value.qualities &&
+        mappingForm.value.qualities.length > 0
+      ) {
         next.qualities = mappingForm.value.qualities;
       }
-      if (mappingForm.value.aspectRatios && mappingForm.value.aspectRatios.length > 0) {
+      if (
+        mappingForm.value.aspectRatios &&
+        mappingForm.value.aspectRatios.length > 0
+      ) {
         next.aspectRatios = mappingForm.value.aspectRatios;
       }
       if (typeof mappingForm.value.maxReferenceImages === "number") {
@@ -1612,7 +2113,7 @@ async function saveMapping() {
       next.videoConfigId = mappingForm.value.videoConfigId || undefined;
     } else {
       next.videoConfigId = undefined;
-      
+
       if (mappingForm.value.sizes && mappingForm.value.sizes.length > 0) {
         next.sizes = mappingForm.value.sizes;
       }
@@ -1629,7 +2130,8 @@ async function saveMapping() {
         next.defaultSize = mappingForm.value.defaultSize.trim();
       }
       if (mappingForm.value.supportReferenceType?.trim()) {
-        next.supportReferenceType = mappingForm.value.supportReferenceType.trim();
+        next.supportReferenceType =
+          mappingForm.value.supportReferenceType.trim();
       }
     }
   }
@@ -1696,7 +2198,7 @@ async function saveTemplate() {
     ElMessage.warning("请填写必填项");
     return;
   }
-  
+
   const next: ImageConfig = {
     id: templateForm.value.id.trim(),
     label: templateForm.value.label.trim(),
@@ -1713,7 +2215,9 @@ async function saveTemplate() {
 
   const newTemplateIdLower = next.id.toLowerCase();
   const isDuplicateTemplateId = props.imageConfigs.some(
-    (c) => c.id.toLowerCase() === newTemplateIdLower && c.id !== editingTemplateId.value
+    (c) =>
+      c.id.toLowerCase() === newTemplateIdLower &&
+      c.id !== editingTemplateId.value,
   );
   if (isDuplicateTemplateId) {
     ElMessage.warning(`模板 ID "${next.id}" 已存在，请使用其他 ID`);
@@ -1722,7 +2226,9 @@ async function saveTemplate() {
 
   try {
     const current = [
-      ...props.imageConfigs.filter((item) => item.id !== editingTemplateId.value),
+      ...props.imageConfigs.filter(
+        (item) => item.id !== editingTemplateId.value,
+      ),
       next,
     ];
     await updateModelConfig({
@@ -1757,11 +2263,14 @@ function confirmDeleteTemplate(item: ImageConfig) {
 }
 
 async function saveVideoTemplate() {
-  if (!videoTemplateForm.value.id.trim() || !videoTemplateForm.value.label.trim()) {
+  if (
+    !videoTemplateForm.value.id.trim() ||
+    !videoTemplateForm.value.label.trim()
+  ) {
     ElMessage.warning("请填写必填项");
     return;
   }
-  
+
   const next: VideoConfig = {
     id: videoTemplateForm.value.id.trim(),
     label: videoTemplateForm.value.label.trim(),
@@ -1770,13 +2279,16 @@ async function saveVideoTemplate() {
     maxSeconds: videoTemplateForm.value.maxSeconds,
     defaultSize: videoTemplateForm.value.defaultSize?.trim() || undefined,
     defaultSeconds: videoTemplateForm.value.defaultSeconds,
-    supportReferenceType: videoTemplateForm.value.supportReferenceType?.trim() || "first",
+    supportReferenceType:
+      videoTemplateForm.value.supportReferenceType?.trim() || "first",
     notes: videoTemplateForm.value.notes?.trim() || undefined,
   };
 
   const newTemplateIdLower = next.id.toLowerCase();
   const isDuplicateTemplateId = props.videoConfigs.some(
-    (c) => c.id.toLowerCase() === newTemplateIdLower && c.id !== editingVideoTemplateId.value
+    (c) =>
+      c.id.toLowerCase() === newTemplateIdLower &&
+      c.id !== editingVideoTemplateId.value,
   );
   if (isDuplicateTemplateId) {
     ElMessage.warning(`视频模板 ID "${next.id}" 已存在，请使用其他 ID`);
@@ -1785,7 +2297,9 @@ async function saveVideoTemplate() {
 
   try {
     const current = [
-      ...props.videoConfigs.filter((item) => item.id !== editingVideoTemplateId.value),
+      ...props.videoConfigs.filter(
+        (item) => item.id !== editingVideoTemplateId.value,
+      ),
       next,
     ];
     await updateModelConfig({

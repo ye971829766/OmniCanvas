@@ -1,10 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AgentService } from './agent.service';
 import { AgentMemory } from './agent.memory';
 import { exportRegistry } from './export-registry';
+import { OptionalAuthGuard } from '../auth/auth.guard';
 
 @Controller('agent')
+@UseGuards(OptionalAuthGuard)
 export class AgentController {
   constructor(
     private readonly agent: AgentService,
@@ -47,16 +49,21 @@ export class AgentController {
   @Post(':sessionId/chat')
   async chat(
     @Param('sessionId') sessionId: string,
-    @Body() body: { message: string; images?: string[]; canvasState?: any[] },
+    @Body() body: { message: string; images?: string[]; canvasState?: any[]; userId?: string; username?: string },
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
+    const reqUser = (req as any).user;
+    const userId = body?.userId || reqUser?.sub || reqUser?.id;
+    const username = body?.username || reqUser?.username;
+
     const sink = this.agent.run(
       sessionId,
       body?.message ?? '',
       this.getOrigin(req),
       body?.images,
       body?.canvasState,
+      { userId, username },
     );
     await this.pipe(res, sink.stream());
   }
@@ -69,10 +76,23 @@ export class AgentController {
   async stream(
     @Param('sessionId') sessionId: string,
     @Query('message') message: string,
+    @Query('userId') queryUserId: string,
+    @Query('username') queryUsername: string,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    const sink = this.agent.run(sessionId, message ?? '', this.getOrigin(req));
+    const reqUser = (req as any).user;
+    const userId = queryUserId || reqUser?.sub || reqUser?.id;
+    const username = queryUsername || reqUser?.username;
+
+    const sink = this.agent.run(
+      sessionId,
+      message ?? '',
+      this.getOrigin(req),
+      undefined,
+      undefined,
+      { userId, username },
+    );
     await this.pipe(res, sink.stream());
   }
 

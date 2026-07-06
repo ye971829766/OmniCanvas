@@ -3,9 +3,7 @@
     <!-- ── Seamless Inline Action Link (e.g. "使用了 6 个工具 ›") ── -->
     <button class="inline-action-btn" @click="isExpanded = !isExpanded">
       <span v-if="isRunning" class="inline-spin-sparkle">
-        <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12" class="spin">
-          <path d="M8 1.5 L9.1 6.3 L14 7.5 L9.1 8.7 L8 13.5 L6.9 8.7 L2 7.5 L6.9 6.3 Z"/>
-        </svg>
+        <Loader2 :size="12" class="spin" />
       </span>
       <span class="inline-action-text">{{ actionLabelText }}</span>
       <span class="inline-arrow" :class="{ 'rotated': isExpanded }">›</span>
@@ -35,6 +33,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { Loader2 } from 'lucide-vue-next';
 import { getToolLabel } from './tool-labels';
 import type { ToolCallItem } from '@/composables/useAgent';
 

@@ -1,14 +1,17 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode, HttpStatus } from "@nestjs/common";
+import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode, HttpStatus, UseGuards, Req } from "@nestjs/common";
 import { WorkspacesService } from "./workspaces.service";
 import type { WorkspaceMetadata } from "./workspaces.service";
+import { AuthGuard } from "../auth/auth.guard";
 
 @Controller("workspaces")
+@UseGuards(AuthGuard)
 export class WorkspacesController {
   constructor(private readonly workspacesService: WorkspacesService) {}
 
   @Get()
-  async getAll(): Promise<WorkspaceMetadata[]> {
-    return this.workspacesService.getAll();
+  async getAll(@Req() req: any): Promise<WorkspaceMetadata[]> {
+    const userId = req.user?.sub;
+    return this.workspacesService.getAll(userId);
   }
 
   @Get(":id/canvas")
@@ -27,8 +30,9 @@ export class WorkspacesController {
   }
 
   @Post()
-  async create(@Body("name") name: string): Promise<WorkspaceMetadata> {
-    return this.workspacesService.create(name || "未命名工作区");
+  async create(@Req() req: any, @Body("name") name: string): Promise<WorkspaceMetadata> {
+    const userId = req.user?.sub;
+    return this.workspacesService.create(name || "未命名工作区", userId);
   }
 
   @Put(":id")

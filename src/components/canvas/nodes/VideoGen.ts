@@ -125,148 +125,157 @@ export class VideoGen extends Box {
     this.updateVisuals();
   }
 
+  private _isUpdatingVisuals = false;
+
   public updateVisuals() {
-    this.clear();
+    if (this._isUpdatingVisuals) return;
+    this._isUpdatingVisuals = true;
 
-    if (this.generationStatus === "success") {
-      return;
-    }
+    try {
+      this.clear();
 
-    const group = new Box({
-      width: this.width,
-      height: this.height,
-      hittable: true,
-      overflow: "hide",
-    });
+      if (this.generationStatus === "success") {
+        return;
+      }
 
-    const w = this.width ?? 400;
-    const h = this.height ?? 300;
-
-    // Background card shape (soft blue background, matching ImageGen)
-    const bg = new Rect({
-      width: w,
-      height: h,
-      fill: "#e2e8f0", // slate-200
-      cornerRadius: 12,
-    });
-    group.add(bg);
-
-    // Camera Icon in the center (white fill, matching ImageGen's sun and mountains)
-    const iconWidth = 120;
-    const iconHeight = 80;
-
-    const hasText =
-      this.generationStatus === "generating" ||
-      this.generationStatus === "error";
-    const iconY = hasText
-      ? h / 2 - iconHeight / 2 - 20
-      : h / 2 - iconHeight / 2;
-
-    const iconGroup = new Box({
-      x: w / 2 - iconWidth / 2,
-      y: iconY,
-      width: iconWidth,
-      height: iconHeight,
-      hittable: false,
-    });
-
-    // 1. Camera Body (Rect)
-    const body = new Rect({
-      x: 15,
-      y: 20,
-      width: 55,
-      height: 40,
-      fill: "#ffffff", // white
-      cornerRadius: 6,
-    });
-    iconGroup.add(body);
-
-    // 2. Camera Lens (Polygon / Triangle on the right side)
-    const lens = new Polygon({
-      points: [70, 30, 95, 20, 95, 60, 70, 50],
-      fill: "#ffffff", // white
-    });
-    iconGroup.add(lens);
-
-    // 3. Reels (Two small circles on top of the camera body)
-    const reel1 = new Ellipse({
-      x: 22,
-      y: 8,
-      width: 16,
-      height: 16,
-      fill: "#ffffff", // white
-    });
-    const reel2 = new Ellipse({
-      x: 44,
-      y: 8,
-      width: 16,
-      height: 16,
-      fill: "#ffffff", // white
-    });
-    iconGroup.add(reel1);
-    iconGroup.add(reel2);
-
-    group.add(iconGroup);
-
-    // Loading state (shimmer animation and prompt text)
-    if (this.generationStatus === "generating") {
-      const loadingText = new Text({
-        x: w / 2,
-        y: h / 2 + 45,
-        text: this.prompt,
-        fontSize: 14,
-        fontWeight: "bold",
-        fill: "#00000050", // grey transparent
-        textAlign: "center",
-        verticalAlign: "middle",
+      const group = new Box({
+        width: this.width,
+        height: this.height,
+        hittable: true,
+        overflow: "hide",
       });
 
-      const loadingRect = new Rect({
-        x: -w,
+      const w = this.width ?? 400;
+      const h = this.height ?? 300;
+
+      // Background card shape (soft blue background, matching ImageGen)
+      const bg = new Rect({
         width: w,
         height: h,
-        fill: {
-          type: "linear",
-          from: { type: "percent", x: 0, y: 0.5 },
-          to: { type: "percent", x: 1, y: 0.5 },
-          stops: [
-            "rgba(255,255,255,0)",
-            "rgba(255,255,255,0.6)",
-            "rgba(255,255,255,0)",
-          ],
-        },
+        fill: "#e2e8f0", // slate-200
+        cornerRadius: 12,
+      });
+      group.add(bg);
+
+      // Camera Icon in the center (white fill, matching ImageGen's sun and mountains)
+      const iconWidth = 120;
+      const iconHeight = 80;
+
+      const hasText =
+        this.generationStatus === "generating" ||
+        this.generationStatus === "error";
+      const iconY = hasText
+        ? h / 2 - iconHeight / 2 - 20
+        : h / 2 - iconHeight / 2;
+
+      const iconGroup = new Box({
+        x: w / 2 - iconWidth / 2,
+        y: iconY,
+        width: iconWidth,
+        height: iconHeight,
+        hittable: false,
       });
 
-      group.add(loadingRect);
-      group.add(loadingText);
-      group.remove(iconGroup);
-
-      loadingRect.animate(
-        {
-          x: w,
-        },
-        {
-          duration: 1.2,
-          loop: true,
-        },
-      );
-    }
-    // Error state
-    else if (this.generationStatus === "error") {
-      const errorTitle = new Text({
-        x: w / 2,
-        y: h / 2 + 40,
-        text: "生成失败",
-        fontSize: 14,
-        fontWeight: "bold",
-        fill: "#ef4444",
-        textAlign: "center",
-        verticalAlign: "middle",
+      // 1. Camera Body (Rect)
+      const body = new Rect({
+        x: 15,
+        y: 20,
+        width: 55,
+        height: 40,
+        fill: "#ffffff", // white
+        cornerRadius: 6,
       });
-      group.add(errorTitle);
-    }
+      iconGroup.add(body);
 
-    this.add(group);
+      // 2. Camera Lens (Polygon / Triangle on the right side)
+      const lens = new Polygon({
+        points: [70, 30, 95, 20, 95, 60, 70, 50],
+        fill: "#ffffff", // white
+      });
+      iconGroup.add(lens);
+
+      // 3. Reels (Two small circles on top of the camera body)
+      const reel1 = new Ellipse({
+        x: 22,
+        y: 8,
+        width: 16,
+        height: 16,
+        fill: "#ffffff", // white
+      });
+      const reel2 = new Ellipse({
+        x: 44,
+        y: 8,
+        width: 16,
+        height: 16,
+        fill: "#ffffff", // white
+      });
+      iconGroup.add(reel1);
+      iconGroup.add(reel2);
+
+      group.add(iconGroup);
+
+      // Loading state (shimmer animation and prompt text)
+      if (this.generationStatus === "generating") {
+        const loadingText = new Text({
+          x: w / 2,
+          y: h / 2 + 45,
+          text: this.prompt,
+          fontSize: 14,
+          fontWeight: "bold",
+          fill: "#00000050", // grey transparent
+          textAlign: "center",
+          verticalAlign: "middle",
+        });
+
+        const loadingRect = new Rect({
+          x: -w,
+          width: w,
+          height: h,
+          fill: {
+            type: "linear",
+            from: { type: "percent", x: 0, y: 0.5 },
+            to: { type: "percent", x: 1, y: 0.5 },
+            stops: [
+              "rgba(255,255,255,0)",
+              "rgba(255,255,255,0.6)",
+              "rgba(255,255,255,0)",
+            ],
+          },
+        });
+
+        group.add(loadingRect);
+        group.add(loadingText);
+        group.remove(iconGroup);
+
+        loadingRect.animate(
+          {
+            x: w,
+          },
+          {
+            duration: 1.2,
+            loop: true,
+          },
+        );
+      }
+      // Error state
+      else if (this.generationStatus === "error") {
+        const errorTitle = new Text({
+          x: w / 2,
+          y: h / 2 + 40,
+          text: "生成失败",
+          fontSize: 14,
+          fontWeight: "bold",
+          fill: "#ef4444",
+          textAlign: "center",
+          verticalAlign: "middle",
+        });
+        group.add(errorTitle);
+      }
+
+      this.add(group);
+    } finally {
+      this._isUpdatingVisuals = false;
+    }
   }
 
   public getLayoutPoints(type?: any, relative?: any): any[] {

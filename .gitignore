@@ -52,3 +52,8 @@ server/files/
 
 # Test artifacts
 server/test.mp4
+
+# OAuth & API secrets
+client_secret_*.json
+server/client_secret_*.json
+

@@ -15,6 +15,7 @@ declare module 'vue' {
     AgentInput: typeof import('./components/agent/AgentInput.vue')['default']
     AgentMessages: typeof import('./components/agent/AgentMessages.vue')['default']
     AgentPanel: typeof import('./components/AgentPanel.vue')['default']
+    AuthModal: typeof import('./components/auth/AuthModal.vue')['default']
     AutoLayoutAndFreeLayout: typeof import('./components/canvas/floatToolbar/custom/AutoLayoutAndFreeLayout.vue')['default']
     BorderTool: typeof import('./components/canvas/floatToolbar/custom/BorderTool.vue')['default']
     Button: typeof import('primevue/button')['default']
@@ -61,8 +62,10 @@ declare module 'vue' {
     ToolCallCard: typeof import('./components/agent/ToolCallCard.vue')['default']
     ToolCallGroup: typeof import('./components/agent/ToolCallGroup.vue')['default']
     ToolRowBasic: typeof import('./components/agent/ToolRowBasic.vue')['default']
+    UserProfileModal: typeof import('./components/auth/UserProfileModal.vue')['default']
     ViboardToolbar: typeof import('./components/ViboardToolbar.vue')['default']
     VideoGenCard: typeof import('./components/canvas/floatToolbar/custom/VideoGenCard.vue')['default']
+    WorkspaceSkeleton: typeof import('./components/WorkspaceSkeleton.vue')['default']
     ZoomController: typeof import('./components/canvas/ZoomController.vue')['default']
   }
 }

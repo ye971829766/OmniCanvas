@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { Image, LayoutGrid, Wrench } from "lucide-vue-next";
 import { getToolActiveLabel, getToolDoneLabel } from "./tool-labels";
 import type { ToolCallItem } from "@/composables/useAgent";
 
@@ -109,20 +110,9 @@ function truncate(value: unknown, maxLength: number) {
     <div v-if="shouldShow && activeTool" class="tool-activity" role="status">
       <!-- Tool icon (left) -->
       <span class="activity-icon" :class="{ spinning: streaming }">
-        <svg v-if="isImageTool(activeTool.name)" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-          <rect x="2" y="2" width="12" height="12" rx="2" />
-          <circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none" />
-          <path d="M14 10 L11 7 L7 11" />
-        </svg>
-        <svg v-else-if="isLayoutTool(activeTool.name)" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-          <rect x="2" y="2" width="5" height="5" rx="1" />
-          <rect x="9" y="2" width="5" height="5" rx="1" />
-          <rect x="2" y="9" width="5" height="5" rx="1" />
-          <rect x="9" y="9" width="5" height="5" rx="1" />
-        </svg>
-        <svg v-else viewBox="0 0 16 16" fill="currentColor" width="13" height="13">
-          <path d="M8 1.5 L9.1 6.3 L14 7.5 L9.1 8.7 L8 13.5 L6.9 8.7 L2 7.5 L6.9 6.3 Z"/>
-        </svg>
+        <Image v-if="isImageTool(activeTool.name)" :size="14" />
+        <LayoutGrid v-else-if="isLayoutTool(activeTool.name)" :size="14" />
+        <Wrench v-else :size="13" />
       </span>
 
       <!-- Tool text -->

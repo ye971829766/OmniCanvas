@@ -21,6 +21,7 @@
   "scripts": {
     "dev": "vite",
     "dev:all": "node run-all.js",
+    "docker:deploy": "docker compose up -d --build",
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",

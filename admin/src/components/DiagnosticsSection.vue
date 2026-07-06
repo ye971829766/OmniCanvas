@@ -7,10 +7,11 @@
       <!-- Left Parameter Configuration Panel -->
       <el-col :span="10">
         <el-card
+          shadow="none"
           style="
-            background-color: #141416;
-            border: 1px solid #27272a;
-            border-radius: 12px;
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 20px;
             height: 100%;
             display: flex;
             flex-direction: column;
@@ -19,15 +20,15 @@
           <template #header>
             <span
               style="
-                font-size: 14px;
-                font-weight: 600;
-                color: #fff;
+                font-size: 16px;
+                font-weight: 700;
+                color: #0f172a;
                 display: flex;
                 align-items: center;
-                gap: 6px;
+                gap: 8px;
               "
             >
-              <el-icon style="color: #f97316"><Setting /></el-icon>
+              <el-icon style="color: #0f172a"><Setting /></el-icon>
               测试参数配置
             </span>
           </template>
@@ -169,10 +170,11 @@
       >
         <!-- Response Preview -->
         <el-card
+          shadow="none"
           style="
-            background-color: #141416;
-            border: 1px solid #27272a;
-            border-radius: 12px;
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 20px;
             flex: 1;
             display: flex;
             flex-direction: column;
@@ -180,7 +182,7 @@
           "
         >
           <template #header>
-            <span style="font-size: 14px; font-weight: 600; color: #fff"
+            <span style="font-size: 16px; font-weight: 700; color: #0f172a"
               >渲染预览</span
             >
           </template>

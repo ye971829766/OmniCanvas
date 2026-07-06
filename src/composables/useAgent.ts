@@ -4,6 +4,7 @@ import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/utils";
 import { getAgentHistory, deleteAgentSession, stopAgent } from "@/utils/api";
+import { useUser } from "./useUser";
 
 /**
  * useAgent — drives the Lovart-style chat panel.
@@ -981,16 +982,24 @@ export function useAgent(
 
 
     try {
+      const { currentUser } = useUser();
+      const token = localStorage.getItem("omnicanvas_token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
 
       const res = await fetch(
         `${AGENT_BASE_URL}/agent/${sessionId.value}/chat`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             message: text,
             images: attachments,
             canvasState: serializeCanvasForAgent(),
+            userId: currentUser.value?.id,
+            username: currentUser.value?.username,
           }),
           signal: abort.signal,
         },

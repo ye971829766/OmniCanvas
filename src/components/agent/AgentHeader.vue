@@ -16,19 +16,27 @@ const emit = defineEmits<{
   <div class="agent-header">
     <div class="flex items-center gap-2">
       <span class="agent-logo">
-        <img src="@/assets/logo.jpg" alt="OmniCanvas" class="agent-logo-img" />
+        <img
+          src="@/assets/logo.jpg"
+          alt="OmniCanvas"
+          width="24"
+          height="24"
+          style="width: 24px; height: 24px; object-fit: cover"
+          class="agent-logo-img"
+        />
       </span>
       <span class="font-600 text-15px">AI 设计助手</span>
     </div>
     <div class="flex items-center gap-1">
-      <button
+      <Button
         v-if="messagesCount > 0"
-        class="agent-icon-btn"
-        title="新会话"
+        text
+        rounded
+        size="small"
         @click="emit('reset')"
       >
         <RotateCcw :size="14" />
-      </button>
+      </Button>
       <Button text rounded size="small" title="收起" @click="emit('collapse')">
         <PanelRightClose :size="18" />
       </Button>

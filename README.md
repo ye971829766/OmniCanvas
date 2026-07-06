@@ -231,9 +231,25 @@ MOCK_VIDEO=false
 
 ## ⚡ Running the Application
 
-### Option A: One-Click Startup (Recommended)
+### Option A: Docker One-Click Deployment (Recommended for Production)
 
-Start Frontend, Backend, and Admin Dashboard concurrently with a single unified command:
+Deploy Frontend, Admin Dashboard, and Backend API using Docker & Docker Compose:
+
+```bash
+# Linux / Mac
+chmod +x deploy-docker.sh
+./deploy-docker.sh
+
+# Windows (PowerShell)
+.\deploy-docker.ps1
+
+# Or run via Docker Compose directly
+docker compose up -d --build
+```
+
+### Option B: Local One-Click Start All Services
+
+Run all three services (Frontend, Backend, and Admin Dashboard) concurrently for development:
 
 ```bash
 bun dev:all
@@ -241,13 +257,13 @@ bun dev:all
 npm run dev:all
 ```
 
-| Service             | Local URL               | Description                                  |
-| ------------------- | ----------------------- | -------------------------------------------- |
-| **Frontend App**    | `http://localhost:5173` | Main infinite canvas & AI agent interface    |
-| **Admin Dashboard** | `http://localhost:5174` | System monitoring, channels, and diagnostics |
-| **Backend Service** | `http://localhost:3000` | NestJS REST & SSE Agent service              |
+| Service | Local URL | Description |
+|---------|-----------|-------------|
+| **Frontend App** | `http://localhost` (Docker) / `http://localhost:5173` (Dev) | Main infinite canvas & AI agent interface |
+| **Admin Dashboard** | `http://localhost/admin` (Docker) / `http://localhost:5174` (Dev) | System monitoring, channels, and diagnostics |
+| **Backend Service** | `http://localhost:3000` | NestJS REST & SSE Agent service |
 
-### Option B: Individual Service Startup
+### Option C: Individual Service Startup
 
 ```bash
 # Terminal 1: Backend

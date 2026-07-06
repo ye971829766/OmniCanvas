@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from "vue";
+import { Sparkles, RotateCcw, ChevronDown } from "lucide-vue-next";
 import {
   IncremarkContent,
   AutoScrollContainer,
@@ -215,8 +216,13 @@ interface ParsedMessagePart {
   refId?: string;
 }
 
+function normalizeCodeLangs(raw: string): string {
+  if (!raw) return "";
+  return raw.replace(/```(math|maths|formula|equation)\b/gi, "```latex");
+}
+
 function parseMessageText(text: string): ParsedMessagePart[] {
-  text = stripInternalToolErrors(text);
+  text = normalizeCodeLangs(stripInternalToolErrors(text));
   if (!text || !text.trim()) return [];
   const regex = /\[inspiration_grid:([^\]]+)\]|\[@image:#([^\]]+)\]/g;
   const parts: ParsedMessagePart[] = [];
@@ -314,6 +320,9 @@ function copyText(txt: string) {
           <img
             :src="logoImg"
             alt="OmniCanvas"
+            width="56"
+            height="56"
+            style="width: 56px; height: 56px; object-fit: cover;"
             class="agent-empty-logo-img float-logo"
           />
         </div>
@@ -382,6 +391,9 @@ function copyText(txt: string) {
                 class="agent-avatar"
                 :src="OmniCanvasAvatar"
                 alt="OmniCanvas"
+                width="28"
+                height="28"
+                style="width: 28px; height: 28px; object-fit: cover;"
               />
             </div>
             <div class="flex-1 min-w-0">
@@ -394,16 +406,7 @@ function copyText(txt: string) {
                 "
               >
                 <span class="gemini-sparkle-icon">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="16"
-                    height="16"
-                    fill="currentColor"
-                  >
-                    <path
-                      d="M12 2C12 7.5 7.5 12 2 12C7.5 12 12 16.5 12 22C12 16.5 16.5 12 22 12C16.5 12 12 7.5 12 2Z"
-                    />
-                  </svg>
+                  <Sparkles :size="16" />
                 </span>
                 <span class="thinking-label">思考中</span>
                 <!-- <span class="thinking-timer">{{ formattedTimer }}</span> -->
@@ -544,17 +547,7 @@ function copyText(txt: string) {
                 <p class="error-card-desc">{{ m.error }}</p>
                 <div class="error-card-actions">
                   <button class="error-retry-btn" @click="emit('retry')">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      width="12"
-                      height="12"
-                    >
-                      <polyline points="23 4 23 10 17 10"></polyline>
-                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                    </svg>
+                    <RotateCcw :size="12" />
                     <span>重试</span>
                   </button>
                 </div>
@@ -604,16 +597,7 @@ function copyText(txt: string) {
         title="滚动到最新消息"
         aria-label="滚动到底部"
       >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          width="16"
-          height="16"
-        >
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
+        <ChevronDown :size="16" />
       </button>
     </Transition>
   </div>

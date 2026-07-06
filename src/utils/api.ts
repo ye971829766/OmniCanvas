@@ -426,3 +426,57 @@ export async function stopAgent(sessionId: string): Promise<void> {
 export async function deleteAgentSession(sessionId: string): Promise<void> {
   await request.delete(`/agent/${sessionId}`);
 }
+
+// ==================== User & Auth APIs ====================
+
+export interface UserProfile {
+  id: string;
+  username: string;
+  nickname: string;
+  avatarUrl?: string;
+  role: "user" | "admin";
+  createdAt: string;
+}
+
+export interface AuthResponse {
+  user: UserProfile;
+  token: string;
+}
+
+export async function registerUser(data: {
+  username: string;
+  nickname?: string;
+  password: string;
+  avatarUrl?: string;
+}): Promise<AuthResponse> {
+  const res = await request.post<AuthResponse>("/auth/register", data);
+  return res.data;
+}
+
+export async function loginUser(data: {
+  username: string;
+  password: string;
+}): Promise<AuthResponse> {
+  const res = await request.post<AuthResponse>("/auth/login", data);
+  return res.data;
+}
+
+export async function loginWithGoogleApi(idToken: string): Promise<AuthResponse> {
+  const res = await request.post<AuthResponse>("/auth/google", { idToken });
+  return res.data;
+}
+
+export async function getCurrentUser(): Promise<UserProfile> {
+  const res = await request.get<UserProfile>("/auth/me");
+  return res.data;
+}
+
+export async function updateUserProfile(data: {
+  nickname?: string;
+  avatarUrl?: string;
+  oldPassword?: string;
+  newPassword?: string;
+}): Promise<UserProfile> {
+  const res = await request.put<UserProfile>("/users/profile", data);
+  return res.data;
+}

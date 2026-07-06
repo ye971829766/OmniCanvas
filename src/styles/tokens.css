@@ -166,6 +166,64 @@ video {
   border-radius: 8px !important;
 }
 
+/* --- Dialog & Input Adaptation for Dark Mode --- */
+.p-dialog {
+  background-color: var(--p-surface-0) !important;
+  color: var(--p-text-color) !important;
+  border: 1px solid var(--p-surface-200) !important;
+  box-shadow: var(--shadow-lg) !important;
+  border-radius: 16px !important;
+}
+
+.p-dialog-header {
+  background-color: var(--p-surface-0) !important;
+  color: var(--p-text-color) !important;
+  border-bottom: 1px solid var(--p-surface-100) !important;
+  padding: 1.25rem 1.5rem 0.75rem 1.5rem !important;
+  border-top-left-radius: 16px !important;
+  border-top-right-radius: 16px !important;
+}
+
+.p-dialog-title {
+  color: var(--p-text-color) !important;
+  font-weight: 700 !important;
+}
+
+.p-dialog-header-icon {
+  color: var(--p-text-muted-color) !important;
+  border-radius: 50% !important;
+}
+
+.p-dialog-header-icon:hover {
+  background-color: var(--p-surface-100) !important;
+  color: var(--p-text-color) !important;
+}
+
+.p-dialog-content {
+  background-color: var(--p-surface-0) !important;
+  color: var(--p-text-color) !important;
+  padding: 1rem 1.5rem 1.5rem 1.5rem !important;
+}
+
+.p-dialog-footer {
+  background-color: var(--p-surface-0) !important;
+  color: var(--p-text-color) !important;
+  border-top: 1px solid var(--p-surface-100) !important;
+  padding: 1rem 1.5rem !important;
+  border-bottom-left-radius: 16px !important;
+  border-bottom-right-radius: 16px !important;
+}
+
+.p-inputtext {
+  background-color: var(--p-surface-50) !important;
+  color: var(--p-text-color) !important;
+  border: 1px solid var(--p-surface-200) !important;
+}
+
+.p-inputtext:focus {
+  border-color: var(--p-primary-color) !important;
+}
+
 .p-popover-content {
   background-color: transparent !important;
   color: var(--p-text-color) !important;

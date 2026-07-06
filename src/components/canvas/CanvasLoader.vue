@@ -4,9 +4,7 @@
       <div class="loader-content">
         <!-- Minimalist macOS / Linear spinner -->
         <div class="loader-spinner">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" class="spin-icon">
-            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke-linecap="round"/>
-          </svg>
+          <Loader2 :size="22" class="spin-icon" />
         </div>
         <p class="loader-text">正在准备工作区…</p>
       </div>
@@ -15,6 +13,8 @@
 </template>
 
 <script setup lang="ts">
+import { Loader2 } from "lucide-vue-next";
+
 defineProps<{ loading: boolean }>();
 const emit = defineEmits<{ (e: 'hidden'): void }>();
 </script>

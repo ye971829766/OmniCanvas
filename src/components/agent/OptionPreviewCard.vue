@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { Download, Play } from "lucide-vue-next";
 
 const props = defineProps<{
   refId: string;
@@ -79,18 +80,7 @@ function downloadMedia(e: MouseEvent) {
         title="下载高清原图"
         aria-label="下载图片"
       >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          width="16"
-          height="16"
-        >
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
+        <Download :size="16" />
       </button>
 
       <div class="preview-overlay">
@@ -111,9 +101,7 @@ function downloadMedia(e: MouseEvent) {
         @click.stop="emit('zoom', refId)"
         aria-label="定位画布"
       >
-        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-          <path d="M8 5v14l11-7z" />
-        </svg>
+        <Play :size="16" fill="currentColor" />
       </button>
 
       <!-- Floating Download Button -->
@@ -123,18 +111,7 @@ function downloadMedia(e: MouseEvent) {
         title="下载视频"
         aria-label="下载视频"
       >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          width="16"
-          height="16"
-        >
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
+        <Download :size="16" />
       </button>
 
       <span class="video-badge">VIDEO</span>

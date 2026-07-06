@@ -142,22 +142,28 @@ export class ImageGen extends Box {
     this.updateVisuals();
   }
 
+  private _isUpdatingVisuals = false;
+
   public updateVisuals() {
-    // Clear all children first to prevent stale placeholder groups or duplicate elements
-    this.clear();
+    if (this._isUpdatingVisuals) return;
+    this._isUpdatingVisuals = true;
 
-    if (this.generationStatus === "success") {
-      // If image has generated, no placeholder is drawn
-      return;
-    }
+    try {
+      // Clear all children first to prevent stale placeholder groups or duplicate elements
+      this.clear();
 
-    // Create overlay placeholder group
-    const group = new Box({
-      width: this.width,
-      height: this.height,
-      hittable: true,
-      overflow:'hide'
-    });
+      if (this.generationStatus === "success") {
+        // If image has generated, no placeholder is drawn
+        return;
+      }
+
+      // Create overlay placeholder group
+      const group = new Box({
+        width: this.width,
+        height: this.height,
+        hittable: true,
+        overflow: "hide",
+      });
 
     const w = this.width ?? 400;
     const h = this.height ?? 300;
@@ -269,6 +275,9 @@ export class ImageGen extends Box {
     }
 
     this.add(group);
+    } finally {
+      this._isUpdatingVisuals = false;
+    }
   }
 
   public getLayoutPoints(type?: any, relative?: any): any[] {

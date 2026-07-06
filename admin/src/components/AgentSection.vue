@@ -1,42 +1,21 @@
 <template>
   <div style="display: flex; flex-direction: column; gap: 20px">
-    <el-card
-      style="
-        background-color: #141416;
-        border: 1px solid #27272a;
-        border-radius: 12px;
-      "
-    >
+    <el-card shadow="none" style="border-radius: 20px; background-color: #ffffff; border: 1px solid #e5e7eb">
       <template #header>
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          "
-        >
-          <span
-            style="
-              font-size: 14px;
-              font-weight: 600;
-              color: #fff;
-              display: flex;
-              align-items: center;
-              gap: 6px;
-            "
-          >
-            <el-icon style="color: #f97316"><Cpu /></el-icon>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <span style="font-size: 16px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px">
+            <el-icon style="color: #0f172a"><Cpu /></el-icon>
             Agent 核心参数配置
           </span>
-          <div>
+          <div style="display: flex; gap: 12px">
             <el-button
               type="info"
               plain
+              style="border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; color: #0f172a"
               @click="resetToDefaultPrompt"
               :disabled="saving || loading"
             >
-              <el-icon style="margin-right: 4px"><Refresh /></el-icon
-              >恢复默认提示词
+              <el-icon style="margin-right: 4px"><Refresh /></el-icon>恢复默认提示词
             </el-button>
             <el-button
               type="primary"

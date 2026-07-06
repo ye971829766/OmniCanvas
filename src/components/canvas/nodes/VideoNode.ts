@@ -268,7 +268,6 @@ export class VideoNode extends Box {
     if (appInstance?.tree) {
       appInstance.tree.on(MoveEvent.MOVE, updatePosition);
       appInstance.tree.on(ZoomEvent.ZOOM, updatePosition);
-      appInstance.tree.on(PropertyEvent.CHANGE, updatePosition);
     }
     this.on(PropertyEvent.CHANGE, updatePosition);
 
@@ -316,7 +315,6 @@ export class VideoNode extends Box {
       if (appInstance?.tree) {
         appInstance.tree.off(MoveEvent.MOVE, this._updatePosition);
         appInstance.tree.off(ZoomEvent.ZOOM, this._updatePosition);
-        appInstance.tree.off(PropertyEvent.CHANGE, this._updatePosition);
       }
       this.off(PropertyEvent.CHANGE, this._updatePosition);
       this._updatePosition = undefined;

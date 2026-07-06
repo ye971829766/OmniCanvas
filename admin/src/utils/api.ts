@@ -123,6 +123,24 @@ export async function testChannelConnection(id: string): Promise<{ success: bool
   return res.data;
 }
 
+export async function pingChannel(id: string): Promise<{ success: boolean; latency: number; error?: string }> {
+  return testChannelConnection(id);
+}
+
+export async function discoverChannelModels(idOrBaseUrl: string, apiKey?: string): Promise<string[]> {
+  if (apiKey) {
+    const res = await axios.post<{ success: boolean; models: string[]; error?: string }>(
+      `${API_BASE_URL}/channels/discover-models`,
+      { baseUrl: idOrBaseUrl, apiKey }
+    );
+    return res.data.models || [];
+  }
+  const res = await axios.get<{ success: boolean; models: string[]; error?: string }>(
+    `${API_BASE_URL}/channels/${idOrBaseUrl}/discover-models`
+  );
+  return res.data.models || [];
+}
+
 export async function getAllYunwuModels(type: ModelType): Promise<YunwuModelsResponse> {
   const res = await axios.get<YunwuModelsResponse>(
     `${API_BASE_URL}/models/${type}?scope=all`,
@@ -152,30 +170,6 @@ export async function uploadImage(file: File): Promise<{ url: string }> {
   return res.data;
 }
 
-export interface TaskResponse {
-  id: string;
-  status: "generating" | "success" | "error";
-  imageUrl?: string;
-  videoUrl?: string;
-  thumbnailUrl?: string;
-  error?: string;
-}
-
-export async function discoverChannelModels(id: string): Promise<{ success: boolean; models: string[]; error?: string }> {
-  const res = await axios.get<{ success: boolean; models: string[]; error?: string }>(
-    `${API_BASE_URL}/channels/${id}/discover-models`
-  );
-  return res.data;
-}
-
-export async function discoverModelsWithCredentials(baseUrl: string, apiKey: string): Promise<{ success: boolean; models: string[]; error?: string }> {
-  const res = await axios.post<{ success: boolean; models: string[]; error?: string }>(
-    `${API_BASE_URL}/channels/discover-models`,
-    { baseUrl, apiKey }
-  );
-  return res.data;
-}
-
 export async function testChat(payload: { model: string; messages: { role: string; content: string }[]; temperature?: number; maxTokens?: number }): Promise<any> {
   const res = await axios.post(`${API_BASE_URL}/chat`, payload);
   return res.data;
@@ -193,6 +187,72 @@ export async function testGenerateVideo(payload: { model: string; prompt: string
 
 export async function pollTaskStatus(taskId: string): Promise<TaskResponse> {
   const res = await axios.get<TaskResponse>(`${API_BASE_URL}/tasks/${taskId}`);
+  return res.data;
+}
+
+// --- Admin User Management APIs ---
+export interface AdminUser {
+  id: string;
+  username: string;
+  nickname?: string;
+  avatarUrl?: string;
+  role: "user" | "admin";
+  createdAt: string;
+}
+
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  const res = await axios.get<AdminUser[]>(`${API_BASE_URL}/admin/users`);
+  return res.data;
+}
+
+export async function createAdminUser(payload: {
+  username: string;
+  nickname?: string;
+  password: string;
+  role?: string;
+}): Promise<AdminUser> {
+  const res = await axios.post<AdminUser>(`${API_BASE_URL}/admin/users`, payload);
+  return res.data;
+}
+
+export async function updateAdminUser(
+  id: string,
+  payload: { nickname?: string; role?: string; password?: string }
+): Promise<AdminUser> {
+  const res = await axios.put<AdminUser>(`${API_BASE_URL}/admin/users/${id}`, payload);
+  return res.data;
+}
+
+export async function deleteAdminUser(id: string): Promise<void> {
+  await axios.delete(`${API_BASE_URL}/admin/users/${id}`);
+}
+
+// --- Admin Token Statistics APIs ---
+export interface UserTokenStat {
+  userId: string;
+  username: string;
+  nickname: string;
+  avatarUrl?: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  requestCount: number;
+  lastUsedAt?: string;
+}
+
+export interface SystemTokenStats {
+  total: {
+    totalTokens: number;
+    promptTokens: number;
+    completionTokens: number;
+    totalRequests: number;
+    activeUsersCount: number;
+  };
+  users: UserTokenStat[];
+}
+
+export async function getTokenStats(): Promise<SystemTokenStats> {
+  const res = await axios.get<SystemTokenStats>(`${API_BASE_URL}/admin/token-stats`);
   return res.data;
 }
 

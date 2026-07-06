@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # Backend NestJS & Agent Engine
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: omnicanvas-backend
+    restart: always
+    environment:
+      - PORT=3000
+      - UPLOAD_DIR=/app/files
+    volumes:
+      - ./server/files:/app/files
+      - ./server/data:/app/data
+      - ./server/.env:/app/.env
+    ports:
+      - "3000:3000"
+
+  # Web Server (Nginx Proxy for Frontend App & Admin)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omnicanvas-web
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

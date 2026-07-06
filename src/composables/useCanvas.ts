@@ -391,6 +391,12 @@ export function useCanvas(
   let resizeObserver: ResizeObserver | null = null;
   let watchedElements: any[] = [];
   const onPropertyChange = (e: any) => {
+    const app = canvasApp.value;
+    // Skip recording history during continuous dragging (DragEvent.END handles history)
+    if (app?.editor && (app.editor as any).dragging) {
+      return;
+    }
+
     const trackedProperties = [
       "x",
       "y",
@@ -607,14 +613,10 @@ export function useCanvas(
       y: 28,
     });
 
-    // Dynamic guide line color per theme mode (neutral monochrome)
-    const { isDark } = useTheme();
-    const getSnapLineColor = (dark: boolean) => (dark ? "#ffffff" : "#18181b");
-
     // Initialize smart snapping using leafer-x-snap
     const snap = new Snap(app as any, {
       snapSize: 6,
-      lineColor: getSnapLineColor(isDark.value),
+      lineColor: "#3d8bd6",
       strokeWidth: 1.5,
       dashPattern: [4, 4],
       isDash: true,
@@ -642,16 +644,6 @@ export function useCanvas(
       },
     });
     snap.enable(true);
-
-    watch(
-      isDark,
-      (dark) => {
-        if (snap) {
-          snap.lineColor = getSnapLineColor(dark);
-        }
-      },
-      { immediate: true },
-    );
 
     // Observe container resize to update Leafer App dimensions
     resizeObserver = new ResizeObserver((entries) => {
@@ -756,6 +748,7 @@ export function useCanvas(
 
     // Restore saved elements or add initial ImageGen element
     await loadCanvasState();
+    loading.value = false;
 
     // Zoom to fit all elements on initialization
     setTimeout(() => {
@@ -969,33 +962,35 @@ export function useCanvas(
         async (newId, oldId) => {
           if (newId && newId !== oldId && app.tree) {
             loading.value = true;
-            if (oldId) {
-              await saveCanvasState(oldId);
-            }
-            await loadCanvasState(newId);
-
-            // Resume frame and task start/polling listeners for the newly loaded nodes
-            if (app.tree.children) {
-              app.tree.children.forEach((child: any) => {
-                initNodeListeners(child);
-              });
-            }
-
-            // Auto-zoom to fit elements
-            setTimeout(() => {
-              try {
-                if (app.tree.children && app.tree.children.length > 0) {
-                  app.tree.zoom?.("fit", 80, undefined, 0);
-                }
-                loading.value = false;
-              } catch (err) {
-                console.warn(
-                  "Failed to zoom to fit after workspace change:",
-                  err,
-                );
-                loading.value = false;
+            try {
+              if (oldId) {
+                await saveCanvasState(oldId);
               }
-            }, 150);
+              await loadCanvasState(newId);
+
+              // Resume frame and task start/polling listeners for the newly loaded nodes
+              if (app.tree.children) {
+                app.tree.children.forEach((child: any) => {
+                  initNodeListeners(child);
+                });
+              }
+
+              // Auto-zoom to fit elements
+              setTimeout(() => {
+                try {
+                  if (app.tree.children && app.tree.children.length > 0) {
+                    app.tree.zoom?.("fit", 80, undefined, 0);
+                  }
+                } catch (err) {
+                  console.warn(
+                    "Failed to zoom to fit after workspace change:",
+                    err,
+                  );
+                }
+              }, 150);
+            } finally {
+              loading.value = false;
+            }
           }
         },
         {

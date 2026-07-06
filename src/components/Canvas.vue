@@ -129,6 +129,9 @@
         <img
           :src="logoImg"
           alt="OmniCanvas"
+          width="28"
+          height="28"
+          style="width: 28px; height: 28px; object-fit: cover;"
           class="w-28px h-28px rounded-full object-cover"
         />
       </button>

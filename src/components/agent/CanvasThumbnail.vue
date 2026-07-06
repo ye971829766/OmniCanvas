@@ -2,11 +2,7 @@
   <div class="canvas-thumb" :class="{ 'has-image': thumbUrl }" @click="emit('click')">
     <img v-if="thumbUrl" :src="thumbUrl" class="thumb-img" alt="Canvas preview" />
     <div v-else class="thumb-placeholder">
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
-           width="16" height="16" class="thumb-icon">
-        <rect x="2" y="2" width="16" height="16" rx="2"/>
-        <path d="M2 13 L7 8 L11 12 L14 9 L18 13"/>
-      </svg>
+      <Image :size="16" class="thumb-icon" />
     </div>
     <!-- Refresh indicator -->
     <div v-if="refreshing" class="thumb-refresh-ring" />
@@ -16,6 +12,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import type { App as LeaferApp } from 'leafer-ui';
+import { Image } from 'lucide-vue-next';
 
 const props = defineProps<{
   leaferApp: LeaferApp | null;

@@ -1,140 +1,182 @@
 <template>
   <el-container
     class="admin-dashboard-layout"
-    style="height: 100vh; width: 100vw; background-color: #09090b"
+    style="height: 100vh; width: 100vw; background-color: #f1f3f5"
   >
     <!-- Sidebar Navigation -->
     <el-aside
-      width="240px"
+      width="220px"
       style="
-        background-color: #141416;
-        border-right: 1px solid #27272a;
+        width: 220px !important;
+        min-width: 220px !important;
+        max-width: 220px !important;
+        flex-shrink: 0 !important;
+        background-color: #f1f3f5;
         display: flex;
         flex-direction: column;
+        padding: 20px 14px;
+        box-sizing: border-box;
       "
     >
+      <!-- Brand Logo Header -->
       <div
         class="sidebar-header"
-        style="padding: 24px 20px; border-bottom: 1px solid #27272a"
+        style="
+          margin-bottom: 20px;
+          padding: 0 6px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          white-space: nowrap;
+          cursor: pointer;
+        "
+        @click="router.push('/dashboard')"
       >
+        <div
+          style="
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            background-color: #0f172a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            box-shadow: 0 3px 8px rgba(15, 23, 42, 0.2);
+            flex-shrink: 0;
+          "
+        >
+          <el-icon :size="16"><Cpu /></el-icon>
+        </div>
         <span
           class="logo-text"
           style="
-            font-size: 18px;
-            font-weight: 700;
-            color: #fff;
-            letter-spacing: 0.5px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            font-size: 17px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.3px;
+            white-space: nowrap;
           "
         >
-          <el-icon style="color: #f97316"><Cpu /></el-icon> Viboard Admin
+          OmniAdmin
         </span>
       </div>
-      <el-menu
-        :default-active="activeTab"
-        style="
-          border-right: none;
-          background: transparent;
-          flex: 1;
-          padding: 16px 8px;
-        "
-        text-color="#a1a1aa"
-        active-text-color="#f97316"
-        @select="(key: string) => (activeTab = key as any)"
-      >
-        <el-menu-item
-          index="dashboard"
-          style="border-radius: 8px; margin-bottom: 4px; height: 48px"
+
+      <!-- Navigation Menu -->
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 100%">
+        <div
+          v-for="item in navItems"
+          :key="item.key"
+          @click="navigateTo(item.key)"
+          :style="getItemStyle(item.key)"
+          style="
+            height: 42px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+            box-sizing: border-box;
+            width: 100%;
+          "
         >
-          <el-icon><Odometer /></el-icon>
-          <span>系统概览</span>
-        </el-menu-item>
-        <el-menu-item
-          index="channels"
-          style="border-radius: 8px; margin-bottom: 4px; height: 48px"
-        >
-          <el-icon><Connection /></el-icon>
-          <span>上游渠道管理</span>
-        </el-menu-item>
-        <el-menu-item
-          index="models"
-          style="border-radius: 8px; margin-bottom: 4px; height: 48px"
-        >
-          <el-icon><Files /></el-icon>
-          <span>模型目录</span>
-        </el-menu-item>
-        <el-menu-item
-          index="agent"
-          style="border-radius: 8px; margin-bottom: 4px; height: 48px"
-        >
-          <el-icon><Cpu /></el-icon>
-          <span>Agent配置</span>
-        </el-menu-item>
-        <el-menu-item
-          index="diagnostics"
-          style="border-radius: 8px; height: 48px"
-        >
-          <el-icon><ChatLineRound /></el-icon>
-          <span>路由与接口测试</span>
-        </el-menu-item>
-      </el-menu>
+          <div style="display: flex; align-items: center; gap: 10px; white-space: nowrap">
+            <el-icon
+              :size="18"
+              :style="{
+                color: isCurrentRoute(item.key) ? '#0f172a' : '#64748b',
+                flexShrink: 0,
+              }"
+            >
+              <component :is="item.icon" />
+            </el-icon>
+            <span
+              :style="{
+                fontSize: '13.5px',
+                fontWeight: isCurrentRoute(item.key) ? '700' : '500',
+                color: isCurrentRoute(item.key) ? '#0f172a' : '#475569',
+                whiteSpace: 'nowrap',
+              }"
+            >
+              {{ item.label }}
+            </span>
+          </div>
+          <span
+            v-if="item.badge"
+            :style="{
+              fontSize: '11px',
+              fontWeight: '700',
+              padding: '2px 7px',
+              borderRadius: '8px',
+              backgroundColor: item.badgeBg || '#ffedd5',
+              color: item.badgeColor || '#c2410c',
+              whiteSpace: 'nowrap',
+            }"
+          >
+            {{ item.badge }}
+          </span>
+        </div>
+      </div>
     </el-aside>
 
+    <!-- Content Workspace -->
     <el-container
       style="display: flex; flex-direction: column; overflow: hidden"
     >
       <!-- Page Header -->
       <el-header
         style="
-          height: 72px;
+          height: 80px;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          border-bottom: 1px solid #27272a;
           padding: 0 40px;
-          background-color: #141416;
+          background-color: #f1f3f5;
           flex-shrink: 0;
         "
       >
         <div>
-          <h1 style="margin: 0; font-size: 18px; font-weight: 700; color: #fff">
-            {{
-              activeTab === "dashboard"
-                ? "系统概览"
-                : activeTab === "channels"
-                  ? "上游渠道管理"
-                  : activeTab === "models"
-                    ? "模型目录"
-                    : activeTab === "agent"
-                      ? "Agent配置"
-                      : "路由与接口测试"
-            }}
+          <h1
+            style="
+              margin: 0;
+              font-size: 26px;
+              font-weight: 800;
+              color: #0f172a;
+              letter-spacing: -0.5px;
+            "
+          >
+            {{ route.meta.title || "系统概览" }}
           </h1>
-          <p style="margin: 4px 0 0 0; font-size: 12px; color: #a1a1aa">
-            {{
-              activeTab === "dashboard"
-                ? "企业级网关运行指标、信道延迟及配置统计"
-                : activeTab === "channels"
-                  ? "维护可用的上游渠道、密钥和路由优先级"
-                  : activeTab === "models"
-                    ? "维护前端显示名、上游渠道、上游模型名及图标的映射表"
-                    : activeTab === "agent"
-                      ? "配置Agent画布操作的系统提示词（SYSTEM_PROMPT）与调用的核心对话/工具调用模型"
-                      : "测试模型映射关系并实时诊断接口延迟与底座返回负载"
-            }}
+          <p
+            style="
+              margin: 4px 0 0 0;
+              font-size: 13px;
+              color: #64748b;
+              font-weight: 500;
+            "
+          >
+            {{ route.meta.description || "企业级网关运行指标、信道延迟及配置统计" }}
           </p>
         </div>
+
         <div>
           <el-button
-            v-if="activeTab === 'channels'"
+            v-if="currentKey === 'channels'"
             type="primary"
             @click="openChannelModal"
           >
             <el-icon style="margin-right: 4px"><Plus /></el-icon>添加上游渠道
           </el-button>
-          <template v-else-if="activeTab === 'models'">
+          <el-button
+            v-else-if="currentKey === 'users'"
+            type="primary"
+            @click="openUserModal"
+          >
+            <el-icon style="margin-right: 4px"><Plus /></el-icon>新增用户
+          </el-button>
+          <template v-else-if="currentKey === 'models'">
             <el-button
               v-if="modelsSubTab === 'mappings'"
               type="primary"
@@ -158,9 +200,15 @@
             </el-button>
           </template>
           <el-button
-            v-else-if="activeTab === 'dashboard'"
+            v-else-if="currentKey === 'dashboard'"
             type="info"
             plain
+            style="
+              background-color: #ffffff;
+              border: 1px solid #e2e8f0;
+              color: #0f172a;
+              border-radius: 12px;
+            "
             @click="refreshAllData"
           >
             <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新数据
@@ -171,66 +219,52 @@
       <!-- Main Contents -->
       <el-main
         style="
-          padding: 30px 40px;
+          padding: 10px 40px 30px 40px;
           overflow: auto;
-          background-color: #09090b;
+          background-color: #f1f3f5;
           display: flex;
           flex-direction: column;
           gap: 20px;
         "
       >
-        <DashboardSection
-          v-if="activeTab === 'dashboard'"
-          :channels="channels"
-          :mappings="mappings"
-          :imageConfigs="imageConfigs"
-          :videoConfigs="videoConfigs"
-          :ping-results="pingResults"
-        />
-
-        <ChannelsSection
-          v-else-if="activeTab === 'channels'"
-          ref="channelsRef"
-          :channels="channels"
-          :loading="loading"
-          :ping-results="pingResults"
-          @refresh-channels="loadChannels"
-          @update-ping-result="handleUpdatePingResult"
-        />
-
-        <ModelsSection
-          v-else-if="activeTab === 'models'"
-          ref="modelsRef"
-          v-model:modelsSubTab="modelsSubTab"
-          :mappings="mappings"
-          :image-configs="imageConfigs"
-          :video-configs="videoConfigs"
-          :channels="channels"
-          :dictionaries="dictionaries"
-          :mappings-loading="mappingsLoading"
-          @refresh-mappings="loadMappings"
-        />
-
-        <AgentSection
-          v-else-if="activeTab === 'agent'"
-          :mappings="mappings"
-          @refresh-mappings="loadMappings"
-        />
-
-        <DiagnosticsSection
-          v-else-if="activeTab === 'diagnostics'"
-          :channels="channels"
-          :mappings="mappings"
-        />
+        <router-view v-slot="{ Component }">
+          <component
+            :is="Component"
+            ref="activeComponentRef"
+            v-model:modelsSubTab="modelsSubTab"
+            :channels="channels"
+            :mappings="mappings"
+            :image-configs="imageConfigs"
+            :video-configs="videoConfigs"
+            :ping-results="pingResults"
+            :loading="loading"
+            :mappings-loading="mappingsLoading"
+            :dictionaries="dictionaries"
+            @refresh-channels="loadChannels"
+            @refresh-mappings="loadMappings"
+            @update-ping-result="handleUpdatePingResult"
+          />
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { Cpu, Odometer, Connection, Files, ChatLineRound, Plus, Refresh } from "@element-plus/icons-vue";
+import {
+  Cpu,
+  Odometer,
+  Connection,
+  Files,
+  ChatLineRound,
+  Plus,
+  Refresh,
+  User,
+  DataAnalysis,
+} from "@element-plus/icons-vue";
 import {
   getChannels,
   getModelConfig,
@@ -240,14 +274,51 @@ import {
   type VideoConfig,
 } from "./utils/api";
 
-import DashboardSection from "./components/DashboardSection.vue";
-import ChannelsSection from "./components/ChannelsSection.vue";
-import ModelsSection from "./components/ModelsSection.vue";
-import DiagnosticsSection from "./components/DiagnosticsSection.vue";
-import AgentSection from "./components/AgentSection.vue";
+const route = useRoute();
+const router = useRouter();
 
-const activeTab = ref<"dashboard" | "channels" | "models" | "agent" | "diagnostics">("dashboard");
-const modelsSubTab = ref<"mappings" | "templates" | "videoTemplates" | "dictionaries">("mappings");
+const currentKey = computed(() => (route.meta?.key as string) || "dashboard");
+
+const modelsSubTab = computed<"mappings" | "templates" | "videoTemplates" | "dictionaries">({
+  get() {
+    return (route.query.tab as any) || "mappings";
+  },
+  set(val) {
+    router.replace({ query: { ...route.query, tab: val } });
+  },
+});
+
+const navItems = [
+  { key: "dashboard", label: "系统概览", icon: Odometer },
+  { key: "channels", label: "上游渠道", icon: Connection },
+  { key: "models", label: "模型目录", icon: Files },
+  { key: "users", label: "用户管理", icon: User },
+  { key: "tokens", label: "Token 统计", icon: DataAnalysis, badge: "Live", badgeBg: "#dcfce7", badgeColor: "#15803d" },
+  { key: "agent", label: "Agent 配置", icon: Cpu },
+  { key: "diagnostics", label: "接口测试", icon: ChatLineRound },
+];
+
+function isCurrentRoute(key: string): boolean {
+  return currentKey.value === key || route.path.startsWith(`/${key}`);
+}
+
+function navigateTo(key: string) {
+  router.push(`/${key}`);
+}
+
+function getItemStyle(key: string) {
+  if (isCurrentRoute(key)) {
+    return {
+      backgroundColor: "#ffffff",
+      borderRadius: "14px",
+      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)",
+    };
+  }
+  return {
+    backgroundColor: "transparent",
+    borderRadius: "14px",
+  };
+}
 
 const channels = ref<Channel[]>([]);
 const mappings = ref<ModelMapping[]>([]);
@@ -271,37 +342,39 @@ const pingResults = ref<
   Record<string, { success: boolean; latency?: number; error?: string }>
 >({});
 
-// Component template references
-const channelsRef = ref<InstanceType<typeof ChannelsSection> | null>(null);
-const modelsRef = ref<InstanceType<typeof ModelsSection> | null>(null);
+// Component template reference for current active route
+const activeComponentRef = ref<any>(null);
+
+function openUserModal() {
+  activeComponentRef.value?.openCreateModal?.();
+}
 
 function handleUpdatePingResult(payload: { id: string; result: any }) {
   pingResults.value[payload.id] = payload.result;
 }
 
 function openChannelModal() {
-  channelsRef.value?.openChannelModal();
+  activeComponentRef.value?.openModal?.();
 }
 
 function openMappingModal() {
-  modelsRef.value?.openMappingModal();
+  activeComponentRef.value?.openMappingModal?.();
 }
 
 function openTemplateModal() {
-  modelsRef.value?.openTemplateModal();
+  activeComponentRef.value?.openTemplateModal?.();
 }
 
 function openVideoTemplateModal() {
-  modelsRef.value?.openVideoTemplateModal();
+  activeComponentRef.value?.openVideoTemplateModal?.();
 }
 
 async function loadChannels() {
   loading.value = true;
   try {
     channels.value = await getChannels();
-  } catch (err) {
-    console.error(err);
-    ElMessage.error("加载渠道列表失败");
+  } catch (e) {
+    ElMessage.error("获取上游渠道列表失败");
   } finally {
     loading.value = false;
   }
@@ -310,87 +383,32 @@ async function loadChannels() {
 async function loadMappings() {
   mappingsLoading.value = true;
   try {
-    const cfg = await getModelConfig();
-    mappings.value = (cfg.mappings || []) as ModelMapping[];
-    imageConfigs.value = (cfg.imageConfigs || []) as ImageConfig[];
-    videoConfigs.value = (cfg.videoConfigs || []) as VideoConfig[];
-    if (cfg.dictionaries) {
+    const data = await getModelConfig();
+    mappings.value = data.mappings || [];
+    imageConfigs.value = data.imageConfigs || [];
+    videoConfigs.value = data.videoConfigs || [];
+    if (data.dictionaries) {
       dictionaries.value = {
-        sizes: cfg.dictionaries.sizes || [],
-        aspectRatios: cfg.dictionaries.aspectRatios || [],
-        qualities: cfg.dictionaries.qualities || [],
-        videoSizes: cfg.dictionaries.videoSizes || [],
+        sizes: data.dictionaries.sizes || [],
+        aspectRatios: data.dictionaries.aspectRatios || [],
+        qualities: data.dictionaries.qualities || [],
+        videoSizes: data.dictionaries.videoSizes || [],
       };
     }
-  } catch (err) {
-    console.error(err);
-    ElMessage.error("加载模型目录失败");
+  } catch (e) {
+    ElMessage.error("获取模型配置失败");
   } finally {
     mappingsLoading.value = false;
   }
 }
 
 async function refreshAllData() {
-  await loadChannels();
-  await loadMappings();
+  await Promise.all([loadChannels(), loadMappings()]);
   ElMessage.success("数据已刷新");
 }
 
 onMounted(() => {
-  void loadChannels();
-  void loadMappings();
+  loadChannels();
+  loadMappings();
 });
 </script>
-
-<style scoped lang="scss">
-.admin-dashboard-layout {
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
-
-  :deep(.el-table) {
-    --el-table-bg-color: #141416;
-    --el-table-tr-bg-color: #141416;
-    --el-table-header-bg-color: #1a1a1e;
-    --el-table-border-color: #27272a;
-    --el-table-header-text-color: #a1a1aa;
-    --el-table-text-color: #e4e4e7;
-    background-color: #141416;
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
-  :deep(.el-table__row:hover > td) {
-    background-color: #1d1d22 !important;
-  }
-
-  :deep(.el-dialog) {
-    --el-dialog-bg-color: #141416;
-    --el-dialog-title-font-size: 16px;
-    --el-dialog-title-text-color: #fff;
-    --el-dialog-content-font-size: 14px;
-    border: 1px solid #27272a;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-  }
-
-  :deep(.el-form-item__label) {
-    color: #a1a1aa !important;
-    font-size: 12px !important;
-    font-weight: 600 !important;
-    padding-bottom: 4px !important;
-  }
-
-  :deep(.el-input__inner),
-  :deep(.el-textarea__inner) {
-    font-family: inherit;
-  }
-
-  :deep(.el-input-number .el-input__inner) {
-    text-align: left;
-  }
-}
-</style>
