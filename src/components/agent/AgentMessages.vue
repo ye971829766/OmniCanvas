@@ -378,21 +378,21 @@ function parseUserText(text: string) {
                 class="agent-avatar"
                 :src="OmniCanvasAvatar"
                 alt="OmniCanvas"
-                width="28"
-                height="28"
-                style="width: 28px; height: 28px; object-fit: cover"
+                width="20"
+                height="20"
+                style="width: 20px; height: 20px; object-fit: cover"
               />
             </div>
-            <div class="flex-1 min-w-0">
-              <!-- Inline thinking indicator right next to avatar when AI is actively thinking       -->
+            <div class="flex-1 min-w-0 items-center">
+              <!--    Inline thinking indicator right next to avatar when AI is actively thinking       -->
               <div
                 class="inline-thinking-header"
+                role="status"
+                aria-live="polite"
                 v-if="
                   m.streaming &&
                   (!m.text || !m.text.trim() || m.tools?.some((t) => !t.done))
                 "
-                role="status"
-                aria-live="polite"
                 aria-label="AI 正在思考"
               >
                 <span class="thinking-label">思考中</span>
@@ -1296,24 +1296,6 @@ function parseUserText(text: string) {
   -webkit-background-clip: text;
   background-clip: text;
   animation: thinking-text-sheen 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-.thinking-label::after {
-  content: "";
-  position: absolute;
-  left: 1px;
-  right: 1px;
-  bottom: -5px;
-  height: 1px;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--thinking-faint),
-    transparent
-  );
-  opacity: 0.7;
-  animation: thinking-line-breathe 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 @keyframes thinking-text-sheen {
