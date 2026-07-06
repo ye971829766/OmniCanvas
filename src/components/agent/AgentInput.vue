@@ -326,8 +326,6 @@ function clearInput() {
   emit("update:modelValue", "");
 }
 
-
-
 function triggerFileInput() {
   fileInputRef.value?.click();
 }
@@ -417,7 +415,7 @@ function handleSubmit() {
 <template>
   <div
     class="agent-input-wrap"
-    :class="{ 'is-focused': isFocused, 'is-dragging': isDragging }"
+    :class="{ 'is-dragging': isDragging }"
     @dragover.prevent="isDragging = true"
     @dragleave.prevent="isDragging = false"
     @drop.prevent="handleDrop"
@@ -572,7 +570,6 @@ function handleSubmit() {
         >
           <BookOpen :size="14" />
         </button>
-
       </div>
 
       <div class="toolbar-right">
@@ -623,8 +620,8 @@ function handleSubmit() {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   transition:
     border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow   0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    transform    0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Focus: lift + glow ring */
@@ -801,8 +798,8 @@ function handleSubmit() {
   background: var(--accent-primary);
   transition:
     background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    transform       0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow      0.2s ease;
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.2s ease;
   box-shadow: 0 2px 8px rgba(24, 24, 27, 0.25);
   overflow: hidden;
 }
@@ -823,10 +820,22 @@ function handleSubmit() {
 }
 
 @keyframes arrow-fly {
-  0%   { transform: translateY(0);    opacity: 1; }
-  60%  { transform: translateY(-6px); opacity: 0; }
-  61%  { transform: translateY(6px);  opacity: 0; }
-  100% { transform: translateY(0);    opacity: 1; }
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  61% {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .toolbar-send-btn:disabled {

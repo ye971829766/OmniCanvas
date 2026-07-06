@@ -248,10 +248,7 @@ export class AgentService {
 
     let userContent: string | any[] = userInput;
     if (screenshot || (images && images.length > 0)) {
-      const promptText = userInput.trim()
-        ? `${userInput} [系统提示：用户已在聊天消息中上传了图片附件，请直接识别分析该图片内容]`
-        : "请分析我上传的图片内容。";
-      const parts: any[] = [{ type: "text", text: promptText }];
+      const parts: any[] = [{ type: "text", text: userInput }];
       if (screenshot) {
         const uploadedUrl = await this.ai.uploadImageToHost(screenshot);
         parts.push({

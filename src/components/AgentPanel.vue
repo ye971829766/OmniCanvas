@@ -264,7 +264,6 @@ function useSuggestion(s: string) {
   display: flex;
   flex-direction: column;
   background: var(--surface-panel);
-  box-shadow: 0 -8px 16px -4px var(--border-subtle);
   z-index: 50;
 }
 

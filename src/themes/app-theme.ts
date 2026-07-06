@@ -137,36 +137,12 @@ export const NoirPreset = definePreset(Aura, {
             color: "{surface.900}",
             borderColor: "{surface.200}",
           },
-          header: {
-            background: "{surface.0}",
-            color: "{surface.900}",
-          },
-          content: {
-            background: "{surface.0}",
-            color: "{surface.900}",
-          },
-          footer: {
-            background: "{surface.0}",
-            color: "{surface.900}",
-          },
         },
         dark: {
           root: {
             background: "{surface.0}",
             color: "{surface.900}",
             borderColor: "{surface.200}",
-          },
-          header: {
-            background: "{surface.0}",
-            color: "{surface.900}",
-          },
-          content: {
-            background: "{surface.0}",
-            color: "{surface.900}",
-          },
-          footer: {
-            background: "{surface.0}",
-            color: "{surface.900}",
           },
         },
       },
