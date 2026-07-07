@@ -1,4 +1,12 @@
-import { ref, shallowRef, watch, onMounted, onUnmounted, type Ref } from "vue";
+import {
+  ref,
+  shallowRef,
+  watch,
+  onMounted,
+  onUnmounted,
+  toRaw,
+  type Ref,
+} from "vue";
 import { useTheme } from "@/composables/useTheme";
 import {
   App,
@@ -8,6 +16,9 @@ import {
   Cursor,
   Image,
   Debug,
+  Rect,
+  Text,
+  Box,
 } from "leafer-ui";
 
 // Suppress EventCreator repeat warnings from plugins
@@ -567,7 +578,7 @@ export function useCanvas(
       editor: {
         editBoxType: "box",
         hideOnMove: false,
-        stroke: "#3d8bd6",
+        stroke: "#007aff",
         circle: {
           width: 14,
           height: 14,
@@ -616,7 +627,7 @@ export function useCanvas(
     // Initialize smart snapping using leafer-x-snap
     const snap = new Snap(app as any, {
       snapSize: 6,
-      lineColor: "#3d8bd6",
+      lineColor: "#007aff",
       strokeWidth: 1.5,
       dashPattern: [4, 4],
       isDash: true,
@@ -746,6 +757,215 @@ export function useCanvas(
       node._pollingInterval = pollInterval;
     };
 
+    const resumeImageTaskPolling = (node: any) => {
+      const rawNode = toRaw(node);
+      const taskId = rawNode.taskId;
+      if (!taskId) return;
+
+      // Prevent duplicate polling of the same task ID on the same node
+      if (rawNode._pollingTaskId === taskId) return;
+      rawNode._pollingTaskId = taskId;
+
+      const parent = rawNode.parent;
+      if (!parent) {
+        delete rawNode._pollingTaskId;
+        return;
+      }
+
+      const rawParent = toRaw(parent);
+
+      if (rawNode._pollingInterval) {
+        clearInterval(rawNode._pollingInterval);
+      }
+
+      // 1. Create loading overlay Box in parent
+      const w = rawNode.width || 200;
+      const h = rawNode.height || 200;
+
+      const loadingGroup = new Box({
+        x: rawNode.x,
+        y: rawNode.y,
+        width: w,
+        height: h,
+        scaleX: rawNode.scaleX,
+        scaleY: rawNode.scaleY,
+        rotation: rawNode.rotation,
+        overflow: "hide",
+        hittest: false, // Completely click-through so user can drag/move image underneath
+      });
+
+      const mask = new Rect({
+        width: w,
+        height: h,
+        fill: "rgba(255, 255, 255, 0.75)",
+        cornerRadius: rawNode.cornerRadius || 0,
+      });
+
+      const loadingRect = new Rect({
+        x: -w,
+        width: w,
+        height: h,
+        fill: {
+          type: "linear",
+          from: { type: "percent", x: 0, y: 0.5 },
+          to: { type: "percent", x: 1, y: 0.5 },
+          stops: [
+            "rgba(255,255,255,0)",
+            "rgba(255,255,255,0.6)",
+            "rgba(255,255,255,0)",
+          ],
+        },
+      });
+
+      const text =
+        rawNode.generationType === "removeBg"
+          ? "正在去除背景..."
+          : rawNode.generationType === "inpaint"
+            ? "正在进行图像擦除..."
+            : "正在进行 HD 放大...";
+      const loadingText = new Text({
+        x: w / 2,
+        y: h / 2,
+        text,
+        fontSize: Math.max(12, Math.min(16, w / 15)),
+        fontWeight: "bold",
+        fill: "#00000080",
+        textAlign: "center",
+        verticalAlign: "middle",
+      });
+
+      loadingGroup.add(mask);
+      loadingGroup.add(loadingRect);
+      loadingGroup.add(loadingText);
+
+      // Add to parent right above the image to maintain z-index order
+      const index = rawParent.children.indexOf(rawNode);
+      if (index !== -1) {
+        rawParent.addAt(loadingGroup, index + 1);
+      } else {
+        rawParent.add(loadingGroup);
+      }
+      rawNode._loadingGroup = loadingGroup;
+
+      loadingRect.animate(
+        {
+          x: w,
+        },
+        {
+          duration: 1.2,
+          loop: true,
+        },
+      );
+
+      // 2. Synchronize coordinates and dimensions if image moves/rotates/scales/resizes
+      const syncPosition = () => {
+        if (!loadingGroup || !rawNode || !rawNode.parent) return;
+        const newW = rawNode.width || 200;
+        const newH = rawNode.height || 200;
+
+        loadingGroup.set({
+          x: rawNode.x,
+          y: rawNode.y,
+          width: newW,
+          height: newH,
+          scaleX: rawNode.scaleX,
+          scaleY: rawNode.scaleY,
+          rotation: rawNode.rotation,
+        });
+
+        mask.set({
+          width: newW,
+          height: newH,
+          cornerRadius: rawNode.cornerRadius || 0,
+        });
+
+        loadingRect.set({
+          width: newW,
+          height: newH,
+        });
+
+        loadingText.set({
+          x: newW / 2,
+          y: newH / 2,
+          fontSize: Math.max(12, Math.min(16, newW / 15)),
+        });
+      };
+
+      rawNode.on(PropertyEvent.CHANGE, syncPosition);
+
+      // 3. Start Polling
+      const pollInterval = setInterval(async () => {
+        if (!rawNode.parent) {
+          clearInterval(pollInterval);
+          delete rawNode._pollingInterval;
+          delete rawNode._pollingTaskId;
+          rawNode.off(PropertyEvent.CHANGE, syncPosition);
+          return;
+        }
+
+        try {
+          const res = await getTaskStatus(taskId);
+          if (res.status === "success" && res.imageUrl) {
+            clearInterval(pollInterval);
+            delete rawNode._pollingInterval;
+            rawNode.off(PropertyEvent.CHANGE, syncPosition);
+
+            // Remove loading overlay
+            if (rawNode._loadingGroup) {
+              try {
+                rawNode._loadingGroup.remove();
+              } catch (_) {}
+              delete rawNode._loadingGroup;
+            }
+
+            // Clean up properties
+            delete rawNode.generationStatus;
+            delete rawNode.taskId;
+            delete rawNode.generationType;
+            delete rawNode._pollingTaskId;
+
+            // Update URL
+            rawNode.url = res.imageUrl;
+
+            // Save history
+            recordHistoryDebounced();
+          } else if (res.status === "error") {
+            clearInterval(pollInterval);
+            delete rawNode._pollingInterval;
+            rawNode.off(PropertyEvent.CHANGE, syncPosition);
+
+            // Remove loading overlay
+            if (rawNode._loadingGroup) {
+              try {
+                rawNode._loadingGroup.remove();
+              } catch (_) {}
+              delete rawNode._loadingGroup;
+            }
+
+            // Clean up properties
+            delete rawNode.generationStatus;
+            delete rawNode.taskId;
+            delete rawNode.generationType;
+            delete rawNode._pollingTaskId;
+
+            window.dispatchEvent(
+              new CustomEvent("canvas:toast", {
+                detail: {
+                  severity: "error",
+                  summary: "处理失败",
+                  detail: res.error || "任务处理失败，请重试",
+                },
+              }),
+            );
+          }
+        } catch (err: any) {
+          console.error(`Polling failed for image task ${taskId}:`, err);
+        }
+      }, 2000);
+
+      rawNode._pollingInterval = pollInterval;
+    };
+
     // Restore saved elements or add initial ImageGen element
     await loadCanvasState();
     loading.value = false;
@@ -871,6 +1091,12 @@ export function useCanvas(
       });
     };
 
+    const attachImageTaskStartListener = (node: any) => {
+      node.on("task-start", () => {
+        resumeImageTaskPolling(node);
+      });
+    };
+
     const attachContainerChildAddListener = (container: any) => {
       if (!container || container._hasChildAddListener) return;
       container._hasChildAddListener = true;
@@ -907,6 +1133,13 @@ export function useCanvas(
         attachVideoTaskStartListener(node);
         if (node.generationStatus === "generating" && node.taskId) {
           resumeVideoNodePolling(node);
+        }
+      }
+
+      if (node.tag === "Image" || node.__tag === "Image") {
+        attachImageTaskStartListener(node);
+        if (node.generationStatus === "generating" && node.taskId) {
+          resumeImageTaskPolling(node);
         }
       }
 

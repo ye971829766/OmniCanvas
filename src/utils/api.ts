@@ -480,3 +480,30 @@ export async function updateUserProfile(data: {
   const res = await request.put<UserProfile>("/users/profile", data);
   return res.data;
 }
+
+export interface TaskResponse {
+  type: "image";
+  taskId: string;
+  status: "generating" | "success" | "error";
+  url?: string;
+  imageUrl?: string;
+}
+
+export async function removeBg(imageUrl: string): Promise<TaskResponse> {
+  const res = await request.post<TaskResponse>("/remove-bg", { imageUrl });
+  return res.data;
+}
+
+export async function upscaleImage(imageUrl: string, scale?: number): Promise<TaskResponse> {
+  const res = await request.post<TaskResponse>("/upscale", { imageUrl, scale });
+  return res.data;
+}
+
+export async function inpaintImage(
+  imageUrl: string,
+  rectangles: { left: number; top: number; width: number; height: number }[],
+): Promise<TaskResponse> {
+  const res = await request.post<TaskResponse>("/inpaint", { imageUrl, rectangles });
+  return res.data;
+}
+

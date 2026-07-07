@@ -300,6 +300,47 @@ const doExport = async (ext: "png" | "jpg" | "webp" | "svg") => {
 
   // 3. PNG / JPG / WebP 导出处理
   try {
+    if (el.tag === "Image" && el.url) {
+      try {
+        const response = await fetch(el.url);
+        const blob = await response.blob();
+        
+        const img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.src = el.url;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          if (ext === "jpg") {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((convertedBlob) => {
+            if (convertedBlob) {
+              const blobUrl = URL.createObjectURL(convertedBlob);
+              triggerDownload(blobUrl, fileName);
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+            } else {
+              const blobUrl = URL.createObjectURL(blob);
+              triggerDownload(blobUrl, fileName);
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+            }
+          }, `image/${ext === "jpg" ? "jpeg" : ext}`);
+          return;
+        }
+      } catch (e) {
+        console.warn("[ExportTool] Failed to export raw image at full resolution, falling back to canvas export:", e);
+      }
+    }
+
     const options: any = {
       filename: fileName,
       format: ext,

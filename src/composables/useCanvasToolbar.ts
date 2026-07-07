@@ -28,6 +28,10 @@ export function useCanvasToolbar() {
       left: `${left}px`,
       top: `${top}px`,
     };
+  };
+
+  const updateToolbarPositionAndRefresh = () => {
+    updateToolbarPosition();
     refreshToolbar();
   };
 
@@ -41,7 +45,7 @@ export function useCanvasToolbar() {
         e.propertyName === "width" ||
         e.propertyName === "height"
       ) {
-        updateToolbarPosition();
+        updateToolbarPositionAndRefresh();
       }
     };
 
@@ -115,12 +119,12 @@ export function useCanvasToolbar() {
         selectTarget.value = undefined;
       }
 
-      updateToolbarPosition();
+      updateToolbarPositionAndRefresh();
     });
 
-    canvasApp.editor.on("editor.scale", updateToolbarPosition);
-    canvasApp.editor.on("editor.move", updateToolbarPosition);
-    canvasApp.editor.on("editor.rotate", updateToolbarPosition);
+    canvasApp.editor.on("editor.scale", updateToolbarPositionAndRefresh);
+    canvasApp.editor.on("editor.move", updateToolbarPositionAndRefresh);
+    canvasApp.editor.on("editor.rotate", updateToolbarPositionAndRefresh);
 
     // Track viewport zoom/pan changes
     canvasApp.tree.on(MoveEvent.MOVE, updateToolbarPosition);

@@ -98,15 +98,6 @@
     <div class="absolute right-4 top-4 z-40 flex items-center gap-3">
       <ZoomController
         :canvas-app="canvasApp"
-        :style="{
-          transition:
-            'transform ' +
-            (agentPanelCollapsed ? '0.35s' : '0.25s') +
-            ' cubic-bezier(0.45, 0, 0.55, 1)',
-          transform: agentPanelCollapsed
-            ? 'translateX(0)'
-            : 'translateX(-380px)',
-        }"
       />
       <button
         class="agent-launcher-btn cursor-pointer flex items-center justify-center"

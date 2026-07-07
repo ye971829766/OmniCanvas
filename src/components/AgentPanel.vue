@@ -98,8 +98,11 @@ const bottomRef = ref<HTMLElement | null>(null);
 
 onMounted(() => {
   if (collapsed.value) {
-    gsap.set(containerRef.value, { x: 420, opacity: 0 });
+    gsap.set(containerRef.value, { width: 0, opacity: 0 });
     isVisible.value = false;
+  } else {
+    gsap.set(containerRef.value, { width: 420, opacity: 1 });
+    isVisible.value = true;
   }
 });
 
@@ -107,10 +110,10 @@ watch(collapsed, (isCollapsed) => {
   if (isCollapsed) {
     // Smooth exit animation first, hide display after animation finishes
     gsap.to(containerRef.value, {
-      x: 420,
+      width: 0,
       opacity: 0,
-      duration: 0.22,
-      ease: "power2.in",
+      duration: 0.25,
+      ease: "power2.inOut",
       onComplete: () => {
         isVisible.value = false;
       },
@@ -120,12 +123,12 @@ watch(collapsed, (isCollapsed) => {
     isVisible.value = true;
     gsap.fromTo(
       containerRef.value,
-      { x: 420, opacity: 0 },
+      { width: 0, opacity: 0 },
       {
-        x: 0,
+        width: 420,
         opacity: 1,
-        duration: 0.28,
-        ease: "power3.out",
+        duration: 0.25,
+        ease: "power2.inOut",
       },
     );
     gsap.fromTo(
@@ -193,10 +196,10 @@ function useSuggestion(s: string) {
 <template>
   <div
     ref="containerRef"
-    class="agent-panel w-[420px]"
+    class="agent-panel"
     :style="{ display: isVisible ? 'flex' : 'none' }"
   >
-    <div class="flex-1 flex flex-col min-h-0">
+    <div class="w-[420px] flex flex-col h-full min-h-0 shrink-0">
       <!-- Header -->
       <div ref="headerRef" class="panel-header-row">
         <AgentHeader
@@ -240,16 +243,13 @@ function useSuggestion(s: string) {
 
 <style scoped>
 .agent-panel {
-  position: absolute;
-  right: 0;
-  top: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--surface-panel);
   border-left: 1px solid var(--border-color);
   overflow: hidden;
-  z-index: 99;
+  flex-shrink: 0;
 }
 
 .panel-header-row {

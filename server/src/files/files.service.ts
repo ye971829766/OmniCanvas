@@ -1,15 +1,22 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import type { OnModuleInit } from '@nestjs/common';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Buffer } from 'node:buffer';
 import { mkdir } from 'node:fs/promises';
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import { DatabaseService } from '../database/database.service';
+
 
 @Injectable()
 export class FilesService implements OnModuleInit {
+  constructor(private readonly dbService: DatabaseService) {}
+
   private MAX_IMAGE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '52428800');
   private ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
   private UPLOAD_DIR = process.env.UPLOAD_DIR || './files';
+
+  private baiduAccessToken: string | null = null;
+  private baiduTokenExpireTime: number = 0;
 
   async onModuleInit() {
     await mkdir(this.UPLOAD_DIR, { recursive: true });
@@ -335,5 +342,313 @@ export class FilesService implements OnModuleInit {
       imageUrl,
       url: imageUrl,
     };
+  }
+
+  private setTaskStatus(id: string, status: string, data: any) {
+    try {
+      const stmt = this.dbService.db.prepare(`
+        INSERT INTO generation_tasks (id, status, data, createdAt)
+        VALUES ($id, $status, $data, $createdAt)
+        ON CONFLICT(id) DO UPDATE SET
+          status = excluded.status,
+          data = excluded.data
+      `);
+      stmt.run({
+        $id: id,
+        $status: status,
+        $data: JSON.stringify(data),
+        $createdAt: Date.now(),
+      });
+    } catch (err) {
+      console.error(`Failed to save task status for ${id}:`, err);
+    }
+  }
+
+  async removeBackground(imageUrl: string, originUrl: string) {
+    if (!imageUrl) {
+      throw new HttpException({ error: "Missing imageUrl" }, HttpStatus.BAD_REQUEST);
+    }
+
+    const taskId = crypto.randomUUID();
+    this.setTaskStatus(taskId, "generating", {});
+
+    this.runRemoveBgTaskInBackground(taskId, imageUrl, originUrl);
+
+    return {
+      type: "image",
+      taskId,
+      status: "generating",
+    };
+  }
+
+  private async runRemoveBgTaskInBackground(taskId: string, imageUrl: string, originUrl: string) {
+    try {
+      // 1. Download image from imageUrl
+      const response = await this.downloadAsset(imageUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download image: HTTP ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type") || "image/png";
+      const arrayBuffer = await response.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: contentType });
+
+      let filename = "image.png";
+      const slashIndex = imageUrl.lastIndexOf("/");
+      if (slashIndex !== -1) {
+        const namePart = imageUrl.substring(slashIndex + 1);
+        const qIndex = namePart.indexOf("?");
+        filename = qIndex !== -1 ? namePart.substring(0, qIndex) : namePart;
+      }
+      if (!filename.includes(".")) {
+        filename += ".png";
+      }
+
+      // 2. Prepare FormData
+      const formData = new FormData();
+      formData.append("image", blob, filename);
+      formData.append("outside", "1");
+
+      const apiUrl = "http://j.ai.iseny.net:30088/admin-api/tools/ai-ticket/clear-bg2";
+
+      // 3. Request
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        body: formData,
+        headers: {
+          "tenant-id": "1",
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Local background removal API returned HTTP ${res.status}`);
+      }
+
+      const resData: any = await res.json();
+      if (!resData || resData.code !== 0) {
+        throw new Error(resData?.msg || "Local background removal API returned error code");
+      }
+
+      const clearBgUrl = resData.data;
+      if (!clearBgUrl) {
+        throw new Error("Local background removal API did not return image URL");
+      }
+
+      // 4. Download and save locally
+      const outputFormat = "png";
+      const localFilename = await this.saveImageFromUrl(clearBgUrl, outputFormat);
+      const localImageUrl = `${originUrl}/files/${localFilename}`;
+
+      this.setTaskStatus(taskId, "success", {
+        imageUrl: localImageUrl,
+        url: localImageUrl,
+      });
+    } catch (err: any) {
+      console.error(`[runRemoveBgTaskInBackground] Task ${taskId} failed:`, err);
+      this.setTaskStatus(taskId, "error", {
+        error: err.message || "背景消除失败，请重试",
+      });
+    }
+  }
+
+  async upscaleImage(imageUrl: string, scale: number = 4, originUrl: string) {
+    if (!imageUrl) {
+      throw new HttpException({ error: "Missing imageUrl" }, HttpStatus.BAD_REQUEST);
+    }
+
+    const taskId = crypto.randomUUID();
+    this.setTaskStatus(taskId, "generating", {});
+
+    this.runUpscaleTaskInBackground(taskId, imageUrl, scale, originUrl);
+
+    return {
+      type: "image",
+      taskId,
+      status: "generating",
+    };
+  }
+
+  private async runUpscaleTaskInBackground(taskId: string, imageUrl: string, scale: number, originUrl: string) {
+    let absoluteInputPath = "";
+    try {
+      // 1. Download image from imageUrl
+      const response = await this.downloadAsset(imageUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download image: HTTP ${response.status}`);
+      }
+
+      // Save image to a temporary file
+      const tempId = crypto.randomUUID();
+      const ext = this.getContentTypeExtension(response.headers.get("content-type")) || "png";
+      const inputFilename = `temp_upscale_input_${tempId}.${ext}`;
+      const inputPath = join(this.UPLOAD_DIR, inputFilename);
+      absoluteInputPath = resolve(inputPath);
+      const arrayBuffer = await response.arrayBuffer();
+      await Bun.write(absoluteInputPath, arrayBuffer);
+
+      // Prepare output filename
+      const outputId = crypto.randomUUID();
+      const outputFilename = `upscaled_${outputId}.png`;
+      const outputPath = join(this.UPLOAD_DIR, outputFilename);
+      const absoluteOutputPath = resolve(outputPath);
+
+      // 2. Execute RealESRGAN
+      const absoluteExePath = resolve(join("realesrgan", "realesrgan-ncnn-vulkan.exe"));
+      const absoluteCwd = resolve("realesrgan");
+      const args = [
+        "-i", absoluteInputPath,
+        "-o", absoluteOutputPath,
+        "-n", "realesrgan-x4plus",
+        "-s", String(scale),
+      ];
+
+      const proc = Bun.spawn([absoluteExePath, ...args], {
+        cwd: absoluteCwd,
+      });
+
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        const errText = await new Response(proc.stderr).text();
+        console.error("RealESRGAN error:", errText);
+        throw new Error(`RealESRGAN process exited with code ${exitCode}`);
+      }
+
+      // Clean up temp input file
+      try { await Bun.file(absoluteInputPath).delete(); } catch (_) {}
+      absoluteInputPath = "";
+
+      // Verify output file exists
+      const outputFile = Bun.file(absoluteOutputPath);
+      if (!(await outputFile.exists())) {
+        throw new Error("Upscaled output file was not generated");
+      }
+
+      const localImageUrl = `${originUrl}/files/${outputFilename}`;
+
+      this.setTaskStatus(taskId, "success", {
+        imageUrl: localImageUrl,
+        url: localImageUrl,
+      });
+    } catch (err: any) {
+      console.error(`[runUpscaleTaskInBackground] Task ${taskId} failed:`, err);
+      if (absoluteInputPath) {
+        try { await Bun.file(absoluteInputPath).delete(); } catch (_) {}
+      }
+      this.setTaskStatus(taskId, "error", {
+        error: err.message || "超分放大失败，请重试",
+      });
+    }
+  }
+
+  private async getBaiduAccessToken(): Promise<string> {
+    if (this.baiduAccessToken && Date.now() < this.baiduTokenExpireTime) {
+      return this.baiduAccessToken;
+    }
+
+    const apiKey = process.env.BAIDU_API_KEY;
+    const secretKey = process.env.BAIDU_SECRET_KEY;
+    if (!apiKey || !secretKey) {
+      throw new Error("Missing BAIDU_API_KEY or BAIDU_SECRET_KEY in environment");
+    }
+
+    const url = `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${apiKey}&client_secret=${secretKey}`;
+    const res = await fetch(url, { method: "POST" });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch Baidu access token: HTTP ${res.status}`);
+    }
+
+    const data: any = await res.json();
+    if (!data.access_token) {
+      throw new Error(`Baidu token response missing access_token: ${JSON.stringify(data)}`);
+    }
+
+    this.baiduAccessToken = data.access_token;
+    const expiresIn = parseInt(data.expires_in || "2592000");
+    this.baiduTokenExpireTime = Date.now() + (expiresIn - 300) * 1000;
+
+    return this.baiduAccessToken;
+  }
+
+  async inpaintImage(
+    imageUrl: string,
+    rectangles: { left: number; top: number; width: number; height: number }[],
+    originUrl: string,
+  ) {
+    if (!imageUrl) {
+      throw new HttpException({ error: "Missing imageUrl" }, HttpStatus.BAD_REQUEST);
+    }
+    if (!rectangles || !Array.isArray(rectangles) || rectangles.length === 0) {
+      throw new HttpException({ error: "Missing or invalid rectangles array" }, HttpStatus.BAD_REQUEST);
+    }
+
+    const taskId = crypto.randomUUID();
+    this.setTaskStatus(taskId, "generating", {});
+
+    this.runInpaintTaskInBackground(taskId, imageUrl, rectangles, originUrl);
+
+    return {
+      type: "image",
+      taskId,
+      status: "generating",
+    };
+  }
+
+  private async runInpaintTaskInBackground(
+    taskId: string,
+    imageUrl: string,
+    rectangles: { left: number; top: number; width: number; height: number }[],
+    originUrl: string,
+  ) {
+    try {
+      const accessToken = await this.getBaiduAccessToken();
+
+      const response = await this.downloadAsset(imageUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download source image: HTTP ${response.status}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const base64Image = Buffer.from(arrayBuffer).toString("base64");
+
+      const inpaintUrl = `https://aip.baidubce.com/rest/2.0/image-process/v1/inpainting?access_token=${accessToken}`;
+      const res = await fetch(inpaintUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image: base64Image,
+          rectangle: rectangles,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Baidu inpainting API returned HTTP ${res.status}`);
+      }
+
+      const resData: any = await res.json();
+      if (resData.error_code) {
+        throw new Error(`Baidu inpainting API error: [${resData.error_code}] ${resData.error_msg}`);
+      }
+
+      const outputBase64 = resData.image;
+      if (!outputBase64) {
+        throw new Error("Baidu inpainting API did not return image data");
+      }
+
+      const outputFormat = "png";
+      const localFilename = await this.saveImageFromBase64(outputBase64, outputFormat);
+      const localImageUrl = `${originUrl}/files/${localFilename}`;
+
+      this.setTaskStatus(taskId, "success", {
+        imageUrl: localImageUrl,
+        url: localImageUrl,
+      });
+    } catch (err: any) {
+      console.error(`[runInpaintTaskInBackground] Task ${taskId} failed:`, err);
+      this.setTaskStatus(taskId, "error", {
+        error: err.message || "图像修复失败，请重试",
+      });
+    }
   }
 }

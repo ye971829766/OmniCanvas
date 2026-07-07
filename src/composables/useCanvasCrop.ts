@@ -212,11 +212,25 @@ export function useCanvasCrop(
       }
     }
 
-    const groupX = matrix?.x ?? matrix?.e ?? imageNode.x ?? 0;
-    const groupY = matrix?.y ?? matrix?.f ?? imageNode.y ?? 0;
-    const composedScaleX = matrix?.scaleX ?? matrix?.a ?? imageNode.scaleX ?? 1;
-    const composedScaleY = matrix?.scaleY ?? matrix?.d ?? imageNode.scaleY ?? 1;
-    const composedRotation = matrix?.rotation ?? imageNode.rotation ?? 0;
+    let groupX = imageNode.x ?? 0;
+    let groupY = imageNode.y ?? 0;
+    let composedScaleX = imageNode.scaleX ?? 1;
+    let composedScaleY = imageNode.scaleY ?? 1;
+    let composedRotation = imageNode.rotation ?? 0;
+
+    if (matrix) {
+      groupX = matrix.x ?? matrix.e ?? groupX;
+      groupY = matrix.y ?? matrix.f ?? groupY;
+
+      const a = matrix.a !== undefined ? matrix.a : 1;
+      const b = matrix.b !== undefined ? matrix.b : 0;
+      const c = matrix.c !== undefined ? matrix.c : 0;
+      const d = matrix.d !== undefined ? matrix.d : 1;
+
+      composedScaleX = Math.sqrt(a * a + b * b);
+      composedScaleY = Math.sqrt(c * c + d * d);
+      composedRotation = Math.atan2(b, a) * (180 / Math.PI);
+    }
 
     cropGroup = new Group({
       x: groupX,

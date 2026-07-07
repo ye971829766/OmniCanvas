@@ -7,7 +7,8 @@ import {
   UseInterceptors, 
   UploadedFiles, 
   ForbiddenException, 
-  Res 
+  Res,
+  Body
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
@@ -76,5 +77,32 @@ export class FilesController {
         }
       }
     });
+  }
+
+  @Post('remove-bg')
+  async removeBg(
+    @Body() body: { imageUrl: string },
+    @Headers() headers: Record<string, string>,
+  ) {
+    const { imageUrl } = body;
+    return this.filesService.removeBackground(imageUrl, this.getOrigin(headers));
+  }
+
+  @Post('upscale')
+  async upscale(
+    @Body() body: { imageUrl: string; scale?: number },
+    @Headers() headers: Record<string, string>,
+  ) {
+    const { imageUrl, scale } = body;
+    return this.filesService.upscaleImage(imageUrl, scale || 4, this.getOrigin(headers));
+  }
+
+  @Post('inpaint')
+  async inpaint(
+    @Body() body: { imageUrl: string; rectangles: { left: number; top: number; width: number; height: number }[] },
+    @Headers() headers: Record<string, string>,
+  ) {
+    const { imageUrl, rectangles } = body;
+    return this.filesService.inpaintImage(imageUrl, rectangles, this.getOrigin(headers));
   }
 }

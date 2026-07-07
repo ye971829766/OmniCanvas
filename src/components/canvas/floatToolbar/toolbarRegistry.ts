@@ -9,6 +9,9 @@ import type { ToolbarItem, ToolbarTarget } from "./types";
 import AutoLayoutAndFreeLayout from "./custom/AutoLayoutAndFreeLayout.vue";
 import LayoutAndArrangement from "./custom/LayoutAndArrangement.vue";
 import ImageGenTool from "./custom/ImageGenTool.vue";
+import RemoveBgTool from "./custom/RemoveBgTool.vue";
+import UpscaleTool from "./custom/UpscaleTool.vue";
+import EraserTool from "./custom/EraserTool.vue";
 
 const isEditableNumber = (key: string) => {
   return (target: ToolbarTarget) => typeof target[key] !== "undefined";
@@ -204,6 +207,33 @@ const multipleSelectTools: ToolbarItem[] = [
 
 const imageTools: ToolbarItem[] = [
   ...sizeTools,
+  {
+    type: "divider",
+  },
+  {
+    type: "custom",
+    key: "upscale",
+    label: "HD放大",
+    component: UpscaleTool,
+  },
+  {
+    type: "divider",
+  },
+  {
+    type: "custom",
+    key: "removeBg",
+    label: "去背景",
+    component: RemoveBgTool,
+  },
+  {
+    type: "divider",
+  },
+  {
+    type: "custom",
+    key: "eraser",
+    label: "橡皮擦",
+    component: EraserTool,
+  },
   {
     type: "divider",
   },
