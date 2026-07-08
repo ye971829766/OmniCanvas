@@ -59,13 +59,13 @@
           <div v-if="tool.dividerBefore" class="divider"></div>
 
           <div class="tooltip-wrapper">
-            <button
+            <Button
               v-if="tool.name !== 'link'"
-              type="button"
               :class="[
                 'tool-btn',
                 { active: props.modelValue === tool.name, [tool.theme]: true },
               ]"
+              unstyled
               :data-tool="tool.name"
               :data-shortcut="tool.shortcut.toUpperCase()"
               @click="handleToolClick(tool.name)"
@@ -86,16 +86,16 @@
                   class="icon-svg"
                 />
               </div>
-            </button>
+            </Button>
 
             <!-- Upload button with direct file input -->
-            <button
+            <Button
               v-else
-              type="button"
               :class="[
                 'tool-btn',
                 { active: props.modelValue === tool.name, [tool.theme]: true },
               ]"
+              unstyled
               :data-tool="tool.name"
               :data-shortcut="tool.shortcut.toUpperCase()"
               @click="triggerFileUpload"
@@ -116,7 +116,7 @@
                   class="icon-svg"
                 />
               </div>
-            </button>
+            </Button>
             <span class="tooltip"
               >{{ tool.label }}
               <span class="shortcut">{{
@@ -475,12 +475,14 @@ onUnmounted(() => {
   perspective: 1000px;
 }
 
-.active-pill.blue-bg {
-  background-color: var(--blue-bg);
+.active-pill.blue-bg,
+.active-pill.brand-bg {
+  background-color: #18181b; /* Solid black/dark in light mode */
 }
 
-.active-pill.brand-bg {
-  background-color: var(--brand-bg);
+:global(.p-dark .active-pill.blue-bg),
+:global(.p-dark .active-pill.brand-bg) {
+  background-color: #ffffff; /* Solid white in dark mode */
 }
 
 /* Tool Buttons */
@@ -505,12 +507,14 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-.tool-btn.active {
-  color: var(--blue-text);
+.tool-btn.active,
+.tool-btn.active.brand {
+  color: #ffffff; /* White in light mode when active */
 }
 
-.tool-btn.active.brand {
-  color: var(--brand-text);
+:global(.p-dark .tool-btn.active),
+:global(.p-dark .tool-btn.active.brand) {
+  color: #18181b; /* Black in dark mode when active */
 }
 
 /* Icon Wrappers */

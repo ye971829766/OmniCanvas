@@ -30,7 +30,6 @@ const displayTitle = computed(() => {
   return "视觉设计方案";
 });
 
-
 function downloadMedia(e: MouseEvent) {
   e.stopPropagation();
   const url = props.state?.url || props.state?.thumbnailUrl;
@@ -46,17 +45,12 @@ function downloadMedia(e: MouseEvent) {
 </script>
 
 <template>
-  <div
-    class="preview-card"
-    @click="emit('zoom', refId)"
-  >
-
+  <div class="preview-card" @click="emit('zoom', refId)">
     <!-- ── GENERATING: gradient mesh skeleton ──────────────────── -->
     <div v-if="!state || state.status === 'generating'" class="preview-mesh">
       <div class="mesh-gradient" />
       <div class="mesh-content">
-        <p class="mesh-label">生成中…</p>
-        <div class="mesh-progress" />
+        <p class="mesh-label">生成中</p>
       </div>
     </div>
 
@@ -72,20 +66,6 @@ function downloadMedia(e: MouseEvent) {
       class="preview-done"
     >
       <img :src="state.url" class="preview-img" />
-
-      <!-- Floating Download Button (Reference Image 2/3 style) -->
-      <button
-        class="action-download-btn"
-        @click.stop="downloadMedia"
-        title="下载高清原图"
-        aria-label="下载图片"
-      >
-        <Download :size="16" />
-      </button>
-
-      <div class="preview-overlay">
-        <span class="preview-tip">点击定位画布</span>
-      </div>
     </div>
 
     <!-- ── DONE: video ────────────────────────────────────────── -->
@@ -322,7 +302,6 @@ function downloadMedia(e: MouseEvent) {
   display: block;
   object-fit: contain;
 }
-
 
 /* Overlay */
 .preview-overlay {

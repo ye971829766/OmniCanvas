@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from "vue";
+import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { FolderKanban, Lock } from "lucide-vue-next";
 import Canvas from "../components/Canvas.vue";
@@ -55,9 +55,18 @@ const validateAndSetWorkspace = async () => {
   }
 };
 
+const handleOpenAgentPanel = () => {
+  agentPanelCollapsed.value = false;
+};
+
 onMounted(async () => {
   await fetchProfile();
   await validateAndSetWorkspace();
+  window.addEventListener("agent:open-panel", handleOpenAgentPanel);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("agent:open-panel", handleOpenAgentPanel);
 });
 
 watch(isLoggedIn, (loggedIn) => {

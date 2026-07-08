@@ -118,8 +118,17 @@ const loadModels = async () => {
   }
 };
 
+const handleAddReferenceImage = (e: Event) => {
+  const customEvent = e as CustomEvent;
+  const imgData = customEvent.detail?.image;
+  if (imgData) {
+    attachments.value.push(imgData);
+  }
+};
+
 onMounted(() => {
   loadModels();
+  window.addEventListener("agent:add-reference-image", handleAddReferenceImage);
 });
 
 const canvasElements = computed(() => {
@@ -303,6 +312,10 @@ const editor = useEditor({
 
 onBeforeUnmount(() => {
   editor.value?.destroy();
+  window.removeEventListener(
+    "agent:add-reference-image",
+    handleAddReferenceImage,
+  );
 });
 
 watch(
@@ -1036,10 +1049,6 @@ function handleSubmit() {
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease;
-}
-
-.attachment-preview:hover {
-  transform: translateY(-2px);
 }
 
 .attachment-preview img {

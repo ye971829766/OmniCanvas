@@ -41,8 +41,12 @@ let _nextId = 1;
 function isLeftoverCropOverlay(data: any): boolean {
   if (data.tag !== "Group" || !Array.isArray(data.children)) return false;
   if (data.children.length !== 13) return false;
-  const strokeMatches = data.children.filter((c: any) => c.stroke === "#10b981").length;
-  const fillMatches = data.children.filter((c: any) => c.fill === "rgba(0,0,0,0.6)").length;
+  const strokeMatches = data.children.filter(
+    (c: any) => c.stroke === "#10b981",
+  ).length;
+  const fillMatches = data.children.filter(
+    (c: any) => c.fill === "rgba(0,0,0,0.6)",
+  ).length;
   return fillMatches === 4 && strokeMatches === 9;
 }
 
@@ -77,13 +81,45 @@ function ensureHistoryIdDeep(node: any): void {
 
 // ── 用于判定两个序列化对象是否属性相同的比较键 ─────────────────────────────
 const COMPARE_KEYS = [
-  "x", "y", "width", "height", "scaleX", "scaleY", "rotation",
-  "skewX", "skewY", "fill", "stroke", "strokeWidth", "cornerRadius",
-  "fontSize", "fontFamily", "fontWeight", "textAlign", "lineHeight",
-  "letterSpacing", "text", "opacity", "url", "prompt", "model",
-  "size", "quality", "aspectRatio", "generationStatus", "errorMessage",
-  "taskId", "videoUrl", "thumbnailUrl", "flow", "flowAlign", "flowWrap",
-  "gap", "padding", "lockRatio", "editable",
+  "x",
+  "y",
+  "width",
+  "height",
+  "scaleX",
+  "scaleY",
+  "rotation",
+  "skewX",
+  "skewY",
+  "fill",
+  "stroke",
+  "strokeWidth",
+  "cornerRadius",
+  "fontSize",
+  "fontFamily",
+  "fontWeight",
+  "textAlign",
+  "lineHeight",
+  "letterSpacing",
+  "text",
+  "opacity",
+  "url",
+  "prompt",
+  "model",
+  "size",
+  "quality",
+  "aspectRatio",
+  "generationStatus",
+  "errorMessage",
+  "taskId",
+  "videoUrl",
+  "thumbnailUrl",
+  "flow",
+  "flowAlign",
+  "flowWrap",
+  "gap",
+  "padding",
+  "lockRatio",
+  "editable",
 ];
 
 /**
@@ -171,7 +207,7 @@ export function useCanvasHistory(
             !c.isCropOverlay &&
             !c.isTaskOverlay &&
             !isLeftoverCropOverlay(c) &&
-            !isLeftoverTaskOverlay(c)
+            !isLeftoverTaskOverlay(c),
         )
         .map((c: any) => serializeNode(c));
     }
@@ -255,7 +291,10 @@ export function useCanvasHistory(
   };
 
   /** 从序列化数据中提取需要 set() 的属性补丁 */
-  const buildPatch = (targetData: any, currentData: any): Record<string, any> => {
+  const buildPatch = (
+    targetData: any,
+    currentData: any,
+  ): Record<string, any> => {
     const patch: Record<string, any> = {};
     for (const key of COMPARE_KEYS) {
       const t = targetData[key];
@@ -335,7 +374,10 @@ export function useCanvasHistory(
       if (existing) {
         // 节点已存在 — 检查是否需要属性更新
         const currentSerialized = currentSerializedMap.get(hid);
-        if (currentSerialized && hasPropertyDiff(targetData, currentSerialized)) {
+        if (
+          currentSerialized &&
+          hasPropertyDiff(targetData, currentSerialized)
+        ) {
           const patch = buildPatch(targetData, currentSerialized);
           if (Object.keys(patch).length > 0) {
             existing.set(patch);
@@ -370,7 +412,10 @@ export function useCanvasHistory(
       // 需要重排：先把所有当前节点从 tree 移除（不销毁），再按目标顺序添加
       // 注意：只移除非 SimulateElement 节点
       for (const child of [...app.tree.children]) {
-        if (child.tag !== "SimulateElement" && (child as any).__tag !== "SimulateElement") {
+        if (
+          child.tag !== "SimulateElement" &&
+          (child as any).__tag !== "SimulateElement"
+        ) {
           child.remove();
         }
       }
@@ -416,8 +461,6 @@ export function useCanvasHistory(
             !isLeftoverTaskOverlay(child),
         )
         .map((child: any) => serializeNode(child));
-      
-      console.log("saveCanvasState: saving childrenData to server:", JSON.stringify(childrenData, null, 2));
 
       await updateWorkspaceCanvas(String(targetId), childrenData);
       console.log("saveCanvasState: successfully saved canvas state.");
@@ -442,7 +485,6 @@ export function useCanvasHistory(
     if (!targetId) return;
     try {
       const dataList = await getWorkspaceCanvas(String(targetId));
-      console.log("loadCanvasState: loaded dataList from server:", JSON.stringify(dataList, null, 2));
 
       if (Array.isArray(dataList)) {
         if (app.editor) {
@@ -452,7 +494,8 @@ export function useCanvasHistory(
         app.tree.children.forEach((child: any) => cleanUpSingleNode(child));
         app.tree.clear();
         dataList.forEach((data: any) => {
-          if (isLeftoverCropOverlay(data) || isLeftoverTaskOverlay(data)) return;
+          if (isLeftoverCropOverlay(data) || isLeftoverTaskOverlay(data))
+            return;
           const child = deserializeNode(data);
           if (child) {
             ensureHistoryIdDeep(child);
@@ -553,7 +596,10 @@ export function useCanvasHistory(
     }
   };
 
-  const recordHistoryDebounced = (delay: number | any = 100, immediateSave = false) => {
+  const recordHistoryDebounced = (
+    delay: number | any = 100,
+    immediateSave = false,
+  ) => {
     if (isRestoring) return;
     const actualDelay = typeof delay === "number" ? delay : 100;
     if (debounceTimeout) {

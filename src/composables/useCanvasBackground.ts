@@ -28,13 +28,15 @@ const LIGHT = {
   bgStart: "#ffffff", // Pure white center
   bgEnd: "#f1f5f9",   // Soft slate 100 edge
   dot: { r: 100, g: 116, b: 139 }, // Slate 500
+  dotOpacity: 0.22,
   spacing: 32,        // Classic Figma spacing (32px)
 } as const;
 
 const DARK = {
-  bgStart: "#0f172a", // Lighter slate 900 center
-  bgEnd: "#020617",   // Deep dark slate 950 edge
-  dot: { r: 148, g: 163, b: 184 }, // Slate 400
+  bgStart: "#16161a", // Premium dark grey center (matches zinc dark theme)
+  bgEnd: "#0a0a0c",   // Rich deep dark edge (matches zinc dark theme)
+  dot: { r: 255, g: 255, b: 255 }, // Crisp white dots
+  dotOpacity: 0.22,   // Clear and visible under dark mode
   spacing: 32,
 } as const;
 
@@ -83,6 +85,23 @@ export function useCanvasBackground(
   let rafId = 0;
   let darkObserver: MutationObserver | null = null;
   let resizeObserver: ResizeObserver | null = null;
+
+  // ---- mouse tracking state ------------------------------------------------
+  let mouseX = -9999;
+  let mouseY = -9999;
+
+  const handleMouseMove = (e: MouseEvent) => {
+    const canvas = canvasEl.value;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+  };
+
+  const handleMouseLeave = () => {
+    mouseX = -9999;
+    mouseY = -9999;
+  };
 
   // ---- public API -----------------------------------------------------------
 
@@ -163,8 +182,19 @@ export function useCanvasBackground(
     const offsetX = ((panX % s) + s) % s;
     const offsetY = ((panY % s) + s) % s;
 
-    // Use Slate 500 at 22% opacity to ensure visibility at all zoom levels, yet stay soft
-    ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.22})`;
+    // Use configured opacity, scaling it with dynamic zoom alpha
+    let fillStyle: string | CanvasGradient;
+    if (mouseX > -9000 && mouseY > -9000) {
+      const glowRadius = 200;
+      const grad = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, glowRadius);
+      const maxOpacity = isDark.value ? 0.65 : 0.55;
+      grad.addColorStop(0, `rgba(${r},${g},${b},${alpha * maxOpacity})`);
+      grad.addColorStop(1, `rgba(${r},${g},${b},${alpha * config.dotOpacity})`);
+      fillStyle = grad;
+    } else {
+      fillStyle = `rgba(${r},${g},${b},${alpha * config.dotOpacity})`;
+    }
+    ctx.fillStyle = fillStyle;
 
     ctx.beginPath();
     for (let x = offsetX - s; x < logicalW + s; x += s) {
@@ -238,6 +268,15 @@ export function useCanvasBackground(
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
+    // Soft, dynamic spotlight following the mouse (dark mode only for high-end look)
+    if (isDark.value && mouseX > -9000 && mouseY > -9000) {
+      const mouseGrad = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, 280);
+      mouseGrad.addColorStop(0, `rgba(${ACCENT.r},${ACCENT.g},${ACCENT.b},0.08)`);
+      mouseGrad.addColorStop(1, `rgba(${ACCENT.r},${ACCENT.g},${ACCENT.b},0)`);
+      ctx.fillStyle = mouseGrad;
+      ctx.fillRect(0, 0, W, H);
+    }
+
     // ------------------------------------------------------------------
     // Grid opacity driven by zoom level
     // ------------------------------------------------------------------
@@ -280,9 +319,13 @@ export function useCanvasBackground(
     setupDarkObserver();
     resizeCanvas();
 
-    if (canvasEl.value?.parentElement) {
+    const parent = canvasEl.value?.parentElement;
+    if (parent) {
       resizeObserver = new ResizeObserver(() => resizeCanvas());
-      resizeObserver.observe(canvasEl.value.parentElement);
+      resizeObserver.observe(parent);
+
+      parent.addEventListener("mousemove", handleMouseMove);
+      parent.addEventListener("mouseleave", handleMouseLeave);
     }
 
     rafId = requestAnimationFrame(draw);
@@ -292,6 +335,12 @@ export function useCanvasBackground(
     cancelAnimationFrame(rafId);
     darkObserver?.disconnect();
     resizeObserver?.disconnect();
+
+    const parent = canvasEl.value?.parentElement;
+    if (parent) {
+      parent.removeEventListener("mousemove", handleMouseMove);
+      parent.removeEventListener("mouseleave", handleMouseLeave);
+    }
   });
 
   return { triggerRipple, isDark };

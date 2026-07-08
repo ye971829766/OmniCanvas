@@ -499,7 +499,7 @@ export class FilesService implements OnModuleInit {
         "-i", absoluteInputPath,
         "-o", absoluteOutputPath,
         "-n", "realesrgan-x4plus",
-        "-s", String(scale),
+        "-s", "4", // Force native scale 4 to avoid jumbled tile/stitching bugs when scale is 2/3
       ];
 
       const proc = Bun.spawn([absoluteExePath, ...args], {

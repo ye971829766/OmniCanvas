@@ -530,12 +530,13 @@ const onUploadFile = async (file: File) => {
         });
       }
     }
-  } catch (error) {
-    console.error("Failed to upload video:", error);
+  } catch (error: any) {
+    console.error("Failed to upload file:", error);
+    const detail = error?.response?.data?.message || error?.message || "上传失败，请确保后端服务器正常运行。";
     toast.add({
       severity: "error",
       summary: "上传失败",
-      detail: "Upload failed. Please make sure the backend server is running.",
+      detail,
       life: 3000,
     });
   }
