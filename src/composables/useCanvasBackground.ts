@@ -185,10 +185,11 @@ export function useCanvasBackground(
     // Use configured opacity, scaling it with dynamic zoom alpha
     let fillStyle: string | CanvasGradient;
     if (mouseX > -9000 && mouseY > -9000) {
-      const glowRadius = 200;
+      const glowRadius = 240;
       const grad = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, glowRadius);
-      const maxOpacity = isDark.value ? 0.65 : 0.55;
+      const maxOpacity = isDark.value ? 0.95 : 0.38; // Keep light mode dot glow extremely subtle
       grad.addColorStop(0, `rgba(${r},${g},${b},${alpha * maxOpacity})`);
+      grad.addColorStop(0.3, `rgba(${r},${g},${b},${alpha * (maxOpacity * 0.7 + config.dotOpacity * 0.3)})`);
       grad.addColorStop(1, `rgba(${r},${g},${b},${alpha * config.dotOpacity})`);
       fillStyle = grad;
     } else {
@@ -270,8 +271,11 @@ export function useCanvasBackground(
 
     // Soft, dynamic spotlight following the mouse (dark mode only for high-end look)
     if (isDark.value && mouseX > -9000 && mouseY > -9000) {
-      const mouseGrad = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, 280);
-      mouseGrad.addColorStop(0, `rgba(${ACCENT.r},${ACCENT.g},${ACCENT.b},0.08)`);
+      const intensity = 0.16;
+      const radius = 320;
+      const mouseGrad = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, radius);
+      mouseGrad.addColorStop(0, `rgba(${ACCENT.r},${ACCENT.g},${ACCENT.b},${intensity})`);
+      mouseGrad.addColorStop(0.4, `rgba(${ACCENT.r},${ACCENT.g},${ACCENT.b},${intensity * 0.4})`);
       mouseGrad.addColorStop(1, `rgba(${ACCENT.r},${ACCENT.g},${ACCENT.b},0)`);
       ctx.fillStyle = mouseGrad;
       ctx.fillRect(0, 0, W, H);

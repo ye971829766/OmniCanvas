@@ -316,3 +316,71 @@ video {
   border-radius: 9999px;
 }
 
+/* ==================== PrimeVue Menu Item Custom Styles ==================== */
+.p-menu-list,
+.p-menuitem {
+  padding: 2px !important;
+}
+
+/* Base item content styling */
+.p-menuitem-content {
+  color: var(--p-text-color) !important;
+  background-color: transparent !important;
+  border-radius: 6px !important;
+  transition: background-color 0.15s ease, color 0.15s ease !important;
+}
+
+/* Link structure styling */
+.p-menuitem-link {
+  color: var(--p-text-color) !important;
+  padding: 6px 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  text-decoration: none !important;
+  background-color: transparent !important;
+  border-radius: 6px !important;
+}
+
+/* Icon and label typography */
+.p-menuitem-icon {
+  color: var(--p-text-secondary) !important;
+  margin-right: 8px !important;
+}
+
+.p-menuitem-label,
+.p-menuitem-text {
+  color: var(--p-text-color) !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+}
+
+/* Bulletproof Hover & Focus States Override */
+.p-menuitem-content:hover,
+.p-menuitem-content.p-focus,
+.p-menuitem-content:focus,
+.p-menuitem-content:has(.p-menuitem-link:focus),
+.p-menuitem.p-focus > .p-menuitem-content,
+.p-menuitem-link:hover,
+.p-menuitem-link:focus,
+.p-menuitem-link:active {
+  background-color: var(--p-surface-100) !important;
+  color: var(--p-text-color) !important;
+}
+
+/* Make sure all child texts and icons are correctly colored on hover/focus */
+.p-menuitem-content:hover .p-menuitem-link,
+.p-menuitem-content:hover .p-menuitem-label,
+.p-menuitem-content:hover .p-menuitem-text,
+.p-menuitem-content:hover .p-menuitem-icon,
+.p-menuitem-link:hover .p-menuitem-label,
+.p-menuitem-link:hover .p-menuitem-text,
+.p-menuitem-link:hover .p-menuitem-icon,
+.p-menuitem.p-focus .p-menuitem-content .p-menuitem-label,
+.p-menuitem.p-focus .p-menuitem-content .p-menuitem-text,
+.p-menuitem.p-focus .p-menuitem-content .p-menuitem-icon,
+.p-menuitem-content.p-focus .p-menuitem-label,
+.p-menuitem-content.p-focus .p-menuitem-text,
+.p-menuitem-content.p-focus .p-menuitem-icon {
+  color: var(--p-text-color) !important;
+}
+

@@ -205,6 +205,32 @@ export const NoirPreset = definePreset(Aura, {
         },
       },
     },
+    menu: {
+      colorScheme: {
+        light: {
+          root: {
+            background: "{surface.0}",
+            borderColor: "{surface.200}",
+          },
+          item: {
+            focusBackground: "{surface.100}",
+            color: "{surface.900}",
+            focusColor: "{surface.950}",
+          },
+        },
+        dark: {
+          root: {
+            background: "{surface.0}",
+            borderColor: "{surface.200}",
+          },
+          item: {
+            focusBackground: "{surface.100}",
+            color: "{surface.900}",
+            focusColor: "{surface.950}",
+          },
+        },
+      },
+    },
   },
 });
 
