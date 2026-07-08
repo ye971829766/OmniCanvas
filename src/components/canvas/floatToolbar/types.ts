@@ -45,6 +45,8 @@ export type ToolbarChangePayload = {
   value: unknown;
   /** When true, Canvas.vue should NOT record this change into undo/redo history */
   skipHistory?: boolean;
+  /** When true, save the canvas state immediately bypassing the debounce time */
+  immediateSave?: boolean;
 };
 
 export type ToolbarActionPayload = {

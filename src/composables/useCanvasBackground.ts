@@ -26,21 +26,21 @@ export interface Ripple {
 // ---------------------------------------------------------------------------
 
 const LIGHT = {
-  bg: "#f5f6f7",
-  dot: { r: 199, g: 201, b: 206 }, // #c7c9ce — clearly visible on light canvas
-  dotRadius: 0.95, // 1.9 px diameter
-  spacing: 24,
+  bgStart: "#ffffff", // Pure white center
+  bgEnd: "#f1f5f9",   // Soft slate 100 edge
+  dot: { r: 100, g: 116, b: 139 }, // Slate 500
+  spacing: 32,        // Classic Figma spacing (32px)
 } as const;
 
 const DARK = {
-  bg: "#121215",
-  dot: { r: 82, g: 82, b: 90 }, // #52525a — visible on dark canvas
-  dotRadius: 0.85, // 1.7 px diameter
-  spacing: 24,
+  bgStart: "#0f172a", // Lighter slate 900 center
+  bgEnd: "#020617",   // Deep dark slate 950 edge
+  dot: { r: 148, g: 163, b: 184 }, // Slate 400
+  spacing: 32,
 } as const;
 
-/** Ripple accent — neutral near-black, matches the near-black CTA palette */
-const ACCENT = { r: 28, g: 28, b: 30 }; // #1c1c1e
+/** Ripple accent — matches the new primary Apple Classic Blue theme color */
+const ACCENT = { r: 0, g: 122, b: 255 }; // #007aff
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -146,35 +146,32 @@ export function useCanvasBackground(
 
   // ---- drawing --------------------------------------------------------------
 
-  function drawDotLayer(
+  function drawDots(
     ctx: CanvasRenderingContext2D,
     config: typeof LIGHT | typeof DARK,
     panX: number,
     panY: number,
-    parallaxFactor: number,
-    radiusMult: number,
     alpha: number,
   ): void {
     const { r, g, b } = config.dot;
     const s = config.spacing;
-    const radius = config.dotRadius * radiusMult;
+    const radius = 1.0; // 1px radius micro-dot (2px diameter)
 
-    const lPanX = panX * parallaxFactor;
-    const lPanY = panY * parallaxFactor;
+    // Tile offset so the grid scrolls continuously with the viewport (no parallax)
+    const offsetX = ((panX % s) + s) % s;
+    const offsetY = ((panY % s) + s) % s;
 
-    // Tile offset so the grid scrolls continuously with the viewport
-    const offsetX = ((lPanX % s) + s) % s;
-    const offsetY = ((lPanY % s) + s) % s;
+    // Use Slate 500 at 22% opacity to ensure visibility at all zoom levels, yet stay soft
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.22})`;
 
-    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
-
+    ctx.beginPath();
     for (let x = offsetX - s; x < logicalW + s; x += s) {
       for (let y = offsetY - s; y < logicalH + s; y += s) {
-        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
         ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.fill();
       }
     }
+    ctx.fill();
   }
 
   function drawRipples(ctx: CanvasRenderingContext2D, now: number): void {
@@ -241,37 +238,27 @@ export function useCanvasBackground(
     ctx.clearRect(0, 0, W, H);
 
     // Base background
-    ctx.fillStyle = config.bg;
+    // Base background with vignette studio lighting
+    const cx = W / 2;
+    const cy = H / 2;
+    const rad = Math.max(W, H) * 0.85;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+    grad.addColorStop(0, config.bgStart);
+    grad.addColorStop(1, config.bgEnd);
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
     // ------------------------------------------------------------------
-    // Dot grid opacity driven by zoom level
+    // Grid opacity driven by zoom level
     // ------------------------------------------------------------------
-    let dotOpacity = 1.0;
-    if (zoom > 2.0) {
-      // Graceful fade above 200 % — gone by 250 %
-      dotOpacity = Math.max(0, 1 - (zoom - 2.0) / 0.5);
-    } else if (zoom < 0.3) {
-      // Merge to soft texture below 30 %
-      dotOpacity = Math.max(0, (zoom / 0.3) * 0.6);
+    let gridOpacity = 1.0;
+    if (zoom > 3.0) {
+      // Graceful fade above 300 % — gone by 400 %
+      gridOpacity = Math.max(0, 1 - (zoom - 3.0) / 1.0);
     }
 
-    if (dotOpacity > 0.004) {
-      // Background (far) layer — moves slightly slower → parallax depth
-      drawDotLayer(ctx, config, panX, panY, 0.97, 0.85, dotOpacity * 0.45);
-      // Foreground layer — nominal speed, full size
-      drawDotLayer(ctx, config, panX, panY, 1.0, 1.0, dotOpacity);
-    }
-
-    // ------------------------------------------------------------------
-    // Low-zoom soft overlay — smoothes merged dots into a texture
-    // ------------------------------------------------------------------
-    if (zoom < 0.3) {
-      const blurAlpha = (1 - zoom / 0.3) * 0.3;
-      ctx.fillStyle = isDark.value
-        ? `rgba(10,10,10,${blurAlpha})`
-        : `rgba(245,246,247,${blurAlpha})`;
-      ctx.fillRect(0, 0, W, H);
+    if (gridOpacity > 0.004) {
+      drawDots(ctx, config, panX, panY, gridOpacity);
     }
 
 

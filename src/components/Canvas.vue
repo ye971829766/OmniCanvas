@@ -25,7 +25,11 @@
       :style="toolbarStyle"
       @change="
         (payload: any) => {
-          if (!payload?.skipHistory) recordHistoryDebounced();
+          if (payload?.immediateSave) {
+            recordHistoryDebounced(50, true);
+          } else if (!payload?.skipHistory) {
+            recordHistoryDebounced();
+          }
         }
       "
       @action="handleToolbarAction"

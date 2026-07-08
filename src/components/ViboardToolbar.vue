@@ -73,8 +73,18 @@
               @pointerleave="onToolPointerLeave"
             >
               <div :class="['icon-wrapper', `${tool.name}-icon`]">
+                <!-- Iconfont Icons -->
+                <span
+                  v-if="tool.icon.startsWith('icon-')"
+                  :class="['iconfont', tool.icon, 'icon-svg']"
+                  style="font-size: 16px; display: flex; align-items: center; justify-content: center;"
+                ></span>
                 <!-- Dynamic Lucide Icons -->
-                <component :is="getIconComponent(tool.icon)" class="icon-svg" />
+                <component
+                  v-else
+                  :is="getIconComponent(tool.icon)"
+                  class="icon-svg"
+                />
               </div>
             </button>
 
@@ -93,7 +103,18 @@
               @pointerleave="onToolPointerLeave"
             >
               <div :class="['icon-wrapper', `${tool.name}-icon`]">
-                <component :is="getIconComponent(tool.icon)" class="icon-svg" />
+                <!-- Iconfont Icons -->
+                <span
+                  v-if="tool.icon.startsWith('icon-')"
+                  :class="['iconfont', tool.icon, 'icon-svg']"
+                  style="font-size: 16px; display: flex; align-items: center; justify-content: center;"
+                ></span>
+                <!-- Dynamic Lucide Icons -->
+                <component
+                  v-else
+                  :is="getIconComponent(tool.icon)"
+                  class="icon-svg"
+                />
               </div>
             </button>
             <span class="tooltip"

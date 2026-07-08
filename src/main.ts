@@ -4,6 +4,7 @@ import 'virtual:uno.css';
 import 'primeicons/primeicons.css';
 import '@incremark/theme/incremark.css';
 import '@/styles/tokens.css';
+import '@/assets/iconfont/iconfont.css';
 
 import App from './App.vue';
 import PrimeVue from 'primevue/config';

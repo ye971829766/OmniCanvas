@@ -147,8 +147,7 @@ const startUpscale = async (scale: number) => {
         // 4. 将新元素加入画布
         rawParent.add(newImage);
 
-        // 5. 触发 change 强制让 Vue 的 Canvas 状态序列化，保存至后台数据库
-        emit("change", { key: "url", value: rawTarget.url, skipHistory: false });
+        emit("change", { key: "url", value: rawTarget.url, skipHistory: false, immediateSave: true });
 
         toast.add({
           severity: "info",

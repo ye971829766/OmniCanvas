@@ -46,6 +46,19 @@ function isLeftoverCropOverlay(data: any): boolean {
   return fillMatches === 4 && strokeMatches === 9;
 }
 
+/** 检查数据是否为残留的任务加载图层（用于自愈被污染的旧数据） */
+function isLeftoverTaskOverlay(data: any): boolean {
+  if (data.tag === "Box" && Array.isArray(data.children)) {
+    return data.children.some(
+      (c: any) =>
+        c.tag === "Text" &&
+        typeof c.text === "string" &&
+        c.text.startsWith("正在"),
+    );
+  }
+  return false;
+}
+
 /** 为节点分配一个跨 undo/redo 稳定的 ID */
 function ensureHistoryId(node: any): string {
   if (!node.__historyId) {
@@ -111,6 +124,17 @@ export function useCanvasHistory(
       data.refId = node.refId;
     }
 
+    // 保存后台异步任务生成状态（支持去背景和局部擦除）
+    if (node.taskId) {
+      data.taskId = node.taskId;
+    }
+    if (node.generationStatus) {
+      data.generationStatus = node.generationStatus;
+    }
+    if (node.generationType) {
+      data.generationType = node.generationType;
+    }
+
     if (data.tag === "ImageGen") {
       data.prompt = node.prompt;
       data.model = node.model;
@@ -145,7 +169,9 @@ export function useCanvasHistory(
             c.tag !== "SimulateElement" &&
             c.__tag !== "SimulateElement" &&
             !c.isCropOverlay &&
-            !isLeftoverCropOverlay(c)
+            !c.isTaskOverlay &&
+            !isLeftoverCropOverlay(c) &&
+            !isLeftoverTaskOverlay(c)
         )
         .map((c: any) => serializeNode(c));
     }
@@ -184,12 +210,17 @@ export function useCanvasHistory(
       }
     }
 
-    // 恢复 historyId 和 refId
+    // 统一为反序列化后的节点绑定异步任务属性
+    if (child) {
+      if (data.taskId) child.taskId = data.taskId;
+      if (data.generationStatus) child.generationStatus = data.generationStatus;
+      if (data.generationType) child.generationType = data.generationType;
+      if (data.refId) child.refId = data.refId;
+    }
+
+    // 恢复 historyId
     if (child && data.__historyId) {
       child.__historyId = data.__historyId;
-    }
-    if (child && data.refId) {
-      child.refId = data.refId;
     }
     return child;
   };
@@ -380,10 +411,16 @@ export function useCanvasHistory(
           (child: any) =>
             child.tag !== "SimulateElement" &&
             child.__tag !== "SimulateElement" &&
-            !child.isCropOverlay,
+            !child.isCropOverlay &&
+            !child.isTaskOverlay &&
+            !isLeftoverTaskOverlay(child),
         )
         .map((child: any) => serializeNode(child));
+      
+      console.log("saveCanvasState: saving childrenData to server:", JSON.stringify(childrenData, null, 2));
+
       await updateWorkspaceCanvas(String(targetId), childrenData);
+      console.log("saveCanvasState: successfully saved canvas state.");
     } catch (e) {
       console.error("Failed to save canvas state to server:", e);
     }
@@ -405,6 +442,8 @@ export function useCanvasHistory(
     if (!targetId) return;
     try {
       const dataList = await getWorkspaceCanvas(String(targetId));
+      console.log("loadCanvasState: loaded dataList from server:", JSON.stringify(dataList, null, 2));
+
       if (Array.isArray(dataList)) {
         if (app.editor) {
           app.editor.cancel();
@@ -413,7 +452,7 @@ export function useCanvasHistory(
         app.tree.children.forEach((child: any) => cleanUpSingleNode(child));
         app.tree.clear();
         dataList.forEach((data: any) => {
-          if (isLeftoverCropOverlay(data)) return;
+          if (isLeftoverCropOverlay(data) || isLeftoverTaskOverlay(data)) return;
           const child = deserializeNode(data);
           if (child) {
             ensureHistoryIdDeep(child);
@@ -428,7 +467,9 @@ export function useCanvasHistory(
             (child: any) =>
               child.tag !== "SimulateElement" &&
               child.__tag !== "SimulateElement" &&
-              !child.isCropOverlay,
+              !child.isCropOverlay &&
+              !child.isTaskOverlay &&
+              !isLeftoverTaskOverlay(child),
           )
           .map((child: any) => serializeNode(child));
         history.push({ serialized, selectedHistoryIds: [] });
@@ -455,7 +496,7 @@ export function useCanvasHistory(
 
   // ── 历史记录 ──────────────────────────────────────────────────────────────
 
-  const recordHistory = () => {
+  const recordHistory = (immediateSave = false) => {
     if (isRestoring) return;
     const app = canvasAppRef.value;
     if (!app?.tree) return;
@@ -497,23 +538,29 @@ export function useCanvasHistory(
         (child: any) =>
           child.tag !== "SimulateElement" &&
           child.__tag !== "SimulateElement" &&
-          !child.isCropOverlay,
+          !child.isCropOverlay &&
+          !child.isTaskOverlay &&
+          !isLeftoverTaskOverlay(child),
       )
       .map((child: any) => serializeNode(child));
     history.push({ serialized, selectedHistoryIds });
     currentIndex = history.length - 1;
 
-    saveCanvasStateDebounced();
+    if (immediateSave) {
+      saveCanvasState();
+    } else {
+      saveCanvasStateDebounced();
+    }
   };
 
-  const recordHistoryDebounced = (delay: number | any = 100) => {
+  const recordHistoryDebounced = (delay: number | any = 100, immediateSave = false) => {
     if (isRestoring) return;
     const actualDelay = typeof delay === "number" ? delay : 100;
     if (debounceTimeout) {
       clearTimeout(debounceTimeout);
     }
     debounceTimeout = setTimeout(() => {
-      recordHistory();
+      recordHistory(immediateSave);
     }, actualDelay);
   };
 

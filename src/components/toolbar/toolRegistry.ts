@@ -87,14 +87,14 @@ export const defaultTools = computed<ToolDefinition[]>(() => [
     name: "image-gen",
     shortcut: "i",
     theme: "blue",
-    icon: "Sparkles",
+    icon: "icon-tupianshengcheng",
     label: "图片生成器",
   },
   {
     name: "video-gen",
     shortcut: "o",
     theme: "blue",
-    icon: "Video",
+    icon: "icon-a-shipinshengchengshipinzhizuoshipinchuangjianshipinshengchengzhizuoshipinhechengshipinshengchengchuangzuoyingpianshengchengyingpianzhizuoyingpianchuangjianshi",
     label: "视频生成器",
   },
   {

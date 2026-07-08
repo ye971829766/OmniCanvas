@@ -320,6 +320,7 @@ const channelForm = ref({
   apiKey: "",
   weight: 10,
   modelsRaw: "*",
+  status: true,
 });
 
 const filteredChannels = computed(() => {
@@ -350,6 +351,7 @@ function openModal(channel?: Channel) {
       apiKey: channel.apiKey,
       weight: channel.weight,
       modelsRaw: channel.models ? channel.models.join(", ") : "*",
+      status: channel.status,
     };
   } else {
     editingChannelId.value = null;
@@ -360,6 +362,7 @@ function openModal(channel?: Channel) {
       apiKey: "",
       weight: 10,
       modelsRaw: "*",
+      status: true,
     };
   }
   channelModalOpen.value = true;
@@ -487,6 +490,7 @@ async function saveChannel() {
       apiKey: channelForm.value.apiKey,
       weight: channelForm.value.weight,
       models,
+      status: channelForm.value.status,
     };
     if (editingChannelId.value) {
       await updateChannel(editingChannelId.value, payload);

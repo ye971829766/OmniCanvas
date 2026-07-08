@@ -16,6 +16,33 @@ import OmniCanvasAvatar from "@/assets/plot_twist_avatar.jpg";
 import logoImg from "@/assets/logo.jpg";
 import type { ChatMessage, ToolCallItem } from "@/composables/useAgent";
 import { stripInternalToolErrors } from "@/composables/useAgent";
+import { getToolActiveLabel } from "./tool-labels";
+
+function getToolActiveNameText(name: string): string {
+  if (name === "generate_image") return "正在执行 GPT Image 2";
+  if (name === "collect_inspiration") return "正在收集图片灵感";
+  if (name === "generate_video") return "正在执行 VideoGen";
+  if (
+    name === "add_text" ||
+    name === "set_frame" ||
+    name === "add_rect" ||
+    name === "add_frame"
+  ) {
+    return "正在进行排版设计";
+  }
+  return getToolActiveLabel(name);
+}
+
+function getThinkingText(m: ChatMessage): string {
+  if (m.tools && m.tools.length > 0) {
+    const activeTool = m.tools.find((t) => !t.done);
+    if (activeTool) {
+      return getToolActiveNameText(activeTool.name);
+    }
+  }
+  return "思考中";
+}
+
 
 const props = defineProps<{
   messages: ChatMessage[];
@@ -150,31 +177,10 @@ function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
 function filterBlocks(blocks: any[]): any[] {
   if (!blocks || !blocks.length) return [];
   const result: any[] = [];
-  let hasLayoutBadge = false;
 
   for (const blk of blocks) {
     if (blk.type === "text") {
       if (blk.text && stripInternalToolErrors(blk.text).trim()) {
-        result.push(blk);
-      }
-    } else if (blk.type === "tools" && blk.tools && blk.tools.length > 0) {
-      const isPureLayout = blk.tools.every((t: any) =>
-        [
-          "add_text",
-          "set_frame",
-          "add_rect",
-          "add_frame",
-          "update_node",
-          "remove_node",
-        ].includes(t.name),
-      );
-
-      if (isPureLayout) {
-        if (!hasLayoutBadge) {
-          result.push(blk);
-          hasLayoutBadge = true;
-        }
-      } else {
         result.push(blk);
       }
     }
@@ -395,8 +401,9 @@ function parseUserText(text: string) {
                 "
                 aria-label="AI 正在思考"
               >
-                <span class="thinking-label">思考中</span>
+                <span class="thinking-label">{{ getThinkingText(m) }}</span>
               </div>
+
 
               <!-- Interleaved Blocks Rendering (Text -> Tool -> Text -> Tool) -->
               <div
@@ -1469,7 +1476,7 @@ function parseUserText(text: string) {
   gap: 6px;
   max-width: 90%;
   justify-content: flex-end;
-  margin-top: 2px;
+  margin-top: 8px;
   margin-bottom: 4px;
 }
 

@@ -626,6 +626,7 @@ const applyEraser = async () => {
           key: "url",
           value: rawTarget.url,
           skipHistory: false,
+          immediateSave: true,
         });
       }
     }

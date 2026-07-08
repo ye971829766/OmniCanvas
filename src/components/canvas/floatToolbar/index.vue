@@ -77,7 +77,8 @@ const GENERATION_STATE_KEYS = new Set([
   "errorMessage",
 ]);
 
-const applyToolbarChange = ({ key, value, skipHistory }: ToolbarChangePayload) => {
+const applyToolbarChange = (payload: ToolbarChangePayload) => {
+  const { key, value, skipHistory, immediateSave } = payload;
   const target = props.target as ToolbarTarget | undefined;
   
   if (!target) return;
@@ -89,7 +90,12 @@ const applyToolbarChange = ({ key, value, skipHistory }: ToolbarChangePayload) =
   }
 
   refreshLocalToolbar();
-  emit("change", { key, value, skipHistory: skipHistory || GENERATION_STATE_KEYS.has(key) });
+  emit("change", {
+    key,
+    value,
+    skipHistory: skipHistory || GENERATION_STATE_KEYS.has(key),
+    immediateSave,
+  });
 };
 
 const runToolbarAction = ({ action, target: payloadTarget }: ToolbarActionPayload) => {

@@ -793,6 +793,7 @@ export function useCanvas(
         overflow: "hide",
         hittest: false, // Completely click-through so user can drag/move image underneath
       });
+      (loadingGroup as any).isTaskOverlay = true;
 
       const mask = new Rect({
         width: w,
