@@ -236,6 +236,26 @@ MOCK_IMAGE_GENERATION=false
 MOCK_VIDEO=false
 ```
 
+### 4. Configuring Google Sign-In (Optional) / 配置 Google 登录 (可选)
+
+OmniCanvas supports quick login using Google OAuth 2.0. If you wish to configure Google Sign-In:
+
+1. **Get Client ID**: Go to the [Google Cloud Console Credentials Page](https://console.cloud.google.com/apis/credentials), create an **OAuth client ID** for a Web Application.
+2. **Set Redirect URIs**: Configure Authorized JavaScript origins to include `http://localhost:5173` (or your production domain).
+3. **Configure Environment Variables**:
+   - **Frontend (`.env`)**: Add `VITE_GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com`
+   - **Backend (`server/.env`)**: Add `GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com`
+
+---
+
+OmniCanvas 原生支持使用 Google OAuth 2.0 进行快捷登录。如需启用 Google 登录：
+
+1. **获取客户端 ID**：访问 [Google Cloud Console 凭据页面](https://console.cloud.google.com/apis/credentials)，创建一个 **OAuth 2.0 客户端 ID** (应用类型选择 Web 应用)。
+2. **设置授权源**：将您的前端来源（如 `http://localhost:5173`，生产环境则是您的域名）添加至 **"已授权的 JavaScript 来源"** 中。
+3. **配置环境变量**：
+   - **前端 (`.env`)**：配置 `VITE_GOOGLE_CLIENT_ID=您的客户端ID.apps.googleusercontent.com`
+   - **后端 (`server/.env`)**：配置 `GOOGLE_CLIENT_ID=您的客户端ID.apps.googleusercontent.com`
+
 ---
 
 ## ⚡ Running the Application

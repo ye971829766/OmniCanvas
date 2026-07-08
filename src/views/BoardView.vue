@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { FolderKanban, Lock } from "lucide-vue-next";
+import { FolderKanban } from "lucide-vue-next";
 import Canvas from "../components/Canvas.vue";
 import Sidebar from "../components/sidebar.vue";
 import AgentPanel from "../components/AgentPanel.vue";
@@ -12,7 +12,11 @@ import AuthModal from "@/components/auth/AuthModal.vue";
 
 const route = useRoute();
 const router = useRouter();
-const { isLoggedIn, openAuthModal, fetchProfile, isInitializing: isUserInitializing } = useUser();
+const {
+  isLoggedIn,
+  fetchProfile,
+  isInitializing: isUserInitializing,
+} = useUser();
 
 const canvasRef = ref<any>(null);
 const agentPanelCollapsed = ref(false);
@@ -28,7 +32,7 @@ const validateAndSetWorkspace = async () => {
     workspaces.value = [];
     activeWorkspaceId.value = null;
     isInitializing.value = false;
-    openAuthModal("login");
+    router.push("/login");
     return;
   }
 
@@ -36,7 +40,9 @@ const validateAndSetWorkspace = async () => {
   try {
     workspaces.value = await getWorkspaces();
     if (queryId) {
-      const exists = workspaces.value.some((w) => String(w.id) === String(queryId));
+      const exists = workspaces.value.some(
+        (w) => String(w.id) === String(queryId),
+      );
       if (exists) {
         activeWorkspaceId.value = String(queryId);
       } else {
@@ -69,15 +75,20 @@ onBeforeUnmount(() => {
   window.removeEventListener("agent:open-panel", handleOpenAgentPanel);
 });
 
-watch(isLoggedIn, (loggedIn) => {
-  if (!loggedIn) {
-    workspaces.value = [];
-    activeWorkspaceId.value = null;
-    openAuthModal("login");
-  } else {
-    validateAndSetWorkspace();
-  }
-});
+watch(
+  [isLoggedIn, isUserInitializing],
+  ([loggedIn, initializing]) => {
+    if (initializing) return;
+    if (!loggedIn) {
+      workspaces.value = [];
+      activeWorkspaceId.value = null;
+      router.push("/login");
+    } else {
+      validateAndSetWorkspace();
+    }
+  },
+  { immediate: true }
+);
 
 // Sync query parameter changes (including page load, history navigation) to state with validation
 watch(
@@ -117,35 +128,7 @@ watch(activeWorkspaceId, (newId) => {
     <AuthModal />
 
     <!-- Full Page Layout Skeleton during initial network loading -->
-    <WorkspaceSkeleton v-if="isInitializing" />
-
-    <!-- Unauthenticated state requirement card -->
-    <div
-      v-else-if="!isLoggedIn"
-      class="w-full h-full flex flex-col items-center justify-center bg-[var(--p-surface-50)] text-[var(--p-text-color)]"
-    >
-      <div
-        class="flex flex-col items-center gap-5 max-w-md text-center p-8 rounded-2xl bg-[var(--p-surface-0)] border border-[var(--p-surface-200)] shadow-lg"
-      >
-        <div
-          class="w-16 h-16 rounded-full bg-[var(--p-primary-color)]/10 flex items-center justify-center text-[var(--p-primary-color)] shrink-0"
-        >
-          <Lock :size="32" />
-        </div>
-        <h3 class="text-xl font-bold text-[var(--p-text-color)]">
-          需要登录后使用画布
-        </h3>
-        <p class="text-sm text-[var(--p-text-muted-color)] leading-relaxed">
-          为了保障您的设计工程与工作空间数据安全，使用 OmniCanvas 画布必须先登录账号。
-        </p>
-        <Button
-          label="立即登录 / 注册"
-          icon="pi pi-user"
-          class="w-full mt-2"
-          @click="openAuthModal('login')"
-        />
-      </div>
-    </div>
+    <WorkspaceSkeleton v-if="isInitializing || !isLoggedIn" />
 
     <!-- Actual Workspace View after loading -->
     <template v-else>
