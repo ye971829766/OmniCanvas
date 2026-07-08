@@ -47,6 +47,7 @@ By deeply combining real-time spatial state parsing with LLM reasoning, visual a
 - **Smart Image Manipulation & Crop**: Non-destructive image insertion, precise dynamic cropping (`useCanvasCrop`), aspect-ratio lock, and mask controls.
 - **Containers & Framing (Frame)**: Nested frame artboards supporting grouping, boundary snapping (`leafer-x-easy-snap`), and spatial region management.
 - **Non-Destructive History & Background**: Full undo/redo stack snapshot management, coupled with customizable grid, dot matrix, and infinite viewport backgrounds.
+- **Interactive Mouse-Glowing Grid**: A premium obsidian dark background gradient (`#16161a` -> `#0a0a0c`) with dynamic, mouse-following radial glowing dot matrix and soft spotlight illumination.
 
 ### 🤖 2. Autonomous Multi-Modal AI Agent & MCOT Reasoning Network
 
@@ -66,10 +67,13 @@ OmniCanvas provides a modular, pluggable 10+ tool registry (`server/src/agent/to
 - 👁️ `vision-analysis.tools`: LLM Vision-assisted aesthetic evaluation, visual hierarchy checking, and design compliance verification.
 - 🔍 `web-search.tools` & `inspiration.tools`: Real-time web inspiration fetching, color moodboard curation, and reference search.
 
-### 🖼️ 4. Native Multi-Modal Generation Pipeline
+### 🖼️ 4. Native Multi-Modal Generation & Intelligent Image Editing
 
-- **AI Image Generation**: Direct integration with Flux, OpenAI DALL-E 3, and Google Gemini Imagen with progress streaming and instant canvas placement.
-- **AI Video Generation**: Native support for Luma, CogVideo, and local FFmpeg video rendering pipelines.
+- **AI Image & Video Generation**: Direct integration with Flux, DALL-E 3, Gemini, Luma, CogVideo, and local FFmpeg video rendering. Supports dynamic parameter configuration customized by the Agent based on user instructions.
+- **AI Image Editing (Remove BG & Inpaint)**: High-precision background removal and selective region inpainting (via Baidu AI) integrated directly onto vector image objects.
+- **Local Super-Resolution (Real-ESRGAN)**: 4x high-fidelity image upscaling and clarity reconstruction using local `realesrgan-ncnn-vulkan` pipelines.
+- **Parabolic Fly-to-Agent Reference Flow**: Press `Ctrl + Mouse Left Click` on any canvas element to send it to the Agent conversation input via a GSAP parabolic curve flight animation (with automatic closed-panel final position prediction).
+- **Private Asset Library (素材库)**: Full-featured PrimeVue-based user private asset manager with folder groups (CRUD, inline rename), drag-and-drop custom sorting, multi-type filters, and collision-free canvas placement.
 
 ### 🛠️ 5. Enterprise Admin & Dynamic Gateway Management
 
@@ -81,14 +85,19 @@ OmniCanvas provides a modular, pluggable 10+ tool registry (`server/src/agent/to
 
 ## 🌟 中文核心特性
 
-- 🎨 **超高性能矢量无限画布**：底层基于 Leafer UI 2.x 极速渲染引擎构建，支持无级缩放、GPU 硬件加速、丰富矢量图形（矩形/星形/多边形/箭头/连线）、Mark 画笔标注、TipTap 富文本与 KaTeX 数学公式渲染。
-- 🤖 **自主多模态 AI Agent 与 MCOT 思维链图谱**：具备实时空间状态感知能力，可将画布 JSON 结构即时解析入上下文；内置 Multi-Chain of Thought (MCOT) 可视化思维链图谱与 SSE 低延迟流式响应。
-- 🧰 **工业级 10+ Tool Calling 工具矩阵**：涵盖矢量控制、智能对齐布局（Grid/Flex/Flow）、自动调色板生成、UI 设计方案规划、基于视觉模型的图像审查（Vision Analysis）及联网灵感搜索。
-- 🖼️ **原生多模态生成流水线**：无缝打通 Flux / DALL-E 3 / Gemini 图像生成与 Luma / CogVideo 视频生成，生成结果实时直通画布图层。
-- 🎛️ **交互式设计方案选项卡 (Option Preview Cards)**：Agent 自动推演多套设计变体并渲染选型卡片，用户在聊天面板中一键实时预览并一键应用至画布。
-- 📐 **专业图层与画板框架管理 (Layer & Frame)**：支持树状图层面板、拖拽重排、锁定/隐藏、成组/解组、容器画板 (Frame) 及点阵/网格背景自定义。
-- 🛠️ **专属 Admin 企业级管理后台**：内置独立控制台（Vue 3 + Element Plus），提供系统监控、多上游渠道管理、模型目录配置及 API 连通性诊断测试。
-- 🔌 **全能 AI 网关与混合脱机开发引擎**：原生支持 OpenAI、Google Gemini、Anthropic 及第三方网关（云雾 Yunwu API），支持全套脱机 Mock 仿真调试。
+- 🎨 **超高性能矢量无限画布**：底层基于 Leafer UI 2.x 极速渲染引擎构建，支持无级缩放、GPU 硬件加速、丰富矢量图形（矩形/星形/多边形/连接线）、Mark 画笔标注、TipTap 富文本与 KaTeX 数学公式。
+- ✨ **动态鼠标泛光矩阵背景**：暗黑模式下精美深炭灰渐变背景，点阵在鼠标周围 200px 内自动平滑泛光，并带有动态蓝光聚光灯跟随。
+- 🤖 **自主多模态 AI Agent 与 MCOT 思维链**：具备实时空间状态感知能力，可将画布 JSON 结构即时解析入上下文；内置 Multi-Chain of Thought (MCOT) 可视化思维链与 SSE 低延迟流式响应。
+- 🧰 **工业级 10+ Tool Calling 工具矩阵**：涵盖矢量控制、对齐布局、自动调色板、UI方案规划、视觉图像审查（Vision Analysis）及联网搜索。
+- 🖼️ **原生多模态生成与参数自由定制**：打通 Flux / DALL-E 3 / Gemini / Luma / CogVideo 生成，支持 Agent 根据用户需求自主推荐并微调多维度生成参数，集成 FFmpeg 视频渲染。
+- 🪄 **AI 智能图像处理（一键去背景与局部重绘）**：原生集成高精度智能去背景（Remove Background）与局部重绘擦除（Inpaint）算法，生成结果无损回填矢量画布。
+- 🔍 **本地超分清晰化修复 (Real-ESRGAN)**：支持基于本地 `realesrgan-ncnn-vulkan` 的 4x 图像高保真超分修复与降噪，彻底解决素材模糊问题。
+- 💫 **GSAP 曲线引用飞入流**：画布元素上 `Ctrl + 鼠标左键` 触发抛物线飞入动画并添加为 Agent 参考图，支持 Agent 面板折叠状态下的轨迹智能终点预测。
+- 📦 **用户私有素材库（素材管理器）**：全面基于 PrimeVue 构建，提供图片/视频过滤、分类自定义文件夹（CRUD 及行内重命名）、最新上传/名称/拖拽自定义重排、双击非重叠自动防碰撞置入画布。
+- 🎛️ **交互式方案选项卡 (Option Preview Cards)**：Agent 自动生成多套设计变体并渲染选型卡片，用户在聊天面板中一键预览并应用至画布。
+- 📐 **专业图层与画板框架管理 (Layer & Frame)**：支持树状图层面板、拖拽重排、锁定/隐藏、成组/解组、容器画板 (Frame)。
+- 🛠️ **专属 Admin 企业级管理后台**：内置独立控制台（Vue 3 + Element Plus），提供系统监控、多上游渠道管理、模型配置及 API 连通性测试。
+- 🔌 **全能 AI 网关与混合脱机开发引擎**：原生支持 OpenAI、Google Gemini、Anthropic 及第三方网关，支持全套脱机 Mock 仿真调试。
 
 ---
 
