@@ -246,7 +246,9 @@ export class VideoNode extends Box {
     this._isCreatingVideoLayer = false;
     if (this.videoEl !== videoEl) return;
     this.opacity = 0;
-    videoEl.play();
+    videoEl.play().catch((err) => {
+      console.warn("[VideoNode] Failed to auto-play video:", err);
+    });
 
     // 视频层不接收指针事件，由 Leafer 元素层统一处理鼠标交互
     videoEl.style.pointerEvents = "none";
@@ -387,7 +389,9 @@ export class VideoNode extends Box {
     this.playBtn.onclick = () => {
       if (!this.videoEl) return;
       if (this.videoEl.paused) {
-        this.videoEl.play();
+        this.videoEl.play().catch((err) => {
+          console.warn("[VideoNode] Play button action failed:", err);
+        });
         this.playBtn!.innerHTML = "⏸";
       } else {
         this.videoEl.pause();

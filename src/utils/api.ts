@@ -507,3 +507,78 @@ export async function inpaintImage(
   return res.data;
 }
 
+// ---- Asset Library (素材库) APIs ----
+
+export interface AssetGroup {
+  id: string;
+  userId: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface Asset {
+  id: string;
+  userId: string;
+  name: string;
+  type: string;
+  url: string;
+  thumbnailUrl?: string;
+  groupId?: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export async function getAssetGroups(): Promise<AssetGroup[]> {
+  const res = await request.get<AssetGroup[]>("/assets/groups");
+  return res.data;
+}
+
+export async function createAssetGroup(name: string): Promise<AssetGroup> {
+  const res = await request.post<AssetGroup>("/assets/groups", { name });
+  return res.data;
+}
+
+export async function renameAssetGroup(id: string, name: string): Promise<boolean> {
+  const res = await request.patch<boolean>(`/assets/groups/${id}`, { name });
+  return res.data;
+}
+
+export async function deleteAssetGroup(id: string): Promise<boolean> {
+  const res = await request.delete<boolean>(`/assets/groups/${id}`);
+  return res.data;
+}
+
+export async function getAssets(groupId?: string, type?: string): Promise<Asset[]> {
+  const res = await request.get<Asset[]>("/assets", {
+    params: { groupId, type },
+  });
+  return res.data;
+}
+
+export async function addAsset(data: {
+  name: string;
+  type: string;
+  url: string;
+  thumbnailUrl?: string;
+  groupId?: string;
+}): Promise<Asset> {
+  const res = await request.post<Asset>("/assets", data);
+  return res.data;
+}
+
+export async function moveAssetGroup(id: string, groupId: string | null): Promise<boolean> {
+  const res = await request.patch<boolean>(`/assets/${id}/group`, { groupId });
+  return res.data;
+}
+
+export async function deleteAsset(id: string): Promise<boolean> {
+  const res = await request.delete<boolean>(`/assets/${id}`);
+  return res.data;
+}
+
+export async function reorderAssets(assetIds: string[]): Promise<boolean> {
+  const res = await request.post<boolean>("/assets/reorder", { assetIds });
+  return res.data;
+}
+
+

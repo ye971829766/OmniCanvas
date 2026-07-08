@@ -15,6 +15,7 @@ declare module 'vue' {
     AgentInput: typeof import('./components/agent/AgentInput.vue')['default']
     AgentMessages: typeof import('./components/agent/AgentMessages.vue')['default']
     AgentPanel: typeof import('./components/AgentPanel.vue')['default']
+    AssetLibraryDialog: typeof import('./components/canvas/AssetLibraryDialog.vue')['default']
     AuthModal: typeof import('./components/auth/AuthModal.vue')['default']
     AutoLayoutAndFreeLayout: typeof import('./components/canvas/floatToolbar/custom/AutoLayoutAndFreeLayout.vue')['default']
     BorderTool: typeof import('./components/canvas/floatToolbar/custom/BorderTool.vue')['default']

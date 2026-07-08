@@ -286,3 +286,33 @@ video {
   background-color: transparent !important;
 }
 
+/* ==================== PrimeVue Image Preview Dark Mode Overrides ==================== */
+.p-dark .p-image-preview-mask,
+.p-dark .p-image-mask {
+  background-color: rgba(9, 9, 11, 0.85) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.p-dark .p-image-preview-toolbar,
+.p-dark .p-image-toolbar {
+  background-color: rgba(24, 24, 27, 0.9) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 9999px;
+  padding: 0.5rem 1rem;
+}
+
+.p-dark .p-image-preview-action,
+.p-dark .p-image-action {
+  color: #f4f4f5 !important;
+}
+
+.p-dark .p-image-preview-action:hover,
+.p-dark .p-image-action:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+  border-radius: 9999px;
+}
+

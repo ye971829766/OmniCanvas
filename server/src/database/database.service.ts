@@ -143,6 +143,31 @@ export class DatabaseService implements OnModuleInit {
         createdAt TEXT NOT NULL
       )
     `);
+
+    // 8. Create asset_groups table
+    this.dbInstance.run(`
+      CREATE TABLE IF NOT EXISTS asset_groups (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      )
+    `);
+
+    // 9. Create assets table
+    this.dbInstance.run(`
+      CREATE TABLE IF NOT EXISTS assets (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        url TEXT NOT NULL,
+        thumbnailUrl TEXT,
+        groupId TEXT,
+        sortOrder INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT NOT NULL
+      )
+    `);
   }
 
   get db(): Database {

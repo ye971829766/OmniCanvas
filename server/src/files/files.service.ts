@@ -566,7 +566,7 @@ export class FilesService implements OnModuleInit {
     const expiresIn = parseInt(data.expires_in || "2592000");
     this.baiduTokenExpireTime = Date.now() + (expiresIn - 300) * 1000;
 
-    return this.baiduAccessToken;
+    return this.baiduAccessToken!;
   }
 
   async inpaintImage(

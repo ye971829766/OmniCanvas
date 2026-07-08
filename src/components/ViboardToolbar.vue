@@ -98,7 +98,7 @@
               unstyled
               :data-tool="tool.name"
               :data-shortcut="tool.shortcut.toUpperCase()"
-              @click="triggerFileUpload"
+              @click="triggerFileUpload($event)"
               @pointerenter="onToolPointerEnter(tool.name)"
               @pointerleave="onToolPointerLeave"
             >
@@ -129,6 +129,15 @@
         </template>
       </div>
     </div>
+
+    <!-- PrimeVue Upload Popup Menu -->
+    <Menu ref="uploadMenuRef" :model="uploadMenuItems" :popup="true" />
+
+    <!-- Asset Library Dialog -->
+    <AssetLibraryDialog
+      v-model="assetLibraryVisible"
+      @insert-media="(media: any) => emit('insert-media', media)"
+    />
   </div>
 </template>
 
@@ -201,6 +210,7 @@ const emit = defineEmits([
   "change-font-family",
   "submit-link",
   "upload-file",
+  "insert-media",
 ]);
 
 // Use provided tools or fall back to default registry
@@ -221,6 +231,29 @@ const propertiesToolbarWrapper = ref<HTMLDivElement | null>(null);
 const activePill = ref<HTMLDivElement | null>(null);
 const hoverPill = ref<HTMLDivElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+
+// ---- Asset Library & Menu State ----
+import AssetLibraryDialog from "./canvas/AssetLibraryDialog.vue";
+import Menu from "primevue/menu";
+
+const assetLibraryVisible = ref(false);
+const uploadMenuRef = ref<any>(null);
+const uploadMenuItems = ref([
+  {
+    label: "文件上传",
+    icon: "pi pi-upload",
+    command: () => {
+      fileInput.value?.click();
+    },
+  },
+  {
+    label: "从素材库上传",
+    icon: "pi pi-images",
+    command: () => {
+      assetLibraryVisible.value = true;
+    },
+  },
+]);
 
 // --- Shared panel state (v-model passthrough) ---
 const hoveredTool = ref<string | null>(null);
@@ -346,8 +379,8 @@ function handleToolClick(toolName: string) {
   showPropertiesPanel.value = true;
 }
 
-function triggerFileUpload() {
-  fileInput.value?.click();
+function triggerFileUpload(event: Event) {
+  uploadMenuRef.value?.toggle(event);
 }
 
 function handleFileSelect(event: Event) {

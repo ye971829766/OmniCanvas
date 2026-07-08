@@ -5,6 +5,7 @@
     <div
       class="flex-1 relative overflow-hidden w-full h-full"
       ref="canvasRef"
+      style="z-index: 1;"
     ></div>
     <ElementInfoLabel
       v-if="selectTarget"
@@ -46,6 +47,7 @@
       @change-font-family="onFontFamilyChange"
       @submit-link="onSubmitLink"
       @upload-file="onUploadFile"
+      @insert-media="insertMedia"
     />
 
     <LayerPanel
@@ -537,6 +539,109 @@ const onUploadFile = async (file: File) => {
       severity: "error",
       summary: "上传失败",
       detail,
+      life: 3000,
+    });
+  }
+};
+
+const insertMedia = async (media: { url: string; type: string; thumbnailUrl?: string }) => {
+  try {
+    if (media.type === "image") {
+      const img = new window.Image();
+      img.src = media.url;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => {
+          const naturalWidth = img.naturalWidth;
+          const naturalHeight = img.naturalHeight;
+          const existingBounds = Array.from(canvasApp.value!.tree.children || [])
+            .filter((child: any) => child.x !== undefined && child.y !== undefined)
+            .map((child: any) => ({
+              x: child.x,
+              y: child.y,
+              width: child.width || naturalWidth,
+              height: child.height || naturalHeight,
+            }));
+          const { x, y } = getNonOverlappingCoordinates({
+            range: 5000,
+            existingBounds,
+            newWidth: naturalWidth,
+            newHeight: naturalHeight,
+            margin: 50,
+          });
+          const image = new Image({
+            x,
+            y,
+            width: naturalWidth,
+            height: naturalHeight,
+            url: media.url,
+            editable: true,
+          });
+          if (image && canvasApp.value?.tree) {
+            canvasApp.value.tree.add(image);
+            recordHistoryDebounced();
+            setTimeout(() => {
+              if (canvasApp.value?.tree) {
+                (canvasApp.value.tree as any).zoom(image, 100, undefined, 0.8);
+              }
+            }, 100);
+          }
+          resolve();
+        };
+        img.onerror = reject;
+      });
+    } else if (media.type === "video") {
+      const video = document.createElement("video");
+      video.src = media.url;
+      video.muted = true;
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => {
+          const naturalWidth = video.videoWidth;
+          const naturalHeight = video.videoHeight;
+          const existingBounds = Array.from(canvasApp.value!.tree.children || [])
+            .filter((child: any) => child.x !== undefined && child.y !== undefined)
+            .map((child: any) => ({
+              x: child.x,
+              y: child.y,
+              width: child.width || naturalWidth,
+              height: child.height || naturalHeight,
+            }));
+          const { x, y } = getNonOverlappingCoordinates({
+            range: 2000,
+            existingBounds,
+            newWidth: naturalWidth,
+            newHeight: naturalHeight,
+            margin: 50,
+          });
+          VideoNode.create({
+            x,
+            y,
+            width: naturalWidth,
+            height: naturalHeight,
+            videoUrl: media.url,
+            thumbnailUrl: media.thumbnailUrl || media.url,
+            editable: true,
+          }).then((videoNode) => {
+            if (videoNode && canvasApp.value?.tree) {
+              canvasApp.value.tree.add(videoNode);
+              recordHistoryDebounced();
+              setTimeout(() => {
+                if (canvasApp.value?.tree) {
+                  (canvasApp.value.tree as any).zoom(videoNode, 100, undefined, 0.8);
+                }
+              }, 100);
+            }
+            resolve();
+          }).catch(reject);
+        };
+        video.onerror = reject;
+      });
+    }
+  } catch (error: any) {
+    console.error("Failed to insert media from library:", error);
+    toast.add({
+      severity: "error",
+      summary: "插入失败",
+      detail: error?.message || "无法加载媒体，请稍后重试",
       life: 3000,
     });
   }
