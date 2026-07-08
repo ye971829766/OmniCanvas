@@ -1,6 +1,5 @@
 import {
   ref,
-  shallowRef,
   onMounted,
   onUnmounted,
   type Ref,
@@ -121,7 +120,10 @@ export function useCanvasBackground(
 
     // Bake DPR into the transform so all draw calls use logical px
     const ctx = canvas.getContext("2d");
-    if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (ctx) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawScene(ctx); // Redraw immediately to avoid a blank frame and flashing during layout transitions
+    }
   }
 
   // ---- dark-mode observation ------------------------------------------------
@@ -211,19 +213,7 @@ export function useCanvasBackground(
     }
   }
 
-  function draw(): void {
-    const canvas = canvasEl.value;
-    if (!canvas || logicalW === 0 || logicalH === 0) {
-      rafId = requestAnimationFrame(draw);
-      return;
-    }
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      rafId = requestAnimationFrame(draw);
-      return;
-    }
-
+  function drawScene(ctx: CanvasRenderingContext2D): void {
     const app = leaferApp.value;
     // Read zoom & pan directly from Leafer tree viewport
     const zoom: number = app ? ((app.tree as any).scale ?? 1) : 1;
@@ -261,13 +251,26 @@ export function useCanvasBackground(
       drawDots(ctx, config, panX, panY, gridOpacity);
     }
 
-
-
     // ------------------------------------------------------------------
     // Ripples (drawn on top so they're always visible)
     // ------------------------------------------------------------------
     drawRipples(ctx, performance.now());
+  }
 
+  function draw(): void {
+    const canvas = canvasEl.value;
+    if (!canvas || logicalW === 0 || logicalH === 0) {
+      rafId = requestAnimationFrame(draw);
+      return;
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      rafId = requestAnimationFrame(draw);
+      return;
+    }
+
+    drawScene(ctx);
     rafId = requestAnimationFrame(draw);
   }
 
