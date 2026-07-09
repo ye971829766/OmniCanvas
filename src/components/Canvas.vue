@@ -104,9 +104,7 @@
     </div>
 
     <div class="absolute right-4 top-4 z-40 flex items-center gap-3">
-      <ZoomController
-        :canvas-app="canvasApp"
-      />
+      <ZoomController :canvas-app="canvasApp" />
       <button
         class="agent-launcher-btn cursor-pointer flex items-center justify-center"
         title="打开 AI 助手"
@@ -130,7 +128,7 @@
           alt="OmniCanvas"
           width="28"
           height="28"
-          style="width: 28px; height: 28px; object-fit: cover;"
+          style="width: 28px; height: 28px; object-fit: cover"
           class="w-28px h-28px rounded-full object-cover"
         />
       </button>
@@ -151,14 +149,20 @@
           class="custom-context-menu-item"
           @click="handleItemClick(handleImageToImage)"
         >
-          <i class="pi pi-image text-primary-500"></i>
+          <i
+            class="pi pi-image text-primary-500"
+            style="font-size: 18px !important"
+          ></i>
           <span>图生图</span>
         </div>
         <div
           class="custom-context-menu-item"
           @click="handleItemClick(handleImageToVideo)"
         >
-          <i class="pi pi-video text-primary-500"></i>
+          <i
+            class="pi pi-video text-primary-500"
+            style="font-size: 18px !important"
+          ></i>
           <span>图生视频</span>
         </div>
       </template>
@@ -171,7 +175,10 @@
             )
           "
         >
-          <i class="pi pi-sparkles text-primary-500"></i>
+          <i
+            class="iconfont icon-tupianshengcheng text-primary-500"
+            style="font-size: 18px !important"
+          ></i>
           <span>图片生成</span>
         </div>
         <div
@@ -182,21 +189,30 @@
             )
           "
         >
-          <i class="pi pi-video text-primary-500"></i>
+          <i
+            class="iconfont icon-a-shipinshengchengshipinzhizuoshipinchuangjianshipinshengchengzhizuoshipinhechengshipinshengchengchuangzuoyingpianshengchengyingpianzhizuoyingpianchuangjianshi text-primary-500"
+            style="font-size: 18px !important"
+          ></i>
           <span>视频生成</span>
         </div>
         <div
           class="custom-context-menu-item"
           @click="handleItemClick(() => fileInputRef?.click())"
         >
-          <i class="pi pi-upload text-primary-500"></i>
+          <i
+            class="pi pi-upload text-primary-500"
+            style="font-size: 17px !important"
+          ></i>
           <span>文件上传</span>
         </div>
         <div
           class="custom-context-menu-item"
           @click="handleItemClick(() => toolbarRef?.openAssetLibrary())"
         >
-          <i class="pi pi-images text-primary-500"></i>
+          <i
+            class="pi pi-images text-primary-500"
+            style="font-size: 17px !important"
+          ></i>
           <span>从素材库选择</span>
         </div>
       </template>
@@ -331,7 +347,11 @@ const closeContextMenu = () => {
 
 const isInsideContextMenu = (event: Event) => {
   const menu = contextMenuRef.value;
-  return !!(menu && event.target instanceof Node && menu.contains(event.target));
+  return !!(
+    menu &&
+    event.target instanceof Node &&
+    menu.contains(event.target)
+  );
 };
 
 const handleDocumentPointerDown = (event: globalThis.PointerEvent) => {
@@ -874,7 +894,10 @@ const onUploadFile = async (file: File) => {
     }
   } catch (error: any) {
     console.error("Failed to upload file:", error);
-    const detail = error?.response?.data?.message || error?.message || "上传失败，请确保后端服务器正常运行。";
+    const detail =
+      error?.response?.data?.message ||
+      error?.message ||
+      "上传失败，请确保后端服务器正常运行。";
     toast.add({
       severity: "error",
       summary: "上传失败",
@@ -884,7 +907,11 @@ const onUploadFile = async (file: File) => {
   }
 };
 
-const insertMedia = async (media: { url: string; type: string; thumbnailUrl?: string }) => {
+const insertMedia = async (media: {
+  url: string;
+  type: string;
+  thumbnailUrl?: string;
+}) => {
   try {
     if (media.type === "image") {
       const img = new window.Image();
@@ -893,8 +920,12 @@ const insertMedia = async (media: { url: string; type: string; thumbnailUrl?: st
         img.onload = () => {
           const naturalWidth = img.naturalWidth;
           const naturalHeight = img.naturalHeight;
-          const existingBounds = Array.from(canvasApp.value!.tree.children || [])
-            .filter((child: any) => child.x !== undefined && child.y !== undefined)
+          const existingBounds = Array.from(
+            canvasApp.value!.tree.children || [],
+          )
+            .filter(
+              (child: any) => child.x !== undefined && child.y !== undefined,
+            )
             .map((child: any) => ({
               x: child.x,
               y: child.y,
@@ -937,8 +968,12 @@ const insertMedia = async (media: { url: string; type: string; thumbnailUrl?: st
         video.onloadedmetadata = () => {
           const naturalWidth = video.videoWidth;
           const naturalHeight = video.videoHeight;
-          const existingBounds = Array.from(canvasApp.value!.tree.children || [])
-            .filter((child: any) => child.x !== undefined && child.y !== undefined)
+          const existingBounds = Array.from(
+            canvasApp.value!.tree.children || [],
+          )
+            .filter(
+              (child: any) => child.x !== undefined && child.y !== undefined,
+            )
             .map((child: any) => ({
               x: child.x,
               y: child.y,
@@ -960,18 +995,25 @@ const insertMedia = async (media: { url: string; type: string; thumbnailUrl?: st
             videoUrl: media.url,
             thumbnailUrl: media.thumbnailUrl || media.url,
             editable: true,
-          }).then((videoNode) => {
-            if (videoNode && canvasApp.value?.tree) {
-              canvasApp.value.tree.add(videoNode);
-              recordHistoryDebounced();
-              setTimeout(() => {
-                if (canvasApp.value?.tree) {
-                  (canvasApp.value.tree as any).zoom(videoNode, 100, undefined, 0.8);
-                }
-              }, 100);
-            }
-            resolve();
-          }).catch(reject);
+          })
+            .then((videoNode) => {
+              if (videoNode && canvasApp.value?.tree) {
+                canvasApp.value.tree.add(videoNode);
+                recordHistoryDebounced();
+                setTimeout(() => {
+                  if (canvasApp.value?.tree) {
+                    (canvasApp.value.tree as any).zoom(
+                      videoNode,
+                      100,
+                      undefined,
+                      0.8,
+                    );
+                  }
+                }, 100);
+              }
+              resolve();
+            })
+            .catch(reject);
         };
         video.onerror = reject;
       });
@@ -1378,10 +1420,20 @@ body {
 }
 
 .custom-context-menu-item i {
-  font-size: 14px;
   transition: color 0.15s ease;
-  width: 16px;
-  text-align: center;
+  width: 18px;
+  height: 18px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-context-menu-item i.iconfont {
+  font-size: 13px !important;
+}
+
+.custom-context-menu-item i.pi {
+  font-size: 17px !important;
 }
 
 .custom-context-menu-item:hover i {
