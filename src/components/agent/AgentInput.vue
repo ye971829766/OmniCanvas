@@ -144,38 +144,38 @@ const canvasElements = computed(() => {
       let type = "shape";
 
       const tag = child.tag || child.__tag;
-    if (tag === "Image") {
-      url = child.url || "";
-      type = "image";
-    } else if (tag === "VideoNode") {
-      url = child.thumbnailUrl || "";
-      type = "video";
-    } else if (tag === "ImageGen" && child.images?.length > 0) {
-      url = child.images[0] || "";
-      type = "image";
-    }
+      if (tag === "Image") {
+        url = child.url || "";
+        type = "image";
+      } else if (tag === "VideoNode") {
+        url = child.thumbnailUrl || "";
+        type = "video";
+      } else if (tag === "ImageGen" && child.images?.length > 0) {
+        url = child.images[0] || "";
+        type = "image";
+      }
 
-    let name = child.name;
-    if (!name) {
-      if (tag === "Rect") name = "矩形元素";
-      else if (tag === "VideoNode") name = "视频元素";
-      else if (tag === "Text") name = "文本元素";
-      else if (tag === "Frame") name = "画板容器";
-      else if (tag === "Line") name = "线段元素";
-      else if (tag === "Star") name = "星形元素";
-      else if (tag === "Ellipse") name = "椭圆元素";
-      else if (tag === "Group") name = "编组容器";
-      else name = tag || "元素";
-    }
+      let name = child.name;
+      if (!name) {
+        if (tag === "Rect") name = "矩形元素";
+        else if (tag === "VideoNode") name = "视频元素";
+        else if (tag === "Text") name = "文本元素";
+        else if (tag === "Frame") name = "画板容器";
+        else if (tag === "Line") name = "线段元素";
+        else if (tag === "Star") name = "星形元素";
+        else if (tag === "Ellipse") name = "椭圆元素";
+        else if (tag === "Group") name = "编组容器";
+        else name = tag || "元素";
+      }
 
-    return {
-      id: child.innerId ?? child.id,
-      name,
-      tag,
-      url,
-      type,
-    };
-  });
+      return {
+        id: child.innerId ?? child.id,
+        name,
+        tag,
+        url,
+        type,
+      };
+    });
 });
 
 const mentionOptions = computed(() => {
@@ -221,7 +221,7 @@ const editor = useEditor({
   extensions: [
     StarterKit,
     Placeholder.configure({
-      placeholder: "描述你想要的设计，或输入 @ 提及…",
+      placeholder: "描述你的想法，或输入@使用工具或素材…",
     }),
     Mention.configure({
       HTMLAttributes: {
@@ -580,7 +580,11 @@ function handleSubmit() {
         class="attachment-preview"
       >
         <img :src="src" />
-        <Button unstyled class="remove-attachment" @click="attachments.splice(idx, 1)">
+        <Button
+          unstyled
+          class="remove-attachment"
+          @click="attachments.splice(idx, 1)"
+        >
           <X :size="10" />
         </Button>
       </div>
@@ -616,7 +620,12 @@ function handleSubmit() {
 
       <div class="toolbar-right">
         <!-- Suggestions button -->
-        <Button unstyled class="toolbar-btn" title="灵感建议" @click="insertSuggestion">
+        <Button
+          unstyled
+          class="toolbar-btn"
+          title="灵感建议"
+          @click="insertSuggestion"
+        >
           <Lightbulb :size="14" />
         </Button>
 
