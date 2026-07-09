@@ -57,6 +57,8 @@
       :record-history-debounced="recordHistoryDebounced"
     />
 
+    <Minimap :canvas-app="canvasApp" />
+
     <!-- Canvas-based Crop Toolbar -->
     <div
       v-if="isCropping"
@@ -265,6 +267,7 @@ import { useCanvasEntrance } from "@/composables/useCanvasEntrance";
 import { uploadImage, uploadVideo } from "@/utils/api";
 import LayerPanel from "@/components/canvas/LayerPanel.vue";
 import ZoomController from "@/components/canvas/ZoomController.vue";
+import Minimap from "@/components/canvas/Minimap.vue";
 import { useCanvasCrop } from "@/composables/useCanvasCrop";
 import {
   getNonOverlappingCoordinates,

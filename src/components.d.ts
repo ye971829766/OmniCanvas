@@ -44,6 +44,7 @@ declare module 'vue' {
     LocalImageTools: typeof import('./components/canvas/floatToolbar/custom/LocalImageTools.vue')['default']
     MarkerPanel: typeof import('./components/toolbar/panels/MarkerPanel.vue')['default']
     Menu: typeof import('primevue/menu')['default']
+    Minimap: typeof import('./components/canvas/Minimap.vue')['default']
     ModelSelector: typeof import('./components/ModelSelector.vue')['default']
     OptionPreviewCard: typeof import('./components/agent/OptionPreviewCard.vue')['default']
     Popover: typeof import('primevue/popover')['default']
