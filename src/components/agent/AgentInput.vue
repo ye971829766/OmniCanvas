@@ -18,6 +18,7 @@ import {
   Cpu,
 } from "lucide-vue-next";
 import { getModelConfig } from "@/utils/api";
+import Button from "primevue/button";
 
 function compressImage(
   file: File,
@@ -544,52 +545,45 @@ function handleSubmit() {
         class="attachment-preview"
       >
         <img :src="src" />
-        <button class="remove-attachment" @click="attachments.splice(idx, 1)">
+        <Button unstyled class="remove-attachment" @click="attachments.splice(idx, 1)">
           <X :size="10" />
-        </button>
+        </Button>
       </div>
     </div>
 
     <!-- Textarea/Editor container -->
     <div class="textarea-container">
       <EditorContent :editor="editor" class="agent-input" />
-      <button
+      <Button
         v-if="modelValue"
+        unstyled
         class="clear-input-btn"
         @click="clearInput"
         title="清空输入"
       >
         <X :size="14" />
-      </button>
+      </Button>
     </div>
 
     <!-- Bottom Toolbar -->
     <div class="agent-input-toolbar">
       <div class="toolbar-left">
         <!-- Plus (upload) button -->
-        <button
+        <Button
+          unstyled
           class="toolbar-btn"
           title="上传素材 (支持粘贴/拖拽)"
           @click="triggerFileInput"
         >
           <Plus :size="14" />
-        </button>
-
-        <!-- Library command trigger -->
-        <button
-          class="toolbar-btn"
-          title="快速提及品牌指令"
-          @click="insertBrand"
-        >
-          <BookOpen :size="14" />
-        </button>
+        </Button>
       </div>
 
       <div class="toolbar-right">
         <!-- Suggestions button -->
-        <button class="toolbar-btn" title="灵感建议" @click="insertSuggestion">
+        <Button unstyled class="toolbar-btn" title="灵感建议" @click="insertSuggestion">
           <Lightbulb :size="14" />
-        </button>
+        </Button>
 
         <!-- Char counter or hint helper -->
         <span class="char-counter" v-if="modelValue.length > 0">
@@ -598,23 +592,25 @@ function handleSubmit() {
         <span class="kb-hint" v-else> ↵ 发送 / ⇧↵ 换行 </span>
 
         <!-- Send/Stop Button -->
-        <button
+        <Button
           v-if="running"
+          unstyled
           class="toolbar-send-btn send-stop"
           title="停止"
           @click="emit('stop')"
         >
           <Square :size="10" fill="currentColor" />
-        </button>
-        <button
+        </Button>
+        <Button
           v-else
+          unstyled
           class="toolbar-send-btn"
           :disabled="!modelValue.trim() && attachments.length === 0"
           title="发送"
           @click="handleSubmit"
         >
           <ArrowUp :size="12" />
-        </button>
+        </Button>
       </div>
     </div>
   </div>
