@@ -2,7 +2,7 @@ import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import type { OnModuleInit } from '@nestjs/common';
 import { join, resolve } from 'node:path';
 import { Buffer } from 'node:buffer';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, unlink } from 'node:fs/promises';
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { DatabaseService } from '../database/database.service';
 
@@ -191,19 +191,57 @@ export class FilesService implements OnModuleInit {
     if (!video) {
       throw new HttpException({ error: "Missing video file in request body (field 'video')" }, HttpStatus.BAD_REQUEST);
     }
-    if (!video.mimetype.startsWith("video/")) {
-      throw new HttpException({ error: "Uploaded file must be a video" }, HttpStatus.BAD_REQUEST);
+    const isGif = video.mimetype === "image/gif" || video.originalname.toLowerCase().endsWith(".gif");
+    if (!video.mimetype.startsWith("video/") && !isGif) {
+      throw new HttpException({ error: "Uploaded file must be a video or GIF" }, HttpStatus.BAD_REQUEST);
     }
 
     const id = crypto.randomUUID();
-    const extension = this.getSafeExtension(video.originalname, "mp4");
+    const extension = isGif ? "mp4" : this.getSafeExtension(video.originalname, "mp4");
     const videoFilename = `${id}.${extension}`;
     const thumbnailFilename = `${id}.jpg`;
 
     const videoPath = join("files", videoFilename);
     const thumbnailPath = join("files", thumbnailFilename);
 
-    await Bun.write(videoPath, video.buffer);
+    if (isGif) {
+      const gifFilename = `${id}.gif`;
+      const gifPath = join("files", gifFilename);
+      await Bun.write(gifPath, video.buffer);
+
+      // Convert GIF to MP4 using FFmpeg
+      const convertProc = Bun.spawn([
+        ffmpegInstaller.path,
+        "-y",
+        "-i",
+        gifPath,
+        "-movflags",
+        "faststart",
+        "-pix_fmt",
+        "yuv420p",
+        "-vf",
+        "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+        videoPath,
+      ]);
+      const convertExitCode = await convertProc.exited;
+
+      // Delete temporary GIF file
+      try {
+        await unlink(gifPath);
+      } catch (e) {
+        console.warn("Failed to delete temp gif file:", gifPath, e);
+      }
+
+      if (convertExitCode !== 0) {
+        const errText = await new Response(convertProc.stderr).text();
+        console.error("FFmpeg conversion error:", errText);
+        throw new HttpException({
+          error: "Failed to convert GIF to MP4. Make sure it is a valid GIF file."
+        }, HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+    } else {
+      await Bun.write(videoPath, video.buffer);
+    }
 
     const proc = Bun.spawn([
       ffmpegInstaller.path,
@@ -233,6 +271,86 @@ export class FilesService implements OnModuleInit {
       thumbnailUrl: `${originUrl}/files/${thumbnailFilename}`,
     };
   }
+
+  async convertGifUrl(gifUrl: string, originUrl: string) {
+    const response = await this.downloadAsset(gifUrl);
+    if (!response.ok) {
+      throw new HttpException(
+        { error: "Failed to download GIF from upstream URL" },
+        HttpStatus.BAD_GATEWAY
+      );
+    }
+
+    const id = crypto.randomUUID();
+    const gifFilename = `${id}.gif`;
+    const videoFilename = `${id}.mp4`;
+    const thumbnailFilename = `${id}.jpg`;
+
+    const gifPath = join("files", gifFilename);
+    const videoPath = join("files", videoFilename);
+    const thumbnailPath = join("files", thumbnailFilename);
+
+    const arrayBuffer = await response.arrayBuffer();
+    await Bun.write(gifPath, arrayBuffer);
+
+    // Convert GIF to MP4
+    const convertProc = Bun.spawn([
+      ffmpegInstaller.path,
+      "-y",
+      "-i",
+      gifPath,
+      "-movflags",
+      "faststart",
+      "-pix_fmt",
+      "yuv420p",
+      "-vf",
+      "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+      videoPath,
+    ]);
+    const convertExitCode = await convertProc.exited;
+    
+    // Delete temporary GIF file
+    try {
+      await unlink(gifPath);
+    } catch (e) {
+      console.warn("Failed to delete temp gif file:", gifPath, e);
+    }
+
+    if (convertExitCode !== 0) {
+      const errText = await new Response(convertProc.stderr).text();
+      console.error("FFmpeg conversion error (convertGifUrl):", errText);
+      throw new HttpException({
+        error: "Failed to convert GIF to MP4. Make sure it is a valid GIF URL."
+      }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    // Extract first frame thumbnail
+    const thumbnailProc = Bun.spawn([
+      ffmpegInstaller.path,
+      "-y",
+      "-ss",
+      "00:00:00",
+      "-i",
+      videoPath,
+      "-vframes",
+      "1",
+      "-q:v",
+      "2",
+      thumbnailPath,
+    ]);
+
+    const thumbnailExitCode = await thumbnailProc.exited;
+    if (thumbnailExitCode !== 0) {
+      const errText = await new Response(thumbnailProc.stderr).text();
+      console.error("FFmpeg thumbnail error (convertGifUrl):", errText);
+    }
+
+    return {
+      videoUrl: `${originUrl}/files/${videoFilename}`,
+      thumbnailUrl: `${originUrl}/files/${thumbnailFilename}`,
+    };
+  }
+
 
   async downloadAndSaveVideo(videoUrl: string, originUrl: string) {
     const response = await this.downloadAsset(videoUrl);

@@ -1,15 +1,17 @@
 // 判断文件是否是图片
 export function isImageFile(file: File): boolean {
+  if (file.type === "image/gif") return false;
   if (file.type.startsWith("image/")) return true;
 
-  const imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg"];
+  const imageExtensions = ["jpg", "jpeg", "png", "bmp", "webp", "svg"];
   const fileExtension = file.name.split(".").pop()?.toLowerCase();
   return imageExtensions.includes(fileExtension || "");
 }
 export function isVideoFile(file: File): boolean {
+  if (file.type === "image/gif") return true;
   if (file.type.startsWith("video/")) return true;
 
-  const videoExtensions = ["mp4", "mov", "avi", "mkv", "webm"];
+  const videoExtensions = ["mp4", "mov", "avi", "mkv", "webm", "gif"];
   const fileExtension = file.name.split(".").pop()?.toLowerCase();
   return videoExtensions.includes(fileExtension || "");
 }

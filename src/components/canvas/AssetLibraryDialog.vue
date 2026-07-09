@@ -506,11 +506,12 @@ const handleUpload = async (event: Event) => {
       let thumbnailUrl = "";
       let type = "image";
 
-      if (file.type.startsWith("image/")) {
+      const isGif = file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+      if (file.type.startsWith("image/") && !isGif) {
         const res = await uploadImage(file);
         url = res.imageUrl;
         type = "image";
-      } else if (file.type.startsWith("video/")) {
+      } else if (file.type.startsWith("video/") || isGif) {
         const res = await uploadVideo(file);
         url = res.videoUrl;
         thumbnailUrl = res.thumbnailUrl;

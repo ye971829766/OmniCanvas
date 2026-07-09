@@ -217,6 +217,12 @@ export async function uploadImage(file: File): Promise<UploadImageResponse> {
   return res.data;
 }
 
+export async function convertGifUrl(gifUrl: string): Promise<UploadVideoResponse> {
+  const res = await request.post<UploadVideoResponse>("/convert-gif", { gifUrl });
+  return res.data;
+}
+
+
 export async function generateImage(
   req: GenerateTextToImageRequest,
 ): Promise<GenerateImageResponse>;

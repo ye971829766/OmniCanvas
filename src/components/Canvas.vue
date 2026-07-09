@@ -264,7 +264,7 @@ import ViboardToolbar from "@/components/ViboardToolbar.vue";
 import { VideoNode } from "@/components/canvas/nodes/VideoNode";
 import { useCanvas } from "@/composables/useCanvas";
 import { useCanvasEntrance } from "@/composables/useCanvasEntrance";
-import { uploadImage, uploadVideo } from "@/utils/api";
+import { uploadImage, uploadVideo, convertGifUrl } from "@/utils/api";
 import LayerPanel from "@/components/canvas/LayerPanel.vue";
 import ZoomController from "@/components/canvas/ZoomController.vue";
 import Minimap from "@/components/canvas/Minimap.vue";
@@ -621,10 +621,12 @@ const onSubmitLink = async (url: string) => {
   if (!app || !app.tree) return;
 
   try {
+    const isGif = !!trimmed.match(/\.gif/i);
     const isImg =
-      trimmed.match(/\.(jpeg|jpg|gif|png|webp)/i) ||
-      trimmed.startsWith("data:image/");
-    const isVid = trimmed.match(/\.(mp4|webm|ogg|mov)/i);
+      (trimmed.match(/\.(jpeg|jpg|png|webp)/i) ||
+        trimmed.startsWith("data:image/")) &&
+      !isGif;
+    const isVid = trimmed.match(/\.(mp4|webm|ogg|mov)/i) || isGif;
 
     if (isImg) {
       const img = new window.Image();
@@ -672,8 +674,17 @@ const onSubmitLink = async (url: string) => {
         img.onerror = reject;
       });
     } else if (isVid) {
+      let videoUrl = trimmed;
+      let thumbnailUrl = trimmed;
+
+      if (isGif) {
+        const res = await convertGifUrl(trimmed);
+        videoUrl = res.videoUrl;
+        thumbnailUrl = res.thumbnailUrl;
+      }
+
       const video = document.createElement("video");
-      video.src = trimmed;
+      video.src = videoUrl;
       video.muted = true;
       await new Promise<void>((resolve, reject) => {
         video.onloadedmetadata = () => {
@@ -704,8 +715,8 @@ const onSubmitLink = async (url: string) => {
             y,
             width: naturalWidth,
             height: naturalHeight,
-            videoUrl: trimmed,
-            thumbnailUrl: trimmed,
+            videoUrl: videoUrl,
+            thumbnailUrl: thumbnailUrl,
             editable: true,
           })
             .then((videoNode) => {
@@ -727,7 +738,7 @@ const onSubmitLink = async (url: string) => {
         severity: "error",
         summary: "格式错误",
         detail:
-          "不支持的媒体链接格式，请提供图片（PNG/JPG/WEBP）或视频（MP4/WEBM）的直链。",
+          "不支持的媒体链接格式，请提供图片（PNG/JPG/WEBP）或视频（MP4/WEBM/GIF）的直链。",
         life: 3000,
       });
     }

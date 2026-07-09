@@ -105,4 +105,13 @@ export class FilesController {
     const { imageUrl, rectangles } = body;
     return this.filesService.inpaintImage(imageUrl, rectangles, this.getOrigin(headers));
   }
+
+  @Post('convert-gif')
+  async convertGif(
+    @Body() body: { gifUrl: string },
+    @Headers() headers: Record<string, string>,
+  ) {
+    const { gifUrl } = body;
+    return this.filesService.convertGifUrl(gifUrl, this.getOrigin(headers));
+  }
 }
