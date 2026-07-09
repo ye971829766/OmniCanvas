@@ -127,8 +127,8 @@ export function useCanvasToolbar() {
     canvasApp.editor.on("editor.rotate", updateToolbarPositionAndRefresh);
 
     // Track viewport zoom/pan changes
-    canvasApp.tree.on(MoveEvent.MOVE, updateToolbarPosition);
-    canvasApp.tree.on(ZoomEvent.ZOOM, updateToolbarPosition);
+    canvasApp.tree.on(MoveEvent.MOVE, updateToolbarPositionAndRefresh);
+    canvasApp.tree.on(ZoomEvent.ZOOM, updateToolbarPositionAndRefresh);
   };
 
   return {
