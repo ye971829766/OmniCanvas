@@ -623,13 +623,22 @@ export function useCanvas(
     app.on(PointerEvent.TAP, (e: PointerEvent) => {
       if (e.ctrlKey || e.metaKey) {
         const target = e.target as any;
-        const invalidTags = new Set(["Leafer", "App", "Viewport", "Editor", "EditBox", "Page"]);
-        if (
-          target &&
-          !invalidTags.has(target.tag) &&
-          !target.tag.startsWith("Edit") &&
-          typeof target.export === "function"
-        ) {
+        const invalidTags = new Set(["Leafer", "App", "Viewport", "Editor", "EditBox", "Page", "ImageGen", "VideoGen"]);
+        let checkNode = target;
+        let isInvalid = false;
+        while (checkNode && checkNode !== (app.tree as any)) {
+          if (
+            !checkNode.tag ||
+            invalidTags.has(checkNode.tag) ||
+            checkNode.tag.startsWith("Edit")
+          ) {
+            isInvalid = true;
+            break;
+          }
+          checkNode = checkNode.parent;
+        }
+
+        if (target && !isInvalid && typeof target.export === "function") {
           target.export("png").then((res: any) => {
             if (res && res.data) {
               const base64DataUrl = res.data.startsWith("data:") ? res.data : `data:image/png;base64,${res.data}`;
@@ -1403,32 +1412,43 @@ export function useCanvas(
     }
   });
 
-  const addImageGenNode = () => {
+  const addImageGenNode = (posX?: number, posY?: number) => {
     const app = canvasApp.value;
     if (!app?.tree) return;
 
-    // 获取画布上所有元素的边界框
-    const existingBounds = Array.from(app.tree.children || [])
-      .filter((child: any) => child.x !== undefined && child.y !== undefined)
-      .map((child: any) => ({
-        x: child.x,
-        y: child.y,
-        width: child.width || 400,
-        height: child.height || 300,
-      }));
+    let targetX = posX;
+    let targetY = posY;
 
-    // 在画布较大范围内随机位置放置元素（避免堆在一起且不遮挡其他元素）
-    const { x, y } = getNonOverlappingCoordinates({
-      range: 2000,
-      existingBounds,
-      newWidth: 400,
-      newHeight: 300,
-      margin: 50,
-    });
+    if (targetX === undefined || targetY === undefined) {
+      // 获取画布上所有元素的边界框
+      const existingBounds = Array.from(app.tree.children || [])
+        .filter((child: any) => child.x !== undefined && child.y !== undefined)
+        .map((child: any) => ({
+          x: child.x,
+          y: child.y,
+          width: child.width || 400,
+          height: child.height || 300,
+        }));
+
+      // 在画布较大范围内随机位置放置元素（避免堆在一起且不遮挡其他元素）
+      const coords = getNonOverlappingCoordinates({
+        range: 2000,
+        existingBounds,
+        newWidth: 400,
+        newHeight: 300,
+        margin: 50,
+      });
+      targetX = coords.x;
+      targetY = coords.y;
+    } else {
+      // Offset so the node centers at context menu click position
+      targetX -= 200;
+      targetY -= 150;
+    }
 
     const imageGen = new ImageGen({
-      x: x,
-      y: y,
+      x: targetX,
+      y: targetY,
       width: 400,
       height: 300,
       editable: true,
@@ -1437,7 +1457,7 @@ export function useCanvas(
     app.tree.add(imageGen as any);
 
     if (app.editor) {
-      app.editor.app.tree?.zoom?.(imageGen as any, 300, undefined, 0.5);
+      (app.tree as any).zoom?.(imageGen as any, 300, undefined, 0.5);
       setTimeout(() => {
         app.editor.select(imageGen as any);
       }, 500);
@@ -1446,31 +1466,42 @@ export function useCanvas(
     recordHistory();
   };
 
-  const addVideoGenNode = () => {
+  const addVideoGenNode = (posX?: number, posY?: number) => {
     const app = canvasApp.value;
     if (!app?.tree) return;
 
-    // 获取画布上所有元素的边界框
-    const existingBounds = Array.from(app.tree.children || [])
-      .filter((child: any) => child.x !== undefined && child.y !== undefined)
-      .map((child: any) => ({
-        x: child.x,
-        y: child.y,
-        width: child.width || 480,
-        height: child.height || 270,
-      }));
+    let targetX = posX;
+    let targetY = posY;
 
-    const { x, y } = getNonOverlappingCoordinates({
-      range: 2000,
-      existingBounds,
-      newWidth: 480,
-      newHeight: 270,
-      margin: 50,
-    });
+    if (targetX === undefined || targetY === undefined) {
+      // 获取画布上所有元素的边界框
+      const existingBounds = Array.from(app.tree.children || [])
+        .filter((child: any) => child.x !== undefined && child.y !== undefined)
+        .map((child: any) => ({
+          x: child.x,
+          y: child.y,
+          width: child.width || 480,
+          height: child.height || 270,
+        }));
+
+      const coords = getNonOverlappingCoordinates({
+        range: 2000,
+        existingBounds,
+        newWidth: 480,
+        newHeight: 270,
+        margin: 50,
+      });
+      targetX = coords.x;
+      targetY = coords.y;
+    } else {
+      // Offset so the node centers at context menu click position
+      targetX -= 240;
+      targetY -= 135;
+    }
 
     const videoGen = new VideoGen({
-      x: x,
-      y: y,
+      x: targetX,
+      y: targetY,
       width: 480,
       height: 270, // default 16:9 sizing
       editable: true,
@@ -1479,7 +1510,7 @@ export function useCanvas(
     app.tree.add(videoGen as any);
 
     if (app.editor) {
-      app.editor.app.tree?.zoom?.(videoGen as any, 300, undefined, 0.5);
+      (app.tree as any).zoom?.(videoGen as any, 300, undefined, 0.5);
       setTimeout(() => {
         app.editor.select(videoGen as any);
       }, 500);

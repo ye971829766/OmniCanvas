@@ -464,6 +464,12 @@ onUnmounted(() => {
   window.removeEventListener("resize", initPillPosition);
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
 });
+
+defineExpose({
+  openAssetLibrary() {
+    assetLibraryVisible.value = true;
+  }
+});
 </script>
 
 <style scoped>

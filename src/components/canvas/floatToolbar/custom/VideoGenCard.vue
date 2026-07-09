@@ -319,6 +319,18 @@ onUnmounted(() => {
   if (refTailImageUrl.value) URL.revokeObjectURL(refTailImageUrl.value);
 });
 
+const dataURLtoFile = (dataurl: string, filename: string): File => {
+  const arr = dataurl.split(",");
+  const mime = arr[0].match(/:(.*?);/)?.[1] || "image/png";
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
+};
+
 // Sync properties from/to Canvas target
 watch(
   [
@@ -342,6 +354,40 @@ watch(
     }
     errorMessage.value = targetAny.errorMessage || "";
     isGenerating.value = targetAny.generationStatus === "generating";
+
+    if (targetAny.inputReference) {
+      const b64 = targetAny.inputReference;
+      const toBase64 = (file: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (error) => reject(error);
+        });
+
+      const setRefFromFile = () => {
+        const file = dataURLtoFile(b64, "ref_image.png");
+        refImage.value = file;
+        if (refImageUrl.value) URL.revokeObjectURL(refImageUrl.value);
+        refImageUrl.value = URL.createObjectURL(file);
+      };
+
+      if (refImage.value) {
+        toBase64(refImage.value).then((currentB64) => {
+          if (currentB64 !== b64) {
+            setRefFromFile();
+          }
+        });
+      } else {
+        setRefFromFile();
+      }
+    } else {
+      refImage.value = null;
+      if (refImageUrl.value) {
+        URL.revokeObjectURL(refImageUrl.value);
+        refImageUrl.value = "";
+      }
+    }
   },
   { immediate: true },
 );
@@ -354,9 +400,29 @@ watch(promptText, (v) => {
   }
 });
 
-watch([selectedModel, selectedSize, selectedSeconds], () => {
+watch([selectedModel, selectedSize, selectedSeconds, refImage], () => {
   const targetAny = props.target as any;
   if (targetAny) {
+    const toBase64 = (file: File): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
+      });
+
+    if (refImage.value) {
+      toBase64(refImage.value).then((b64) => {
+        if (targetAny.inputReference !== b64) {
+          targetAny.set({ inputReference: b64 });
+        }
+      });
+    } else {
+      if (targetAny.inputReference !== "") {
+        targetAny.set({ inputReference: "" });
+      }
+    }
+
     targetAny.set({
       model: selectedModel.value,
       size: selectedSize.value,

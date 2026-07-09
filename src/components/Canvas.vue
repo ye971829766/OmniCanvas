@@ -5,7 +5,8 @@
     <div
       class="flex-1 relative overflow-hidden w-full h-full"
       ref="canvasRef"
-      style="z-index: 1;"
+      style="z-index: 1"
+      @contextmenu.prevent
     ></div>
     <ElementInfoLabel
       v-if="selectTarget"
@@ -37,6 +38,7 @@
     />
 
     <ViboardToolbar
+      ref="toolbarRef"
       v-model="activeTool"
       @change-hue="onHueChange"
       @change-saturation="onSaturationChange"
@@ -133,6 +135,81 @@
         />
       </button>
     </div>
+
+    <!-- Custom Context Menu -->
+    <div
+      v-if="isContextMenuVisible"
+      ref="contextMenuRef"
+      class="custom-context-menu"
+      :style="{ left: contextMenuX + 'px', top: contextMenuY + 'px' }"
+      @pointerdown.stop
+      @click.stop
+      @contextmenu.prevent.stop
+    >
+      <template v-if="hasSelection">
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(handleImageToImage)"
+        >
+          <i class="pi pi-image text-primary-500"></i>
+          <span>图生图</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(handleImageToVideo)"
+        >
+          <i class="pi pi-video text-primary-500"></i>
+          <span>图生视频</span>
+        </div>
+      </template>
+      <template v-else>
+        <div
+          class="custom-context-menu-item"
+          @click="
+            handleItemClick(() =>
+              addImageGenNode(contextMenuPoint?.x, contextMenuPoint?.y),
+            )
+          "
+        >
+          <i class="pi pi-sparkles text-primary-500"></i>
+          <span>图片生成</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="
+            handleItemClick(() =>
+              addVideoGenNode(contextMenuPoint?.x, contextMenuPoint?.y),
+            )
+          "
+        >
+          <i class="pi pi-video text-primary-500"></i>
+          <span>视频生成</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => fileInputRef?.click())"
+        >
+          <i class="pi pi-upload text-primary-500"></i>
+          <span>文件上传</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => toolbarRef?.openAssetLibrary())"
+        >
+          <i class="pi pi-images text-primary-500"></i>
+          <span>从素材库选择</span>
+        </div>
+      </template>
+    </div>
+
+    <!-- Hidden File Input for context menu upload -->
+    <input
+      type="file"
+      ref="fileInputRef"
+      style="display: none"
+      accept="image/*,video/*"
+      @change="handleFileInputChange"
+    />
   </main>
 </template>
 
@@ -150,6 +227,8 @@ import logoImg from "@/assets/logo.jpg";
 import { useToast } from "primevue/usetoast";
 import CanvasBackground from "@/components/canvas/CanvasBackground.vue";
 import CanvasLoader from "@/components/canvas/CanvasLoader.vue";
+import { ImageGen } from "@/components/canvas/nodes/ImageGen";
+import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 
 const props = defineProps<{
   agentPanelCollapsed: boolean;
@@ -175,7 +254,7 @@ import {
   isImageFile,
   isVideoFile,
 } from "@/utils/utils.ts";
-import { Image } from "leafer-ui";
+import { Image, PointerEvent } from "leafer-ui";
 
 const canvasRef = useTemplateRef("canvasRef");
 const canvasBgRef = shallowRef<InstanceType<typeof CanvasBackground> | null>(
@@ -235,6 +314,253 @@ watch(activeTool, (newTool) => {
     activeTool.value = "select";
   }
 });
+
+const toolbarRef = ref<any>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const contextMenuRef = ref<HTMLElement | null>(null);
+const contextMenuPoint = ref<{ x: number; y: number } | null>(null);
+const isContextMenuVisible = ref(false);
+const contextMenuX = ref(0);
+const contextMenuY = ref(0);
+const hasSelection = ref(false);
+
+const closeContextMenu = () => {
+  isContextMenuVisible.value = false;
+  contextMenuPoint.value = null;
+};
+
+const isInsideContextMenu = (event: Event) => {
+  const menu = contextMenuRef.value;
+  return !!(menu && event.target instanceof Node && menu.contains(event.target));
+};
+
+const handleDocumentPointerDown = (event: globalThis.PointerEvent) => {
+  if (!isContextMenuVisible.value || isInsideContextMenu(event)) return;
+  closeContextMenu();
+};
+
+const handleContextMenuKeyDown = (event: KeyboardEvent) => {
+  if (!isContextMenuVisible.value || event.key !== "Escape") return;
+  event.preventDefault();
+  closeContextMenu();
+};
+
+const handleLeaferContextMenu = (e: any) => {
+  e.stop();
+  onLeaferContextMenu(e, e.origin);
+};
+
+const onLeaferContextMenu = (e: any, originalEvent?: MouseEvent) => {
+  const app = canvasApp.value;
+  if (!app) return;
+
+  // Do not show context menu when right-clicking on ImageGen or VideoGen nodes
+  let checkNode: any = e.target;
+  while (checkNode && checkNode !== (app.tree as any)) {
+    if (checkNode.tag === "ImageGen" || checkNode.tag === "VideoGen") {
+      return;
+    }
+    checkNode = checkNode.parent;
+  }
+
+  // Position context menu at screen coordinates (clientX / clientY)
+  contextMenuX.value = originalEvent?.clientX ?? e.clientX ?? 0;
+  contextMenuY.value = originalEvent?.clientY ?? e.clientY ?? 0;
+  contextMenuPoint.value = { x: e.x, y: e.y };
+
+  // Check selection state according to documentation
+  hasSelection.value = !!(app.editor?.single || app.editor?.multiple);
+
+  // If there is selection, let's keep the editor selected element
+  if (hasSelection.value) {
+    let targetNode: any = e.target;
+    while (targetNode && targetNode !== (app.tree as any)) {
+      if (targetNode.editable) {
+        break;
+      }
+      if (
+        targetNode.tag === "ImageGen" ||
+        targetNode.tag === "VideoGen" ||
+        targetNode.tag === "rect" ||
+        targetNode.tag === "text" ||
+        targetNode.tag === "ellipse" ||
+        targetNode.tag === "line"
+      ) {
+        break;
+      }
+      targetNode = targetNode.parent;
+    }
+
+    if (targetNode && targetNode !== (app.tree as any)) {
+      app.editor?.select(targetNode as any);
+    }
+  } else {
+    app.editor?.cancel?.();
+  }
+
+  isContextMenuVisible.value = true;
+};
+
+const handleItemClick = (action: () => void) => {
+  closeContextMenu();
+  action();
+};
+
+const handleFileInputChange = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  if (target.files && target.files.length > 0) {
+    onUploadFile(target.files[0]);
+  }
+};
+
+const getElementBase64 = async (el: any): Promise<string> => {
+  if (typeof el.export === "function") {
+    const exportRes: any = await el.export("png");
+    if (typeof exportRes === "string") {
+      return exportRes;
+    } else if (exportRes?.data) {
+      if (typeof exportRes.data === "string") {
+        return exportRes.data;
+      } else if (exportRes.data instanceof Blob) {
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(exportRes.data);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+        });
+      }
+    }
+  }
+  return "";
+};
+
+const handleImageToImage = async () => {
+  const el = selectTarget.value;
+  if (!el) return;
+
+  const app = canvasApp.value;
+  if (!app) return;
+
+  try {
+    canvasLoading.value = true;
+    const base64 = await getElementBase64(el);
+    if (!base64) {
+      toast.add({
+        severity: "error",
+        summary: "转换失败",
+        detail: "无法提取选中元素的位图数据。",
+        life: 3000,
+      });
+      return;
+    }
+
+    let targetX = contextMenuPoint.value?.x;
+    let targetY = contextMenuPoint.value?.y;
+
+    if (targetX === undefined || targetY === undefined) {
+      const bounds = el.worldBoxBounds || el;
+      targetX = (bounds.x || 0) + (bounds.width || 400) + 40;
+      targetY = bounds.y || 0;
+    } else {
+      targetX -= 200; // offset half width (400 / 2)
+      targetY -= 150; // offset half height (300 / 2)
+    }
+
+    const imageGen = new ImageGen({
+      x: targetX,
+      y: targetY,
+      width: 400,
+      height: 300,
+      editable: true,
+      images: [base64],
+    });
+
+    app.tree.add(imageGen as any);
+
+    if (app.editor) {
+      (app.tree as any).zoom?.(imageGen as any, 300, undefined, 0.5);
+      setTimeout(() => {
+        app.editor?.select(imageGen as any);
+      }, 500);
+    }
+
+    recordHistoryDebounced();
+  } catch (err: any) {
+    console.error("Image to image setup failed:", err);
+    toast.add({
+      severity: "error",
+      summary: "图生图初始化失败",
+      detail: err.message || "无法将元素作为参考图导入。",
+      life: 3000,
+    });
+  } finally {
+    canvasLoading.value = false;
+  }
+};
+
+const handleImageToVideo = async () => {
+  const el = selectTarget.value;
+  if (!el) return;
+
+  const app = canvasApp.value;
+  if (!app) return;
+
+  try {
+    canvasLoading.value = true;
+    const base64 = await getElementBase64(el);
+    if (!base64) {
+      toast.add({
+        severity: "error",
+        summary: "转换失败",
+        detail: "无法提取选中元素的位图数据。",
+        life: 3000,
+      });
+      return;
+    }
+
+    let targetX = contextMenuPoint.value?.x;
+    let targetY = contextMenuPoint.value?.y;
+
+    if (targetX === undefined || targetY === undefined) {
+      const bounds = el.worldBoxBounds || el;
+      targetX = (bounds.x || 0) + (bounds.width || 480) + 40;
+      targetY = bounds.y || 0;
+    } else {
+      targetX -= 240; // offset half width (480 / 2)
+      targetY -= 135; // offset half height (270 / 2)
+    }
+
+    const videoGen = new VideoGen({
+      x: targetX,
+      y: targetY,
+      width: 480,
+      height: 270,
+      editable: true,
+      inputReference: base64,
+    });
+
+    app.tree.add(videoGen as any);
+
+    if (app.editor) {
+      (app.tree as any).zoom?.(videoGen as any, 300, undefined, 0.5);
+      setTimeout(() => {
+        app.editor?.select(videoGen as any);
+      }, 500);
+    }
+
+    recordHistoryDebounced();
+  } catch (err: any) {
+    console.error("Image to video setup failed:", err);
+    toast.add({
+      severity: "error",
+      summary: "图生视频初始化失败",
+      detail: err.message || "无法将元素作为参考图导入。",
+      life: 3000,
+    });
+  } finally {
+    canvasLoading.value = false;
+  }
+};
 
 const onHueChange = (newHue: number) => {
   hue.value = newHue;
@@ -422,7 +748,7 @@ const onUploadFile = async (file: File) => {
               }));
 
             // 在画布较大范围内随机位置放置元素（避免堆在一起且不遮挡其他元素）
-            const { x, y } = getNonOverlappingCoordinates({
+            const coords = getNonOverlappingCoordinates({
               range: 5000,
               existingBounds,
               newWidth: naturalWidth,
@@ -430,9 +756,16 @@ const onUploadFile = async (file: File) => {
               margin: 50,
             });
 
+            const targetX = contextMenuPoint.value
+              ? contextMenuPoint.value.x - naturalWidth / 2
+              : coords.x;
+            const targetY = contextMenuPoint.value
+              ? contextMenuPoint.value.y - naturalHeight / 2
+              : coords.y;
+
             const image = new Image({
-              x,
-              y,
+              x: targetX,
+              y: targetY,
               width: naturalWidth,
               height: naturalHeight,
               url: res.imageUrl,
@@ -490,7 +823,7 @@ const onUploadFile = async (file: File) => {
               }));
 
             // 在画布较大范围内随机位置放置元素（避免堆在一起且不遮挡其他元素）
-            const { x, y } = getNonOverlappingCoordinates({
+            const coords = getNonOverlappingCoordinates({
               range: 2000,
               existingBounds,
               newWidth: naturalWidth,
@@ -498,9 +831,16 @@ const onUploadFile = async (file: File) => {
               margin: 50,
             });
 
+            const targetX = contextMenuPoint.value
+              ? contextMenuPoint.value.x - naturalWidth / 2
+              : coords.x;
+            const targetY = contextMenuPoint.value
+              ? contextMenuPoint.value.y - naturalHeight / 2
+              : coords.y;
+
             VideoNode.create({
-              x,
-              y,
+              x: targetX,
+              y: targetY,
               width: naturalWidth,
               height: naturalHeight,
               videoUrl: videoUrl,
@@ -704,10 +1044,19 @@ const handleCropKeyDown = (e: KeyboardEvent) => {
 
 onMounted(() => {
   window.addEventListener("keydown", handleCropKeyDown);
+  const app = canvasApp.value;
+  if (app) {
+    app.on(PointerEvent.MENU, handleLeaferContextMenu);
+  }
+  document.addEventListener("pointerdown", handleDocumentPointerDown, true);
+  window.addEventListener("keydown", handleContextMenuKeyDown);
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleCropKeyDown);
+  canvasApp.value?.off?.(PointerEvent.MENU, handleLeaferContextMenu);
+  document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
+  window.removeEventListener("keydown", handleContextMenuKeyDown);
 });
 
 /**
@@ -974,5 +1323,79 @@ body {
 .launcher-leave-to {
   transform: scale(0) rotate(45deg);
   opacity: 0;
+}
+
+/* Premium Context Menu Style */
+.custom-context-menu {
+  position: fixed;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 160px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: contextMenuFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.p-dark .custom-context-menu {
+  background: rgba(30, 30, 30, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.custom-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333333;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.p-dark .custom-context-menu-item {
+  color: #e5e5e5;
+}
+
+.custom-context-menu-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #111111;
+}
+
+.p-dark .custom-context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.custom-context-menu-item i {
+  font-size: 14px;
+  transition: color 0.15s ease;
+  width: 16px;
+  text-align: center;
+}
+
+.custom-context-menu-item:hover i {
+  color: var(--p-primary-color) !important;
+}
+
+@keyframes contextMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 </style>
