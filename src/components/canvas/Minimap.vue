@@ -21,7 +21,12 @@
     </div>
 
     <!-- PrimeVue Minimap Popover -->
-    <Popover ref="popoverRef" class="minimap-popover" @show="onPopoverShow" @hide="onPopoverHide">
+    <Popover
+      ref="popoverRef"
+      class="minimap-popover"
+      @show="onPopoverShow"
+      @hide="onPopoverHide"
+    >
       <div class="minimap-content">
         <canvas
           ref="minimapCanvas"
@@ -86,25 +91,25 @@ const onPopoverHide = () => {
 function getElementColor(tag: string): string {
   switch (tag) {
     case "Image":
-      return "rgba(59, 130, 246, 0.55)";   // blue
+      return "rgba(59, 130, 246, 0.55)"; // blue
     case "ImageGen":
-      return "rgba(168, 85, 247, 0.55)";   // purple
+      return "rgba(168, 85, 247, 0.55)"; // purple
     case "VideoGen":
-      return "rgba(236, 72, 153, 0.55)";   // pink
+      return "rgba(236, 72, 153, 0.55)"; // pink
     case "VideoNode":
-      return "rgba(239, 68, 68, 0.55)";    // red
+      return "rgba(239, 68, 68, 0.55)"; // red
     case "Rect":
-      return "rgba(34, 197, 94, 0.50)";    // green
+      return "rgba(34, 197, 94, 0.50)"; // green
     case "Ellipse":
-      return "rgba(234, 179, 8, 0.50)";    // yellow
+      return "rgba(234, 179, 8, 0.50)"; // yellow
     case "Text":
-      return "rgba(107, 114, 128, 0.50)";  // gray
+      return "rgba(107, 114, 128, 0.50)"; // gray
     case "Frame":
-      return "rgba(14, 165, 233, 0.30)";   // sky
+      return "rgba(14, 165, 233, 0.30)"; // sky
     case "Group":
-      return "rgba(14, 165, 233, 0.20)";   // sky lighter
+      return "rgba(14, 165, 233, 0.20)"; // sky lighter
     default:
-      return "rgba(148, 163, 184, 0.45)";  // slate
+      return "rgba(148, 163, 184, 0.45)"; // slate
   }
 }
 
@@ -140,7 +145,8 @@ function collectElements(node: any, out: ElementRect[]) {
       tag === "Viewport" ||
       tag === "Page" ||
       tag.startsWith("Edit")
-    ) continue;
+    )
+      continue;
 
     // Skip task overlay nodes
     if (child.isTaskOverlay) continue;
@@ -174,7 +180,10 @@ function getWorldBounds(elements: ElementRect[]) {
   if (elements.length === 0) {
     return { minX: -500, minY: -350, maxX: 500, maxY: 350 };
   }
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
   for (const el of elements) {
     if (el.x < minX) minX = el.x;
     if (el.y < minY) minY = el.y;
@@ -442,7 +451,7 @@ onUnmounted(() => {
 .minimap-btn-wrapper {
   position: absolute;
   left: 56px;
-  bottom: 12px;
+  bottom: 11px;
   z-index: 40;
 }
 
