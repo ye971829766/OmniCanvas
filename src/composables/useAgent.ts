@@ -150,6 +150,8 @@ function parseHistoryMessage(
           text = part.text || "";
         } else if (part.type === "image_url" && part.image_url?.url) {
           images.push(part.image_url.url);
+        } else if (part.type === "image" && part.image) {
+          images.push(part.image);
         }
       }
     }
@@ -164,8 +166,51 @@ function parseHistoryMessage(
   }
 
   if (msg.role === "assistant") {
-    const text = stripInternalToolErrors(msg.content || "");
+    let rawText = "";
     const tools: { id: string; name: string; done: boolean; input?: any; output?: any }[] = [];
+
+    if (typeof msg.content === "string") {
+      rawText = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === "text") {
+          rawText += part.text || "";
+        } else if (part.type === "tool-call") {
+          const toolCallId = part.toolCallId;
+          const toolResult = allMessages.find((m) => {
+            if (m.role !== "tool") return false;
+            if (Array.isArray(m.content)) {
+              return m.content.some((p: any) => p.type === "tool-result" && p.toolCallId === toolCallId);
+            }
+            return m.tool_call_id === toolCallId;
+          });
+
+          let input = part.args;
+          let output: any;
+          if (toolResult) {
+            if (Array.isArray(toolResult.content)) {
+              const resPart = toolResult.content.find((p: any) => p.type === "tool-result" && p.toolCallId === toolCallId);
+              output = resPart?.result ?? resPart?.output; // support both result and output properties
+            } else {
+              try {
+                output = typeof toolResult.content === "string" ? JSON.parse(toolResult.content) : toolResult.content;
+              } catch {
+                output = toolResult.content;
+              }
+            }
+          }
+
+          tools.push({
+            id: toolCallId,
+            name: part.toolName || "",
+            done: !!toolResult,
+            input,
+            output,
+          });
+        }
+      }
+    }
+
     if (Array.isArray(msg.tool_calls)) {
       for (const tc of msg.tool_calls) {
         const toolCallId = tc.id;
@@ -191,6 +236,8 @@ function parseHistoryMessage(
         });
       }
     }
+
+    const text = stripInternalToolErrors(rawText);
     const blocks: MessageBlock[] = [];
     if (tools.length > 0) {
       if (text) blocks.push({ id: `${id}-txt`, type: "text", text });

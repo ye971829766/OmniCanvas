@@ -238,8 +238,30 @@ export class AgentService {
     abortSignal?: AbortSignal,
   ): Promise<void> {
     const config = await this.modelConfigService.getConfig();
-    const systemPrompt = config.agentConfig?.systemPrompt || SYSTEM_PROMPT;
+    let systemPrompt = config.agentConfig?.systemPrompt || SYSTEM_PROMPT;
     const chatModel = config.agentConfig?.chatModel || this.chatModel;
+
+    try {
+      const imageModelsList = await this.modelConfigService.getEnabledMappingsByPurpose("image");
+      const videoModelsList = await this.modelConfigService.getEnabledMappingsByPurpose("video");
+      const imageModelInfo = imageModelsList.map(m => `- ID: "${m.id}", Name: "${m.label || m.id}"`).join("\n");
+      const videoModelInfo = videoModelsList.map(m => `- ID: "${m.id}", Name: "${m.label || m.id}"`).join("\n");
+
+      const modelInstructions = `
+<available_models>
+When the user mentions a specific model (e.g., "@ModelName" or "@ID") in their prompt, you must choose that model and pass its exact ID string to the "model" parameter of your tool call (e.g., generate_image or generate_video). Do not invent model IDs not listed below.
+
+Available Image Generation Models:
+${imageModelInfo || "- None"}
+
+Available Video Generation Models:
+${videoModelInfo || "- None"}
+</available_models>
+`;
+      systemPrompt += "\n\n" + modelInstructions;
+    } catch (e) {
+      this.logger.error("Failed to load models list for system prompt", e);
+    }
 
     const { modelInstance } = await this.buildClient(chatModel);
 
