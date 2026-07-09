@@ -21,7 +21,8 @@ _Redefining visual design and creative workflows by fusing high-performance vect
 <br />
 
 <img src="public/示例.png" alt="OmniCanvas Screenshot" width="100%" style="border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);" />
-
+<br />
+<img src="public/示例2.gif" alt="OmniCanvas Screenshot" width="100%" style="border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);" />
 </div>
 
 ---
@@ -286,11 +287,11 @@ bun dev:all
 npm run dev:all
 ```
 
-| Service | Local URL | Description |
-|---------|-----------|-------------|
-| **Frontend App** | `http://localhost` (Docker) / `http://localhost:5173` (Dev) | Main infinite canvas & AI agent interface |
+| Service             | Local URL                                                         | Description                                  |
+| ------------------- | ----------------------------------------------------------------- | -------------------------------------------- |
+| **Frontend App**    | `http://localhost` (Docker) / `http://localhost:5173` (Dev)       | Main infinite canvas & AI agent interface    |
 | **Admin Dashboard** | `http://localhost/admin` (Docker) / `http://localhost:5174` (Dev) | System monitoring, channels, and diagnostics |
-| **Backend Service** | `http://localhost:3000` | NestJS REST & SSE Agent service |
+| **Backend Service** | `http://localhost:3000`                                           | NestJS REST & SSE Agent service              |
 
 ### Option C: Individual Service Startup
 
