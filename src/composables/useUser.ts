@@ -65,6 +65,7 @@ export function useUser() {
   const login = async (credentials: { username: string; password: string }) => {
     const res = await loginUser(credentials);
     setToken(res.token);
+    console.log("login res:", res);
     currentUser.value = res.user;
     authModalVisible.value = false;
     return res.user;

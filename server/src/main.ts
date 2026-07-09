@@ -3,6 +3,7 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./all-exceptions.filter";
+import { ApiEncryptionInterceptor } from "./interceptors/api-encryption.interceptor";
 import { json, urlencoded } from "express";
 
 async function bootstrap() {
@@ -34,6 +35,9 @@ async function bootstrap() {
 
   // Use global exception filter for compatible error formatting
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Use global API encryption interceptor
+  app.useGlobalInterceptors(new ApiEncryptionInterceptor());
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
