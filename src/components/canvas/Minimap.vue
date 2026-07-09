@@ -28,14 +28,23 @@
       @hide="onPopoverHide"
     >
       <div class="minimap-content">
-        <canvas
-          ref="minimapCanvas"
-          class="minimap-canvas"
-          @pointerdown="onPointerDown"
-          @pointermove="onPointerMove"
-          @pointerup="onPointerUp"
-          @pointerleave="onPointerUp"
-        />
+        <div
+          class="minimap-panel"
+          :class="{ dragging: isDragging }"
+        >
+          <canvas
+            ref="minimapCanvas"
+            class="minimap-canvas"
+            role="img"
+            aria-label="画布小地图"
+            @pointerdown="onPointerDown"
+            @pointermove="onPointerMove"
+            @pointerup="onPointerUp"
+            @pointercancel="onPointerUp"
+            @pointerleave="onPointerUp"
+            @wheel.prevent="onWheel"
+          />
+        </div>
       </div>
     </Popover>
   </div>
@@ -43,8 +52,8 @@
 
 <script setup lang="ts">
 import {
-  ref,
   shallowRef,
+  ref,
   watch,
   onMounted,
   onUnmounted,
@@ -60,9 +69,13 @@ const props = defineProps({
   },
 });
 
+/** Align with vue-flow MiniMap defaults */
 const MINIMAP_WIDTH = 200;
-const MINIMAP_HEIGHT = 140;
-const PADDING = 12;
+const MINIMAP_HEIGHT = 150;
+/** vue-flow offsetScale — extra padding around content in viewBox units */
+const OFFSET_SCALE = 5;
+const NODE_BORDER_RADIUS = 5;
+const ZOOM_STEP = 1;
 
 const popoverRef = ref();
 const minimapCanvas = shallowRef<HTMLCanvasElement | null>(null);
@@ -78,42 +91,59 @@ const togglePopover = (event: Event) => {
 
 const onPopoverShow = () => {
   isVisible.value = true;
-  // Render immediately when opened
+  // Canvas mounts after show — wait a tick then paint
   setTimeout(scheduleRender, 50);
 };
 
 const onPopoverHide = () => {
   isVisible.value = false;
+  isDragging.value = false;
 };
+
+/** Cached transform from last render — for hit testing & pan scale */
+interface MinimapTransform {
+  /** world units per minimap pixel (vue-flow viewScale) */
+  viewScale: number;
+  viewBoxX: number;
+  viewBoxY: number;
+  viewBoxW: number;
+  viewBoxH: number;
+  elementW: number;
+  elementH: number;
+}
+
+let transform: MinimapTransform | null = null;
 
 // ── Color helpers ──────────────────────────────────────────────────
 
-function getElementColor(tag: string): string {
+function getElementColor(tag: string, isDark: boolean): string {
+  // Soft fills similar to vue-flow nodeColor, tinted by type
   switch (tag) {
     case "Image":
-      return "rgba(59, 130, 246, 0.55)"; // blue
+      return isDark ? "rgba(96, 165, 250, 0.7)" : "rgba(59, 130, 246, 0.65)";
     case "ImageGen":
-      return "rgba(168, 85, 247, 0.55)"; // purple
+      return isDark ? "rgba(192, 132, 252, 0.7)" : "rgba(168, 85, 247, 0.65)";
     case "VideoGen":
-      return "rgba(236, 72, 153, 0.55)"; // pink
+      return isDark ? "rgba(244, 114, 182, 0.7)" : "rgba(236, 72, 153, 0.65)";
     case "VideoNode":
-      return "rgba(239, 68, 68, 0.55)"; // red
+      return isDark ? "rgba(248, 113, 113, 0.7)" : "rgba(239, 68, 68, 0.65)";
     case "Rect":
-      return "rgba(34, 197, 94, 0.50)"; // green
+      return isDark ? "rgba(74, 222, 128, 0.65)" : "rgba(34, 197, 94, 0.6)";
     case "Ellipse":
-      return "rgba(234, 179, 8, 0.50)"; // yellow
+      return isDark ? "rgba(250, 204, 21, 0.65)" : "rgba(234, 179, 8, 0.6)";
     case "Text":
-      return "rgba(107, 114, 128, 0.50)"; // gray
+      return isDark ? "rgba(161, 161, 170, 0.65)" : "rgba(113, 113, 122, 0.55)";
     case "Frame":
-      return "rgba(14, 165, 233, 0.30)"; // sky
+      return isDark ? "rgba(56, 189, 248, 0.35)" : "rgba(14, 165, 233, 0.3)";
     case "Group":
-      return "rgba(14, 165, 233, 0.20)"; // sky lighter
+      return isDark ? "rgba(56, 189, 248, 0.25)" : "rgba(14, 165, 233, 0.2)";
     default:
-      return "rgba(148, 163, 184, 0.45)"; // slate
+      // vue-flow default nodeColor ≈ #e2e2e2
+      return isDark ? "rgba(161, 161, 170, 0.55)" : "rgba(226, 226, 226, 0.9)";
   }
 }
 
-// ── Collect all visible elements recursively ──────────────────────
+// ── Collect elements (world space) ─────────────────────────────────
 
 interface ElementRect {
   x: number;
@@ -121,11 +151,24 @@ interface ElementRect {
   w: number;
   h: number;
   color: string;
-  radius: number;
 }
 
-function collectElements(node: any, out: ElementRect[]) {
-  if (!node) return;
+const SKIP_TAGS = new Set([
+  "Leafer",
+  "Editor",
+  "EditBox",
+  "App",
+  "Viewport",
+  "Page",
+]);
+
+function collectElements(
+  node: any,
+  out: ElementRect[],
+  isDark: boolean,
+  depth = 0,
+) {
+  if (!node || depth > 32) return;
 
   const children = node.children;
   if (!children || children.length === 0) return;
@@ -135,26 +178,27 @@ function collectElements(node: any, out: ElementRect[]) {
     if (!child || child.visible === false) continue;
 
     const tag = child.tag || child.__tag || "";
-
-    // Skip editor/internal nodes
-    if (
-      tag === "Leafer" ||
-      tag === "Editor" ||
-      tag === "EditBox" ||
-      tag === "App" ||
-      tag === "Viewport" ||
-      tag === "Page" ||
-      tag.startsWith("Edit")
-    )
-      continue;
-
-    // Skip task overlay nodes
+    if (SKIP_TAGS.has(tag) || tag.startsWith("Edit")) continue;
     if (child.isTaskOverlay) continue;
 
-    const x = child.x ?? 0;
-    const y = child.y ?? 0;
-    const w = child.width ?? 0;
-    const h = child.height ?? 0;
+    // Prefer world bounds so nested Group/Frame children are correct
+    const wb = child.worldBoxBounds;
+    let x: number;
+    let y: number;
+    let w: number;
+    let h: number;
+
+    if (wb && Number.isFinite(wb.width) && Number.isFinite(wb.height)) {
+      x = wb.x;
+      y = wb.y;
+      w = wb.width;
+      h = wb.height;
+    } else {
+      x = child.x ?? 0;
+      y = child.y ?? 0;
+      w = child.width ?? 0;
+      h = child.height ?? 0;
+    }
 
     if (w > 0 && h > 0) {
       out.push({
@@ -162,49 +206,70 @@ function collectElements(node: any, out: ElementRect[]) {
         y,
         w,
         h,
-        color: getElementColor(tag),
-        radius: Math.min(4, Math.min(w, h) * 0.1),
+        color: getElementColor(tag, isDark),
       });
     }
 
-    // Recurse into Groups / Frames
-    if (child.children && child.children.length > 0) {
-      collectElements(child, out);
+    if (child.children?.length) {
+      collectElements(child, out, isDark, depth + 1);
     }
   }
 }
 
-// ── Compute world bounds of all elements ─────────────────────────
+// ── Bounds helpers (vue-flow getRectOfNodes / getBoundsofRects) ────
 
-function getWorldBounds(elements: ElementRect[]) {
-  if (elements.length === 0) {
-    return { minX: -500, minY: -350, maxX: 500, maxY: 350 };
-  }
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function getRectOfElements(elements: ElementRect[]): Rect | null {
+  if (elements.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
   for (const el of elements) {
     if (el.x < minX) minX = el.x;
     if (el.y < minY) minY = el.y;
     if (el.x + el.w > maxX) maxX = el.x + el.w;
     if (el.y + el.h > maxY) maxY = el.y + el.h;
   }
-  // Add some padding around the world bounds
-  const pw = (maxX - minX) * 0.15 || 100;
-  const ph = (maxY - minY) * 0.15 || 70;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function getBoundsofRects(a: Rect, b: Rect): Rect {
+  const minX = Math.min(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxX = Math.max(a.x + a.width, b.x + b.width);
+  const maxY = Math.max(a.y + a.height, b.y + b.height);
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function getViewportWorld(app: App): Rect {
+  const tree = app.tree as any;
+  const zoom = tree.scaleX || tree.scale || 1;
+  const panX = tree.x || 0;
+  const panY = tree.y || 0;
+  const viewEl = app.view as HTMLElement;
+  const containerW = viewEl?.clientWidth || window.innerWidth;
+  const containerH = viewEl?.clientHeight || window.innerHeight;
   return {
-    minX: minX - pw,
-    minY: minY - ph,
-    maxX: maxX + pw,
-    maxY: maxY + ph,
+    x: -panX / zoom,
+    y: -panY / zoom,
+    width: containerW / zoom,
+    height: containerH / zoom,
   };
 }
 
-// ── Render the minimap ──────────────────────────────────────────
+// ── Render ─────────────────────────────────────────────────────────
 
 function render() {
   renderScheduled = false;
+
+  if (!isVisible.value) return;
 
   const canvas = minimapCanvas.value;
   const app = props.canvasApp;
@@ -214,7 +279,6 @@ function render() {
   const cw = MINIMAP_WIDTH;
   const ch = MINIMAP_HEIGHT;
 
-  // Ensure canvas dimensions match
   if (canvas.width !== cw * dpr || canvas.height !== ch * dpr) {
     canvas.width = cw * dpr;
     canvas.height = ch * dpr;
@@ -228,86 +292,102 @@ function render() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cw, ch);
 
-  // Draw background
   const isDark = document.documentElement.classList.contains("p-dark");
-  ctx.fillStyle = isDark ? "rgba(24, 24, 27, 0.6)" : "rgba(248, 250, 252, 0.6)";
-  ctx.beginPath();
-  ctx.roundRect(0, 0, cw, ch, 6);
-  ctx.fill();
 
-  // Collect elements
+  // Background — vue-flow uses #fff; map to surface token feel
+  ctx.fillStyle = isDark ? "rgba(24, 24, 27, 0.95)" : "rgba(255, 255, 255, 0.95)";
+  ctx.fillRect(0, 0, cw, ch);
+
   const elements: ElementRect[] = [];
-  collectElements(app.tree, elements);
+  collectElements(app.tree, elements, isDark);
 
-  // Calculate world bounds
-  const wb = getWorldBounds(elements);
-  const worldW = wb.maxX - wb.minX;
-  const worldH = wb.maxY - wb.minY;
+  const nodesBB = getRectOfElements(elements);
+  const viewBB = getViewportWorld(app);
+  // vue-flow: union of nodes + viewport so the mask hole always fits
+  const boundingRect = nodesBB ? getBoundsofRects(nodesBB, viewBB) : viewBB;
 
-  // Fit world into minimap with padding
-  const drawW = cw - PADDING * 2;
-  const drawH = ch - PADDING * 2;
-  const scale = Math.min(drawW / worldW, drawH / worldH);
-  const offsetX = PADDING + (drawW - worldW * scale) / 2;
-  const offsetY = PADDING + (drawH - worldH * scale) / 2;
+  // viewScale = max(scaledW, scaledH) — content fits inside element
+  const viewScale = Math.max(
+    boundingRect.width / cw || 1,
+    boundingRect.height / ch || 1,
+  );
 
-  // Draw elements
+  const viewWidth = viewScale * cw;
+  const viewHeight = viewScale * ch;
+  const offset = OFFSET_SCALE * viewScale;
+
+  // vue-flow viewBox: center content with offset padding
+  const viewBoxX =
+    boundingRect.x - (viewWidth - boundingRect.width) / 2 - offset;
+  const viewBoxY =
+    boundingRect.y - (viewHeight - boundingRect.height) / 2 - offset;
+  const viewBoxW = viewWidth + offset * 2;
+  const viewBoxH = viewHeight + offset * 2;
+
+  transform = {
+    viewScale,
+    viewBoxX,
+    viewBoxY,
+    viewBoxW,
+    viewBoxH,
+    elementW: cw,
+    elementH: ch,
+  };
+
+  const worldToMini = (wx: number, wy: number) => ({
+    x: ((wx - viewBoxX) / viewBoxW) * cw,
+    y: ((wy - viewBoxY) / viewBoxH) * ch,
+  });
+
+  // Draw nodes
   for (const el of elements) {
-    const rx = (el.x - wb.minX) * scale + offsetX;
-    const ry = (el.y - wb.minY) * scale + offsetY;
-    const rw = el.w * scale;
-    const rh = el.h * scale;
+    const p = worldToMini(el.x, el.y);
+    const rw = (el.w / viewBoxW) * cw;
+    const rh = (el.h / viewBoxH) * ch;
+    if (rw < 0.5 && rh < 0.5) continue;
 
-    // Don't draw elements smaller than 1px
-    if (rw < 1 && rh < 1) continue;
+    const drawW = Math.max(rw, 1);
+    const drawH = Math.max(rh, 1);
+    const r = Math.min(
+      NODE_BORDER_RADIUS / viewScale,
+      Math.min(drawW, drawH) / 2,
+      4,
+    );
 
     ctx.fillStyle = el.color;
     ctx.beginPath();
-    const r = Math.min(el.radius * scale, 3);
-    ctx.roundRect(rx, ry, Math.max(rw, 1), Math.max(rh, 1), r);
+    ctx.roundRect(p.x, p.y, drawW, drawH, r);
     ctx.fill();
   }
 
-  // Draw viewport indicator
-  const tree = app.tree as any;
-  const zoom = tree.scaleX || tree.scale || 1;
-  const panX = tree.x || 0;
-  const panY = tree.y || 0;
+  // vue-flow mask: evenodd path — fill whole map, cut out viewport hole
+  const vp = worldToMini(viewBB.x, viewBB.y);
+  const vpW = (viewBB.width / viewBoxW) * cw;
+  const vpH = (viewBB.height / viewBoxH) * ch;
 
-  // Get canvas container size
-  const viewEl = app.view as HTMLElement;
-  const containerW = viewEl?.clientWidth || window.innerWidth;
-  const containerH = viewEl?.clientHeight || window.innerHeight;
-
-  // Convert screen viewport back to world coordinates
-  const vpWorldX = -panX / zoom;
-  const vpWorldY = -panY / zoom;
-  const vpWorldW = containerW / zoom;
-  const vpWorldH = containerH / zoom;
-
-  // Map viewport to minimap
-  const vpX = (vpWorldX - wb.minX) * scale + offsetX;
-  const vpY = (vpWorldY - wb.minY) * scale + offsetY;
-  const vpW = vpWorldW * scale;
-  const vpH = vpWorldH * scale;
-
-  // Viewport rect
-  ctx.strokeStyle = "rgba(0, 122, 255, 0.8)";
-  ctx.lineWidth = 1.5;
-  ctx.fillStyle = "rgba(0, 122, 255, 0.08)";
+  ctx.save();
   ctx.beginPath();
-  ctx.roundRect(vpX, vpY, vpW, vpH, 2);
-  ctx.fill();
-  ctx.stroke();
+  // Outer rect
+  ctx.rect(0, 0, cw, ch);
+  // Inner hole (viewport) — reverse winding for evenodd
+  const holeX = vp.x;
+  const holeY = vp.y;
+  const holeW = Math.max(vpW, 2);
+  const holeH = Math.max(vpH, 2);
+  ctx.rect(holeX, holeY, holeW, holeH);
+  // vue-flow maskColor = rgb(240, 240, 240, 0.6)
+  ctx.fillStyle = isDark
+    ? "rgba(0, 0, 0, 0.45)"
+    : "rgba(240, 240, 240, 0.6)";
+  ctx.fill("evenodd");
+  ctx.restore();
 
-  // Store transform info for hit testing
-  (canvas as any).__minimapTransform = {
-    scale,
-    offsetX,
-    offsetY,
-    worldMinX: wb.minX,
-    worldMinY: wb.minY,
-  };
+  // Subtle viewport border (maskStroke) for readability when hole is large
+  ctx.strokeStyle = isDark
+    ? "rgba(255, 255, 255, 0.25)"
+    : "rgba(0, 0, 0, 0.15)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(holeX + 0.5, holeY + 0.5, holeW - 1, holeH - 1);
 }
 
 function scheduleRender() {
@@ -316,83 +396,105 @@ function scheduleRender() {
   rafId = requestAnimationFrame(render);
 }
 
-// ── Pointer interaction ─────────────────────────────────────────
+// ── Coordinate mapping ─────────────────────────────────────────────
 
-function minimapToWorld(clientX: number, clientY: number) {
+function clientToWorld(clientX: number, clientY: number) {
   const canvas = minimapCanvas.value;
-  if (!canvas) return null;
+  if (!canvas || !transform) return null;
 
   const rect = canvas.getBoundingClientRect();
   const mx = clientX - rect.left;
   const my = clientY - rect.top;
 
-  const t = (canvas as any).__minimapTransform;
-  if (!t) return null;
-
-  const worldX = (mx - t.offsetX) / t.scale + t.worldMinX;
-  const worldY = (my - t.offsetY) / t.scale + t.worldMinY;
-
+  const worldX = (mx / transform.elementW) * transform.viewBoxW + transform.viewBoxX;
+  const worldY = (my / transform.elementH) * transform.viewBoxH + transform.viewBoxY;
   return { worldX, worldY };
 }
 
-function navigateTo(worldX: number, worldY: number) {
+function setViewportCenter(worldX: number, worldY: number) {
   const app = props.canvasApp;
   if (!app?.tree) return;
 
   const tree = app.tree as any;
   const zoom = tree.scaleX || tree.scale || 1;
-
   const viewEl = app.view as HTMLElement;
   const containerW = viewEl?.clientWidth || window.innerWidth;
   const containerH = viewEl?.clientHeight || window.innerHeight;
 
-  // Center the viewport on the clicked world position
-  const targetPanX = -(worldX * zoom - containerW / 2);
-  const targetPanY = -(worldY * zoom - containerH / 2);
-
   try {
-    tree.set({ x: targetPanX, y: targetPanY });
+    tree.set({
+      x: -(worldX * zoom - containerW / 2),
+      y: -(worldY * zoom - containerH / 2),
+    });
     scheduleRender();
   } catch (err) {
     console.warn("Minimap navigation failed:", err);
   }
 }
 
+function zoomByWheel(deltaY: number, deltaMode: number, ctrlKey: boolean) {
+  const app = props.canvasApp;
+  if (!app?.tree) return;
+
+  const tree = app.tree as any;
+  const zoom = tree.scaleX || tree.scale || 1;
+
+  // vue-flow wheel zoom math
+  const factor = ctrlKey ? 10 : 1;
+  const pinchDelta =
+    -deltaY *
+    (deltaMode === 1 ? 0.05 : deltaMode ? 1 : 0.002) *
+    ZOOM_STEP;
+  const nextZoom = Math.min(
+    Math.max(zoom * 2 ** (pinchDelta * factor), 0.05),
+    64,
+  );
+
+  try {
+    tree.zoom(nextZoom, undefined, undefined, 0);
+    scheduleRender();
+  } catch (err) {
+    console.warn("Minimap zoom failed:", err);
+  }
+}
+
+// ── Pointer / wheel ────────────────────────────────────────────────
+
 function onPointerDown(e: PointerEvent) {
+  if (e.button !== 0) return;
   isDragging.value = true;
 
   const canvas = minimapCanvas.value;
-  if (canvas) {
-    canvas.setPointerCapture(e.pointerId);
-  }
+  canvas?.setPointerCapture(e.pointerId);
 
-  const pos = minimapToWorld(e.clientX, e.clientY);
-  if (pos) {
-    navigateTo(pos.worldX, pos.worldY);
-  }
+  // Click / drag scrubber: center viewport on minimap position
+  const pos = clientToWorld(e.clientX, e.clientY);
+  if (pos) setViewportCenter(pos.worldX, pos.worldY);
 }
 
 function onPointerMove(e: PointerEvent) {
   if (!isDragging.value) return;
-
-  const pos = minimapToWorld(e.clientX, e.clientY);
-  if (pos) {
-    navigateTo(pos.worldX, pos.worldY);
-  }
+  const pos = clientToWorld(e.clientX, e.clientY);
+  if (pos) setViewportCenter(pos.worldX, pos.worldY);
 }
 
 function onPointerUp(e: PointerEvent) {
   isDragging.value = false;
-
   const canvas = minimapCanvas.value;
   if (canvas) {
     try {
       canvas.releasePointerCapture(e.pointerId);
-    } catch {}
+    } catch {
+      /* already released */
+    }
   }
 }
 
-// ── Lifecycle & watchers ────────────────────────────────────────
+function onWheel(e: WheelEvent) {
+  zoomByWheel(e.deltaY, e.deltaMode, e.ctrlKey);
+}
+
+// ── Lifecycle ──────────────────────────────────────────────────────
 
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -423,12 +525,9 @@ watch(
 );
 
 onMounted(() => {
-  // Poll for updates at a low frequency (element property changes like position/size
-  // don't always fire tree-level events)
+  // Property changes (x/y/width) may not bubble tree events
   pollInterval = setInterval(() => {
-    if (isVisible.value) {
-      scheduleRender();
-    }
+    if (isVisible.value) scheduleRender();
   }, 500);
 });
 
@@ -441,9 +540,7 @@ onUnmounted(() => {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
-  if (props.canvasApp) {
-    cleanupListeners(props.canvasApp);
-  }
+  if (props.canvasApp) cleanupListeners(props.canvasApp);
 });
 </script>
 
@@ -459,13 +556,28 @@ onUnmounted(() => {
   padding: 4px;
 }
 
-.minimap-canvas {
-  display: block;
-  border-radius: 6px;
-  cursor: crosshair;
+/* vue-flow MiniMap surface inside popover */
+.minimap-panel {
+  width: 200px;
+  height: 150px;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--surface-panel, #fff);
+  border: 1px solid var(--glass-border, var(--border-color, #e5e7eb));
+  cursor: grab;
+  user-select: none;
 }
 
-.minimap-canvas:active {
+.minimap-panel.dragging {
   cursor: grabbing;
+}
+
+.minimap-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  cursor: inherit;
+  touch-action: none;
 }
 </style>
