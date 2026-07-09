@@ -134,11 +134,16 @@ onMounted(() => {
 
 const canvasElements = computed(() => {
   if (!props.canvasApp?.tree?.children) return [];
-  return props.canvasApp.tree.children.map((child: any) => {
-    let url = "";
-    let type = "shape";
+  return props.canvasApp.tree.children
+    .filter((child: any) => {
+      const tag = child.tag || child.__tag;
+      return tag !== "ImageGen" && tag !== "VideoGen";
+    })
+    .map((child: any) => {
+      let url = "";
+      let type = "shape";
 
-    const tag = child.tag || child.__tag;
+      const tag = child.tag || child.__tag;
     if (tag === "Image") {
       url = child.url || "";
       type = "image";
@@ -182,15 +187,27 @@ const mentionOptions = computed(() => {
     itemType: "element",
   }));
 
-  const models = modelsList.value.map((m: any) => ({
-    id: m.name,
-    name: m.name,
-    iconUrl: m.iconUrl,
-    purpose: m.purpose,
-    itemType: "model",
-  }));
+  const imageModels = modelsList.value
+    .filter((m: any) => m.purpose === "image")
+    .map((m: any) => ({
+      id: m.name,
+      name: m.name,
+      iconUrl: m.iconUrl,
+      purpose: m.purpose,
+      itemType: "model",
+    }));
 
-  return [...elements, ...models];
+  const videoModels = modelsList.value
+    .filter((m: any) => m.purpose === "video")
+    .map((m: any) => ({
+      id: m.name,
+      name: m.name,
+      iconUrl: m.iconUrl,
+      purpose: m.purpose,
+      itemType: "model",
+    }));
+
+  return [...elements, ...imageModels, ...videoModels];
 });
 
 const filteredMentions = computed(() => {
@@ -463,22 +480,40 @@ function handleSubmit() {
             <!-- Section Divider -->
             <div
               v-if="
-                item.itemType === 'model' &&
                 idx > 0 &&
-                filteredMentions[idx - 1].itemType !== 'model'
+                (item.itemType !== filteredMentions[idx - 1].itemType ||
+                  (item.itemType === 'model' &&
+                    item.purpose !== filteredMentions[idx - 1].purpose))
               "
               class="section-divider"
             ></div>
 
-            <!-- Section Header: 选择模型 -->
+            <!-- Section Header: 图片模型 -->
             <div
               v-if="
                 item.itemType === 'model' &&
-                (idx === 0 || filteredMentions[idx - 1].itemType !== 'model')
+                item.purpose === 'image' &&
+                (idx === 0 ||
+                  filteredMentions[idx - 1].itemType !== 'model' ||
+                  filteredMentions[idx - 1].purpose !== 'image')
               "
               class="mentions-section-header"
             >
-              选择模型
+              图片模型
+            </div>
+
+            <!-- Section Header: 视频模型 -->
+            <div
+              v-if="
+                item.itemType === 'model' &&
+                item.purpose === 'video' &&
+                (idx === 0 ||
+                  filteredMentions[idx - 1].itemType !== 'model' ||
+                  filteredMentions[idx - 1].purpose !== 'video')
+              "
+              class="mentions-section-header"
+            >
+              视频模型
             </div>
 
             <!-- Mention Item -->
