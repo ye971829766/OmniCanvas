@@ -3,8 +3,22 @@ import { Text, Rect, Frame, Group, Image, MoveEvent, ZoomEvent } from "leafer-ui
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/utils";
-import { getAgentHistory, deleteAgentSession, stopAgent } from "@/utils/api";
+import {
+  getAgentHistory,
+  getAgentPlan,
+  deleteAgentSession,
+  stopAgent,
+  uploadImage,
+} from "@/utils/api";
 import { useUser } from "./useUser";
+import type {
+  AgentAssetPayload,
+  AgentAttachmentInput,
+  AgentPlan,
+  AgentPlanStep,
+} from "@/types/agent";
+import { dataUrlToFile } from "@/utils/agentAttachments";
+import { updateAgentPlanFromTool } from "@/utils/agentPlan";
 import {
   createHiddenReasoningStreamFilter,
   stripHiddenReasoning,
@@ -50,6 +64,8 @@ export interface ChatMessage {
   /** Optional timestamp string e.g. Jun 15, 2026 */
   timestamp?: string;
   progress?: { tool?: string; message: string; percent?: number };
+  /** Structured task plan shown separately from conversational text. */
+  plan?: AgentPlan;
 }
 
 interface AgentHistoryControls {
@@ -166,7 +182,9 @@ function parseHistoryMessage(
     } else if (Array.isArray(msg.content)) {
       for (const part of msg.content) {
         if (part.type === "text") {
-          text = part.text || "";
+          text = String(part.text || "")
+            .replace(/\n*<attached_assets>[\s\S]*?<\/attached_assets>[\s\S]*$/i, "")
+            .trimEnd();
         } else if (part.type === "image_url" && part.image_url?.url) {
           images.push(part.image_url.url);
         } else if (part.type === "image" && part.image) {
@@ -265,6 +283,10 @@ function parseHistoryMessage(
       blocks.push({ id: `${id}-txt`, type: "text", text });
     }
 
+    const historicalPlan = tools
+      .map((tool) => tool.output?.plan)
+      .find((plan) => plan && Array.isArray(plan.steps));
+
     return {
       id,
       role: "assistant",
@@ -272,6 +294,7 @@ function parseHistoryMessage(
       tools,
       blocks,
       streaming: false,
+      plan: historicalPlan,
     };
   }
 
@@ -381,7 +404,10 @@ export function useAgent(
     loadingHistory.value = true;
     try {
       messages.value = []; // Clear current history before loading the new one
-      const rawHistory = await getAgentHistory(sessionId.value);
+      const [rawHistory, savedPlan] = await Promise.all([
+        getAgentHistory(sessionId.value),
+        getAgentPlan(sessionId.value).catch(() => null),
+      ]);
       if (Array.isArray(rawHistory)) {
         const parsed: ChatMessage[] = [];
         rawHistory.forEach((msg, idx) => {
@@ -413,6 +439,22 @@ export function useAgent(
             }
           }
         });
+        if (savedPlan) {
+          const lastAssistant = [...parsed].reverse().find((message) => message.role === "assistant");
+          if (lastAssistant) {
+            lastAssistant.plan = savedPlan;
+          } else {
+            parsed.push({
+              id: `plan-${savedPlan.id}`,
+              role: "assistant",
+              text: "",
+              tools: [],
+              blocks: [],
+              streaming: false,
+              plan: savedPlan,
+            });
+          }
+        }
         messages.value = parsed;
       }
     } catch (err) {
@@ -729,6 +771,23 @@ export function useAgent(
             editable: true,
           });
           nodeStates.value[n.refId] = { refId: n.refId, type: "image", status: "done", url: n.url };
+          leaferNode.on("property.change", () => {
+            if (leaferNode.generationStatus === "generating") {
+              nodeStates.value[n.refId] = {
+                refId: n.refId,
+                type: "image",
+                status: "generating",
+                url: leaferNode.url,
+              };
+            } else if (leaferNode.url) {
+              nodeStates.value[n.refId] = {
+                refId: n.refId,
+                type: "image",
+                status: "done",
+                url: leaferNode.url,
+              };
+            }
+          });
         }
 
         if (leaferNode) {
@@ -888,6 +947,15 @@ export function useAgent(
     }
   };
 
+  function updatePlanFromTool(
+    assistant: ChatMessage,
+    tool: string,
+    input: any,
+    completed: boolean,
+  ) {
+    updateAgentPlanFromTool(assistant.plan, tool, input, completed);
+  }
+
   /** Handle one decoded AgentEvent from the SSE stream. */
   function handleEvent(ev: any, assistant: ChatMessage) {
     if (!assistant.blocks) {
@@ -909,6 +977,14 @@ export function useAgent(
           percent: typeof ev.percent === "number" ? ev.percent : undefined,
         };
         break;
+      case "plan":
+        assistant.plan = {
+          ...ev.plan,
+          steps: Array.isArray(ev.plan?.steps)
+            ? ev.plan.steps.map((step: AgentPlanStep) => ({ ...step }))
+            : [],
+        };
+        break;
       case "tool_call": {
         const toolItem: ToolCallItem = {
           id: ev.id,
@@ -917,6 +993,7 @@ export function useAgent(
           input: ev.input,
         };
         assistant.tools.push(toolItem);
+        updatePlanFromTool(assistant, ev.tool, ev.input, false);
 
         const lastBlock = blocks[blocks.length - 1];
         if (lastBlock && lastBlock.type === "tools") {
@@ -935,6 +1012,7 @@ export function useAgent(
         if (chip) {
           chip.done = true;
           chip.output = ev.output;
+          updatePlanFromTool(assistant, ev.tool, chip.input, true);
         }
         for (const blk of blocks) {
           if (blk.type === "tools") {
@@ -983,6 +1061,52 @@ export function useAgent(
         break;
       }
     }
+  }
+
+  async function materializeAgentAssets(
+    attachments: Array<AgentAttachmentInput | string>,
+  ): Promise<AgentAssetPayload[]> {
+    return Promise.all(
+      attachments.map(async (attachment, index) => {
+        if (typeof attachment === "string") {
+          if (/^https?:\/\//i.test(attachment)) {
+            return {
+              id: `asset_retry_${Date.now()}_${index}`,
+              url: attachment,
+              name: `reference-${index + 1}`,
+              mimeType: "image/png",
+            };
+          }
+          const file = await dataUrlToFile(attachment, `reference-${index + 1}.png`);
+          const uploaded = await uploadImage(file);
+          return {
+            id: `asset_retry_${Date.now()}_${index}`,
+            url: uploaded.imageUrl,
+            name: file.name,
+            mimeType: file.type,
+            size: file.size,
+          };
+        }
+
+        let url = attachment.url;
+        if (!url) {
+          const file = attachment.file;
+          if (!file) throw new Error(`素材 ${attachment.name} 缺少原始文件`);
+          const uploaded = await uploadImage(file);
+          url = uploaded.imageUrl;
+        }
+
+        return {
+          id: attachment.id,
+          url,
+          name: attachment.name,
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+          width: attachment.width,
+          height: attachment.height,
+        };
+      }),
+    );
   }
 
   /** 序列化当前画布状态，供 Agent 感知画布全貌 */
@@ -1098,7 +1222,10 @@ export function useAgent(
   }
 
   /** Send a message and stream the agent's response. */
-  async function send(input: string, attachments?: string[]) {
+  async function send(
+    input: string,
+    attachments?: Array<AgentAttachmentInput | string>,
+  ) {
     const text = input.trim();
     if ((!text && (!attachments || attachments.length === 0)) || running.value) return;
 
@@ -1106,14 +1233,17 @@ export function useAgent(
     runCanvasChanged = false;
     historyControls?.begin?.();
 
-    messages.value.push({
+    const userMessage: ChatMessage = {
       id: uid(),
       role: "user",
       text,
       tools: [],
       streaming: false,
-      images: attachments ? [...attachments] : undefined,
-    });
+      images: attachments?.map((attachment) =>
+        typeof attachment === "string" ? attachment : attachment.previewUrl,
+      ),
+    };
+    messages.value.push(userMessage);
     const assistant = reactive<ChatMessage>({
       id: uid(),
       role: "assistant",
@@ -1128,6 +1258,12 @@ export function useAgent(
 
 
     try {
+      if (attachments?.length) {
+        assistant.progress = { message: "正在上传原始素材" };
+      }
+      const assets = await materializeAgentAssets(attachments || []);
+      if (assets.length > 0) userMessage.images = assets.map((asset) => asset.url);
+      assistant.progress = { message: "正在理解任务与画布" };
       const { currentUser } = useUser();
       const token = localStorage.getItem("omnicanvas_token");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -1142,7 +1278,7 @@ export function useAgent(
           headers,
           body: JSON.stringify({
             message: text,
-            images: attachments,
+            assets,
             canvasState: serializeCanvasForAgent(),
             userId: currentUser.value?.id,
             username: currentUser.value?.username,
@@ -1187,7 +1323,7 @@ export function useAgent(
       }
     } catch (e: any) {
       if (e?.name !== "AbortError") {
-        assistant.text += `\n\n⚠️ 连接失败: ${e?.message ?? e}`;
+        assistant.error = e?.message ?? "连接失败，请稍后重试";
       }
     } finally {
       const committed = historyControls?.commit?.() ?? runCanvasChanged;

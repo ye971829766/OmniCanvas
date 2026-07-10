@@ -21,6 +21,13 @@ import { analyzeDesignTool } from './tools/vision-analysis.tools';
 import { verifyDesignTool } from './tools/verify-design.tools';
 import { planDesignTool } from './tools/plan-design.tools';
 import { webSearchTool, webExtractTool } from './tools/web-search.tools';
+import {
+  editImageTool,
+  inpaintImageTool,
+  removeBackgroundTool,
+  upscaleImageTool,
+} from './tools/image-processing.tools';
+import { planEcommerceSuiteTool } from './tools/ecommerce-suite.tools';
 
 /** All design tools the agent can call. */
 export const ALL_TOOLS: AgentTool[] = [
@@ -35,6 +42,10 @@ export const ALL_TOOLS: AgentTool[] = [
   // Generation
   generateImageTool,
   generateVideoTool,
+  editImageTool,
+  removeBackgroundTool,
+  inpaintImageTool,
+  upscaleImageTool,
   // Mutation
   updateNodeTool,
   removeNodeTool,
@@ -55,6 +66,7 @@ export const ALL_TOOLS: AgentTool[] = [
   analyzeDesignTool,
   verifyDesignTool,
   planDesignTool,
+  planEcommerceSuiteTool,
   // Web (internet access)
   webSearchTool,
   webExtractTool,

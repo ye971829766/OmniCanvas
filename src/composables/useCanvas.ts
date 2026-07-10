@@ -7,7 +7,6 @@ import {
   toRaw,
   type Ref,
 } from "vue";
-import { useTheme } from "@/composables/useTheme";
 import { gsap } from "gsap";
 import {
   App,
@@ -222,8 +221,12 @@ export function useCanvas(
   } = useCanvasHistory(canvasApp, activeWorkspaceIdRef);
 
   // Sub-composable for frame creation and containment logic
-  const { enableFrameDraw, disableFrameDraw, attachFrameListeners } =
-    useCanvasFrame(canvasApp, activeTool, recordHistory);
+  const {
+    enableFrameDraw,
+    disableFrameDraw,
+    attachFrameDropFallback,
+    attachFrameListeners,
+  } = useCanvasFrame(canvasApp, activeTool, recordHistory);
 
   const thickness = thicknessState || ref(4);
 
@@ -621,6 +624,7 @@ export function useCanvas(
     }
 
     canvasApp.value = app;
+    attachFrameDropFallback();
     window.canvasApp = app;
     app.recordHistory = recordHistory;
     app.recordHistoryDebounced = recordHistoryDebounced;
@@ -1307,13 +1311,16 @@ export function useCanvas(
     const initNodeListeners = (node: any) => {
       if (!node) return;
 
+      if (node.tag === "Frame" || node.__tag === "Frame") {
+        attachFrameListeners(node);
+      }
+
       if (
         node.tag === "Frame" ||
         node.__tag === "Frame" ||
         node.tag === "Group" ||
         node.__tag === "Group"
       ) {
-        attachFrameListeners(node);
         attachContainerChildAddListener(node);
       }
 

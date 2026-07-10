@@ -54,6 +54,7 @@
 
     <LayerPanel
       :canvas-app="canvasApp"
+      :workspace-id="activeWorkspaceId"
       :record-history-debounced="recordHistoryDebounced"
     />
 
@@ -107,9 +108,6 @@
 
     <div
       class="absolute top-4 z-40 flex items-center gap-3 canvas-top-controls"
-      :style="{
-        right: agentPanelCollapsed ? '12px' : 'min(432px, calc(100% - 96px))',
-      }"
     >
       <ZoomController :canvas-app="canvasApp" />
       <button
@@ -1228,6 +1226,7 @@ body {
 }
 
 .canvas-top-controls {
+  right: 12px;
   transition: right 0.25s ease;
 }
 

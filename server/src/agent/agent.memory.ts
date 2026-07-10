@@ -3,6 +3,8 @@ import type { ModelMessage } from 'ai';
 import { DatabaseService } from '../database/database.service';
 import * as fs from 'fs';
 import { join } from 'path';
+import type { AgentAsset } from './agent-assets';
+import type { AgentPlan, AgentPlanStep } from './agent.protocol';
 
 /**
  * Conversation history per session, persisted in SQLite database.
@@ -28,6 +30,8 @@ interface SessionEntry {
     fontFamily?: string;
     styleKeywords?: string[];
   };
+  assets?: AgentAsset[];
+  plan?: AgentPlan;
   screenshot?: string; // local file path
   lastExportedNodeImage?: string; // local file path
 }
@@ -96,6 +100,8 @@ export class AgentMemory {
         messages: JSON.parse(row.messages),
         lastAccess: Number(row.lastAccess),
         brand: row.brand ? JSON.parse(row.brand) : undefined,
+        assets: row.assets ? JSON.parse(row.assets) : undefined,
+        plan: row.plan ? JSON.parse(row.plan) : undefined,
         screenshot: row.screenshot || undefined,
         lastExportedNodeImage: row.lastExportedNodeImage || undefined,
       };
@@ -112,10 +118,12 @@ export class AgentMemory {
       const row = db.query("SELECT sessionId FROM agent_sessions WHERE sessionId = ?").get(sessionId) as any;
       if (row) {
         db.query(
-          "UPDATE agent_sessions SET messages = ?, brand = ?, screenshot = ?, lastExportedNodeImage = ?, lastAccess = ? WHERE sessionId = ?"
+          "UPDATE agent_sessions SET messages = ?, brand = ?, assets = ?, plan = ?, screenshot = ?, lastExportedNodeImage = ?, lastAccess = ? WHERE sessionId = ?"
         ).run(
           JSON.stringify(entry.messages),
           entry.brand ? JSON.stringify(entry.brand) : null,
+          entry.assets ? JSON.stringify(entry.assets) : null,
+          entry.plan ? JSON.stringify(entry.plan) : null,
           entry.screenshot || null,
           entry.lastExportedNodeImage || null,
           now,
@@ -123,11 +131,13 @@ export class AgentMemory {
         );
       } else {
         db.query(
-          "INSERT INTO agent_sessions (sessionId, messages, brand, screenshot, lastExportedNodeImage, lastAccess) VALUES (?, ?, ?, ?, ?, ?)"
+          "INSERT INTO agent_sessions (sessionId, messages, brand, assets, plan, screenshot, lastExportedNodeImage, lastAccess) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         ).run(
           sessionId,
           JSON.stringify(entry.messages),
           entry.brand ? JSON.stringify(entry.brand) : null,
+          entry.assets ? JSON.stringify(entry.assets) : null,
+          entry.plan ? JSON.stringify(entry.plan) : null,
           entry.screenshot || null,
           entry.lastExportedNodeImage || null,
           now
@@ -197,6 +207,58 @@ export class AgentMemory {
       session = { messages: [], lastAccess: Date.now(), brand };
     }
     this.saveSession(sessionId, session);
+  }
+
+  getAssets(sessionId: string): AgentAsset[] {
+    return this.getSession(sessionId)?.assets ?? [];
+  }
+
+  registerAssets(sessionId: string, assets: AgentAsset[]): AgentAsset[] {
+    if (assets.length === 0) return this.getAssets(sessionId);
+    let session = this.getSession(sessionId) ?? { messages: [], lastAccess: Date.now() };
+    const merged = new Map((session.assets ?? []).map((asset) => [asset.id, asset]));
+    for (const asset of assets) merged.set(asset.id, asset);
+    session.assets = [...merged.values()].slice(-64);
+    this.saveSession(sessionId, session);
+    return session.assets;
+  }
+
+  getPlan(sessionId: string): AgentPlan | null {
+    return this.getSession(sessionId)?.plan ?? null;
+  }
+
+  setPlan(sessionId: string, plan: AgentPlan): void {
+    const session = this.getSession(sessionId) ?? { messages: [], lastAccess: Date.now() };
+    session.plan = plan;
+    this.saveSession(sessionId, session);
+  }
+
+  updatePlanForTool(
+    sessionId: string,
+    tool: string,
+    input: any,
+    completed: boolean,
+  ): AgentPlan | null {
+    const session = this.getSession(sessionId);
+    const plan = session?.plan;
+    if (!session || !plan) return null;
+
+    const matches = (step: AgentPlanStep) => {
+      if (!step.tools?.includes(tool)) return false;
+      if (step.platform && input?.platform && step.platform !== input.platform) return false;
+      if (step.deliverable && input?.deliverable && step.deliverable !== input.deliverable) return false;
+      return true;
+    };
+    const candidates = plan.steps.filter(matches);
+    const step =
+      candidates.find((item) => item.status === 'in_progress') ??
+      candidates.find((item) => item.status === 'pending');
+    if (!step) return plan;
+
+    if (completed && step.completionTool === tool) step.status = 'completed';
+    else if (step.status === 'pending') step.status = 'in_progress';
+    this.saveSession(sessionId, session);
+    return plan;
   }
 
   getScreenshot(sessionId: string): string | null {

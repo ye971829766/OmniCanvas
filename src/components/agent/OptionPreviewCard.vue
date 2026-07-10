@@ -66,6 +66,14 @@ function downloadMedia(e: MouseEvent) {
       class="preview-done"
     >
       <img :src="state.url" class="preview-img" />
+      <button
+        class="action-download-btn"
+        @click.stop="downloadMedia"
+        title="下载图片"
+        aria-label="下载图片"
+      >
+        <Download :size="16" />
+      </button>
     </div>
 
     <!-- ── DONE: video ────────────────────────────────────────── -->

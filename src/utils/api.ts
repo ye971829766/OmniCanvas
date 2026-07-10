@@ -1,4 +1,5 @@
 import request from "./request";
+import type { AgentPlan } from "@/types/agent";
 
 export { API_BASE_URL } from "./request";
 
@@ -421,6 +422,11 @@ export interface AgentMessage {
 
 export async function getAgentHistory(sessionId: string): Promise<AgentMessage[]> {
   const res = await request.get<AgentMessage[]>(`/agent/${sessionId}/history`);
+  return res.data;
+}
+
+export async function getAgentPlan(sessionId: string): Promise<AgentPlan | null> {
+  const res = await request.get<AgentPlan | null>(`/agent/${sessionId}/plan`);
   return res.data;
 }
 

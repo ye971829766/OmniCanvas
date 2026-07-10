@@ -481,10 +481,6 @@ const toggleSearch = () => {
   }
 };
 
-const openSettings = () => {
-  window.open("http://localhost:5174", "_blank");
-};
-
 const handleKeyDown = (e: KeyboardEvent) => {
   if (e.ctrlKey && e.shiftKey) {
     if (e.key === "O" || e.key === "o") {

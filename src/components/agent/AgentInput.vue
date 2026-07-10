@@ -18,52 +18,12 @@ import {
 } from "lucide-vue-next";
 import { getModelConfig } from "@/utils/api";
 import Button from "primevue/button";
-
-function compressImage(
-  file: File,
-  maxWidth = 1024,
-  maxHeight = 1024,
-  quality = 0.85,
-): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new window.Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxWidth) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", quality));
-        } else {
-          resolve(event.target?.result as string);
-        }
-      };
-      img.onerror = () => {
-        resolve(event.target?.result as string);
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
-}
+import type { AgentAttachmentInput } from "@/types/agent";
+import {
+  createAgentAttachment,
+  createAgentAttachmentFromSource,
+  MAX_AGENT_ATTACHMENTS,
+} from "@/utils/agentAttachments";
 
 const props = defineProps<{
   modelValue: string;
@@ -73,7 +33,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:modelValue", val: string): void;
-  (e: "submit", payload: { text: string; attachments: string[] }): void;
+  (e: "submit", payload: { text: string; attachments: AgentAttachmentInput[] }): void;
   (e: "stop"): void;
 }>();
 
@@ -83,7 +43,7 @@ const isDragging = ref(false);
 const showMentions = ref(false);
 const mentionsQuery = ref("");
 const selectedMentionIndex = ref(0);
-const attachments = ref<string[]>([]);
+const attachments = ref<AgentAttachmentInput[]>([]);
 const mentionCommandCallback = ref<any>(null);
 
 const modelsList = ref<any[]>([]);
@@ -129,11 +89,39 @@ const loadModels = async () => {
   }
 };
 
-const handleAddReferenceImage = (e: Event) => {
+function showAttachmentError(message: string) {
+  window.dispatchEvent(
+    new CustomEvent("canvas:toast", {
+      detail: { severity: "warn", summary: "无法添加素材", detail: message },
+    }),
+  );
+}
+
+async function appendAttachment(file: File) {
+  if (attachments.value.length >= MAX_AGENT_ATTACHMENTS) {
+    showAttachmentError(`一次最多添加 ${MAX_AGENT_ATTACHMENTS} 张图片`);
+    return;
+  }
+  try {
+    attachments.value.push(await createAgentAttachment(file));
+  } catch (error: any) {
+    showAttachmentError(error?.message || "图片处理失败");
+  }
+}
+
+const handleAddReferenceImage = async (e: Event) => {
   const customEvent = e as CustomEvent;
   const imgData = customEvent.detail?.image;
   if (imgData) {
-    attachments.value.push(imgData);
+    if (attachments.value.length >= MAX_AGENT_ATTACHMENTS) {
+      showAttachmentError(`一次最多添加 ${MAX_AGENT_ATTACHMENTS} 张图片`);
+      return;
+    }
+    try {
+      attachments.value.push(await createAgentAttachmentFromSource(imgData));
+    } catch (error: any) {
+      showAttachmentError(error?.message || "画布引用添加失败");
+    }
   }
 };
 
@@ -348,9 +336,7 @@ const editor = useEditor({
         if (items[i].type.indexOf("image") !== -1) {
           const file = items[i].getAsFile();
           if (file) {
-            compressImage(file).then((compressed) => {
-              attachments.value.push(compressed);
-            });
+            void appendAttachment(file);
             imagePasted = true;
           }
         }
@@ -443,13 +429,7 @@ function handleFileChange(e: Event) {
       file.type.startsWith("image/") ||
       /\.(png|jpe?g|webp|gif|bmp|svg|tiff?)$/i.test(file.name);
     if (isImage) {
-      compressImage(file)
-        .then((compressed) => {
-          attachments.value.push(compressed);
-        })
-        .catch((err) => {
-          console.error("Failed to process image attachment:", err);
-        });
+      void appendAttachment(file);
     }
   }
   // Reset value so re-selecting the same file triggers change event
@@ -467,19 +447,14 @@ function handleDrop(e: DragEvent) {
       file.type.startsWith("image/") ||
       /\.(png|jpe?g|webp|gif|bmp|svg|tiff?)$/i.test(file.name);
     if (isImage) {
-      compressImage(file)
-        .then((compressed) => {
-          attachments.value.push(compressed);
-        })
-        .catch((err) => {
-          console.error("Failed to process dropped image attachment:", err);
-        });
+      void appendAttachment(file);
     }
   }
 }
 
 function insertSuggestion() {
   const suggestionsList = [
+    "上传产品图，生成淘宝、京东和 Amazon 电商套图",
     "自动重排画布上的所有元素",
     "做一张咖啡店开业海报，暖色调",
     "生成一张可爱的橘猫照片",
@@ -515,7 +490,7 @@ function handleSubmit() {
       type="file"
       ref="fileInputRef"
       style="display: none"
-      accept="image/*"
+      accept="image/png,image/jpeg,image/webp"
       multiple
       @change="handleFileChange"
     />
@@ -639,11 +614,11 @@ function handleSubmit() {
     <!-- Attached Files list -->
     <div v-if="attachments.length > 0" class="attachments-list">
       <div
-        v-for="(src, idx) in attachments"
-        :key="idx"
+        v-for="(attachment, idx) in attachments"
+        :key="attachment.id"
         class="attachment-preview"
       >
-        <img :src="src" />
+        <img :src="attachment.previewUrl" :alt="attachment.name" />
         <Button
           unstyled
           class="remove-attachment"

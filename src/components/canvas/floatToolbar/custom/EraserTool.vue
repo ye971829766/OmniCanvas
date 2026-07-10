@@ -56,7 +56,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, toRaw, onUnmounted, type PropType } from "vue";
 import { Loader2, Eraser, Check, X } from "lucide-vue-next";
-import { ZoomEvent, MoveEvent, Box, Group, Pen, Rect, Image } from "leafer-ui";
+import { Box, Group, Pen, Rect, Image } from "leafer-ui";
 import { inpaintImage } from "@/utils/api";
 import type {
   ToolbarChangePayload,
@@ -174,18 +174,6 @@ const getCanvasApp = () => toRaw(props.target.app);
 const getCanvasView = (): HTMLElement | null => {
   const canvasApp = getCanvasApp();
   return (canvasApp?.view as HTMLElement | undefined) ?? null;
-};
-
-const getViewportZoom = () => {
-  const canvasApp = getCanvasApp();
-  if (!canvasApp?.tree) return 1;
-  const v = { x: 1, y: 0 };
-  try {
-    canvasApp.tree.localToWorld(v, undefined, true);
-  } catch (_) {
-    return 1;
-  }
-  return Math.sqrt(v.x * v.x + v.y * v.y) || 1;
 };
 
 // Build a Leafer IImageCursor object — let Leafer's own system show it on the hittable Rect

@@ -16,6 +16,7 @@ import AgentMessages from "./agent/AgentMessages.vue";
 import AgentInput from "./agent/AgentInput.vue";
 import { useConfirm } from "primevue/useconfirm";
 import { Undo2 } from "lucide-vue-next";
+import type { AgentAttachmentInput } from "@/types/agent";
 const confirm = useConfirm();
 
 const props = defineProps<{
@@ -186,13 +187,14 @@ onUnmounted(() => {
 });
 
 const suggestions = [
+  "上传产品图，生成淘宝、京东和 Amazon 电商套图",
   "生成一张可爱的橘猫照片",
   "做一张咖啡店开业海报，暖色调",
   "画一个科技感的产品 banner",
   "生成一段海浪的短视频",
 ];
 
-async function submit(payload?: { text: string; attachments: string[] }) {
+async function submit(payload?: { text: string; attachments: AgentAttachmentInput[] }) {
   const text = payload?.text ?? input.value;
   const files = payload?.attachments ?? [];
   if (!text.trim() && files.length === 0) return;
@@ -273,7 +275,7 @@ function handleZoomToNode(refId: string) {
   top: 0;
   right: 0;
   z-index: 90;
-  width: min(420px, calc(100vw - 16px));
+  width: var(--agent-panel-width, min(420px, calc(100vw - 16px)));
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -281,7 +283,14 @@ function handleZoomToNode(refId: string) {
   border-left: 1px solid var(--border-color);
   overflow: hidden;
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.08);
-  will-change: transform, opacity;
+  transition: width 0.25s cubic-bezier(0.45, 0, 0.55, 1);
+  will-change: transform, opacity, width;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-panel {
+    transition: none;
+  }
 }
 
 .panel-header-row {

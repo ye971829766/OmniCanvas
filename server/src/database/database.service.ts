@@ -113,11 +113,25 @@ export class DatabaseService implements OnModuleInit {
         sessionId TEXT PRIMARY KEY,
         messages TEXT NOT NULL,
         brand TEXT,
+        assets TEXT,
+        plan TEXT,
         screenshot TEXT,
         lastExportedNodeImage TEXT,
         lastAccess INTEGER NOT NULL
       )
     `);
+
+    try {
+      const agentColumns = this.dbInstance.query("PRAGMA table_info(agent_sessions)").all() as any[];
+      if (!agentColumns.some((column) => column.name === "assets")) {
+        this.dbInstance.run("ALTER TABLE agent_sessions ADD COLUMN assets TEXT");
+      }
+      if (!agentColumns.some((column) => column.name === "plan")) {
+        this.dbInstance.run("ALTER TABLE agent_sessions ADD COLUMN plan TEXT");
+      }
+    } catch (err) {
+      console.warn("Failed to check or alter agent_sessions assets column:", err);
+    }
 
     // 6. Create generation_tasks table to persist generated image/video task states
     this.dbInstance.run(`

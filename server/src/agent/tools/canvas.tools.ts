@@ -415,11 +415,30 @@ export const addFrameTool: AgentTool = {
       flowWrap: { type: 'boolean', description: 'Whether elements wrap to the next line/column when they exceed container bounds.' },
       gap: { type: 'number', description: 'Gap spacing between elements in pixels.' },
       padding: { type: 'number', description: 'Padding spacing inside the frame container.' },
+      refId: { type: 'string', description: 'Optional stable frame ID supplied by a structured plan.' },
     },
     required: ['width', 'height'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const refId = ctx.newRefId('frame');
+    const refId = input.refId || ctx.newRefId('frame');
+    const existing = ctx.canvasState.find((node: any) => node.refId === refId);
+    if (existing) {
+      const patch = {
+        width: input.width,
+        height: input.height,
+        fill: input.background ?? existing.fill ?? '#ffffff',
+        x: input.x ?? existing.x,
+        y: input.y ?? existing.y,
+        flow: input.flow,
+        flowAlign: input.flowAlign,
+        flowWrap: input.flowWrap,
+        gap: input.gap,
+        padding: input.padding,
+      };
+      ctx.sink.canvas({ op: 'update_node', refId, patch: patch as any });
+      upsertCanvasNode(ctx, refId, { ...existing, ...patch });
+      return { output: { refId, reused: true, note: 'Existing frame artboard updated.' } };
+    }
     const node = {
       refId,
       type: 'frame' as const,

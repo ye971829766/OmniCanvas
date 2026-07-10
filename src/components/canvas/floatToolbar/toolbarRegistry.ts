@@ -1,4 +1,4 @@
-import { Download, Lock, LockOpen, Group, Ungroup, Crop } from "lucide-vue-next";
+import { Lock, LockOpen, Group, Ungroup, Crop } from "lucide-vue-next";
 import RadiusTool from "./custom/RadiusTool.vue";
 import FillTool from "./custom/FillTool.vue";
 import BorderTool from "./custom/BorderTool.vue";

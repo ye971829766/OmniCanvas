@@ -480,6 +480,7 @@ defineExpose({
   pointer-events: none;
   z-index: 100;
   overflow: visible;
+  container-type: inline-size;
 }
 
 /* Shared Hover Pill Background */
@@ -753,6 +754,25 @@ defineExpose({
     transform 0.25s cubic-bezier(0.25, 1, 0.5, 1),
     width 0.3s cubic-bezier(0.25, 1, 0.5, 1);
   overflow: visible;
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+}
+
+@container (max-width: 370px) {
+  .toolbar-container {
+    gap: 0;
+    padding-right: 3px;
+    padding-left: 3px;
+  }
+
+  .tool-btn {
+    width: 30px;
+  }
+
+  .divider {
+    margin-right: 1px;
+    margin-left: 1px;
+  }
 }
 
 .properties-toolbar-wrapper.active {

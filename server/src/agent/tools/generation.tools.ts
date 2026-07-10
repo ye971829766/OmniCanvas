@@ -1,131 +1,6 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
 import { upsertCanvasNode } from '../canvas-state';
-import { exportNodeImageTool } from './canvas.tools';
-import * as fs from 'fs';
-import * as path from 'path';
-
-/** Helper to resolve tool-input refImages (refIds or URLs) to base64 Data URLs */
-async function resolveRefImagesToBase64(refImages: string[] | undefined, ctx: ToolContext): Promise<string[]> {
-  if (!refImages || refImages.length === 0) return [];
-  const base64List: string[] = [];
-
-  for (const ref of refImages) {
-    if (!ref) continue;
-    // 1. Check if it's already a base64 Data URL
-    if (ref.startsWith('data:image/')) {
-      base64List.push(ref);
-      continue;
-    }
-
-    // 2. Search canvasState for a node with matching refId
-    const node = ctx.canvasState.find((n: any) => n.refId === ref);
-
-    // Enhancement 1: If canvas node exists but has no image URL (e.g. Rect, Frame, Text, Group),
-    // dynamically export it as a base64 image using exportNodeImageTool
-    if (node && !node.url) {
-      try {
-        console.log(`Node ${ref} has no image URL. Exporting dynamically...`);
-        const exportResult = await exportNodeImageTool.execute({ refId: ref, waitForGeneration: false }, ctx);
-        const output = exportResult.output as any;
-        if (output && output.image) {
-          base64List.push(output.image);
-          continue;
-        }
-      } catch (exportErr) {
-        console.error(`Failed to export non-image reference node ${ref}:`, exportErr);
-      }
-    }
-
-    let imageUrl = ref; // fallback: treat ref as URL itself
-    if (node) {
-      if (node.tag === 'Image' && node.url) {
-        imageUrl = node.url;
-      } else if (node.url) {
-        imageUrl = node.url;
-      }
-    }
-
-    // 3. Resolve the image URL to base64
-    if (imageUrl.startsWith('data:image/')) {
-      base64List.push(imageUrl);
-      continue;
-    }
-
-    // Enhancement 2: Check if we can resolve it locally on the filesystem first,
-    // avoiding HTTP request mismatches or self-fetching routing errors.
-    let resolvedLocally = false;
-    let localPath: string | null = null;
-    
-    const isLocalUrl = imageUrl.startsWith(ctx.origin) || 
-                       imageUrl.startsWith('http://localhost') || 
-                       imageUrl.startsWith('http://127.0.0.1');
-
-    if (isLocalUrl) {
-      const match = imageUrl.match(/\/files\/([^/]+)$/);
-      if (match && match[1]) {
-        localPath = path.join(process.cwd(), 'files', match[1]);
-      }
-    } else if (imageUrl.startsWith('files/')) {
-      localPath = path.join(process.cwd(), imageUrl);
-    } else if (imageUrl.startsWith('/files/')) {
-      localPath = path.join(process.cwd(), imageUrl.slice(1));
-    }
-
-    if (localPath) {
-      try {
-        let finalPath = localPath;
-        let exists = fs.existsSync(finalPath);
-        
-        if (!exists) {
-          // Fallback check if process.cwd() is the project root instead of the server directory
-          const altPath = localPath.replace(/[\\/]files[\\/]/, '/server/files/');
-          if (fs.existsSync(altPath)) {
-            finalPath = altPath;
-            exists = true;
-          }
-        }
-        
-        if (exists) {
-          const buffer = fs.readFileSync(finalPath);
-          const ext = path.extname(finalPath).slice(1) || 'png';
-          const contentType = ext === 'jpeg' || ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-          const base64Str = buffer.toString('base64');
-          base64List.push(`data:${contentType};base64,${base64Str}`);
-          resolvedLocally = true;
-          console.log(`Successfully resolved image locally: ${finalPath}`);
-        }
-      } catch (localErr) {
-        console.error(`Error reading local image file ${localPath}:`, localErr);
-      }
-    }
-
-    if (resolvedLocally) continue;
-
-    // Fallback: fetch over HTTP
-    try {
-      let finalUrl = imageUrl;
-      if (imageUrl.startsWith('/')) {
-        finalUrl = `${ctx.origin}${imageUrl}`;
-      } else if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
-        finalUrl = `${ctx.origin}/${imageUrl}`;
-      }
-
-      console.log(`Fetching reference image from URL: ${finalUrl}`);
-      const res = await fetch(finalUrl);
-      if (!res.ok) {
-        throw new Error(`Failed to fetch image: HTTP ${res.status}`);
-      }
-      const buffer = await res.arrayBuffer();
-      const contentType = res.headers.get('content-type') || 'image/png';
-      const base64Str = Buffer.from(buffer).toString('base64');
-      base64List.push(`data:${contentType};base64,${base64Str}`);
-    } catch (err: any) {
-      console.error(`Failed to resolve reference image ${ref} via fetch:`, err);
-    }
-  }
-
-  return base64List;
-}
+import { resolveReferencesToBase64 } from './image-reference';
 
 /**
  * generate_image — creates an ImageGen node on the canvas and kicks off the
@@ -143,15 +18,17 @@ export const generateImageTool: AgentTool = {
     properties: {
       prompt: { type: 'string', description: 'Detailed description of the image' },
       model: { type: 'string', description: 'Optional image model id. Usually omit unless the user selected one.' },
-      aspectRatio: { type: 'string', enum: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+      aspectRatio: { type: 'string', description: 'Optional aspect ratio such as 1:1, 16:9, 3:4, or a provider-supported custom ratio.' },
       size: { type: 'string', description: 'e.g. "1024x1024" (optional)' },
       quality: { type: 'string', description: 'Optional provider quality such as auto, low, medium, high, standard, hd, 1K, 2K.' },
       style: { type: 'string', description: 'optional style hint' },
       refImages: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Optional array of refIds of existing canvas elements or absolute URLs to use as visual reference for image-to-image/edit generation.',
+        description: 'Optional array of stable assetIds, canvas refIds, or absolute URLs to use as visual references.',
       },
+      platform: { type: 'string', enum: ['amazon', 'taobao', 'jd'], description: 'Optional ecommerce platform tag for plan tracking.' },
+      deliverable: { type: 'string', description: 'Optional deliverable role such as main, lifestyle, selling_point, or detail.' },
       x: { type: 'number', description: 'X position in pixels. Omit if the parentId points to an auto-layout container.' },
       y: { type: 'number', description: 'Y position in pixels. Omit if the parentId points to an auto-layout container.' },
       width: { type: 'number' },
@@ -162,7 +39,10 @@ export const generateImageTool: AgentTool = {
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const refId = ctx.newRefId('img');
-    const base64Images = await resolveRefImagesToBase64(input.refImages, ctx);
+    const base64Images = await resolveReferencesToBase64(input.refImages, ctx);
+    const referenceAssetId = input.refImages?.find((ref: string) =>
+      ctx.assets?.some((asset) => asset.id === ref),
+    );
 
     const nodeSpec = {
       refId,
@@ -178,6 +58,8 @@ export const generateImageTool: AgentTool = {
       width: input.width,
       height: input.height,
       images: base64Images,
+      platform: input.platform,
+      deliverable: input.deliverable,
     };
 
     // 1. tell the canvas to create an ImageGen placeholder node
@@ -217,6 +99,9 @@ export const generateImageTool: AgentTool = {
         refId,
         taskId: (res as any).taskId,
         status: (res as any).status,
+        platform: input.platform,
+        deliverable: input.deliverable,
+        referenceAssetId,
         note: 'ImageGen node created and generation started. The canvas will poll for the result.',
       },
     };
@@ -253,7 +138,7 @@ export const generateVideoTool: AgentTool = {
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const refId = ctx.newRefId('vid');
-    const base64Images = await resolveRefImagesToBase64(input.refImages, ctx);
+    const base64Images = await resolveReferencesToBase64(input.refImages, ctx);
     const inputReference = base64Images[0] || '';
 
     const nodeSpec = {

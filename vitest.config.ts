@@ -10,6 +10,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    include: ['src/**/*.test.ts'],
+    pool: 'forks',
+    poolOptions: {
+      forks: { singleFork: true },
+    },
     setupFiles: ['./src/utils/__tests__/setup.ts'],
   },
   resolve: {

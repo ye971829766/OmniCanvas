@@ -1,6 +1,8 @@
 import type { AiService } from '../ai/ai.service';
 import type { EventSink } from './event-sink';
 import type { AgentMemory } from './agent.memory';
+import type { FilesService } from '../files/files.service';
+import type { AgentAsset } from './agent-assets';
 
 /** Context handed to every tool execution. */
 export interface ToolContext {
@@ -9,6 +11,8 @@ export interface ToolContext {
   sink: EventSink;
   /** the existing AiService — tools reuse generate-image/video, channels, etc. */
   ai: AiService;
+  /** existing file/image processing service */
+  files: FilesService;
   /** origin url for building absolute file urls (same as AiController.getOrigin) */
   origin: string;
   /** generate ref ids */
@@ -17,6 +21,8 @@ export interface ToolContext {
   memory: AgentMemory;
   /** real-time canvas state sent from the frontend (all nodes currently on the canvas) */
   canvasState: any[];
+  /** stable uploaded assets available across conversation turns */
+  assets: AgentAsset[];
   /** abort signal for the current agent turn */
   abortSignal?: AbortSignal;
 }

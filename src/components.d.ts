@@ -15,6 +15,7 @@ declare module 'vue' {
     AgentInput: typeof import('./components/agent/AgentInput.vue')['default']
     AgentMessages: typeof import('./components/agent/AgentMessages.vue')['default']
     AgentPanel: typeof import('./components/AgentPanel.vue')['default']
+    AgentPlanCard: typeof import('./components/agent/AgentPlanCard.vue')['default']
     AssetLibraryDialog: typeof import('./components/canvas/AssetLibraryDialog.vue')['default']
     AuthForm: typeof import('./components/auth/AuthForm.vue')['default']
     AuthModal: typeof import('./components/auth/AuthModal.vue')['default']

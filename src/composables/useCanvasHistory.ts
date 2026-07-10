@@ -81,6 +81,9 @@ function ensureHistoryIdDeep(node: any): void {
 
 // ── 用于判定两个序列化对象是否属性相同的比较键 ─────────────────────────────
 const COMPARE_KEYS = [
+  "name",
+  "visible",
+  "locked",
   "x",
   "y",
   "width",
@@ -108,6 +111,9 @@ const COMPARE_KEYS = [
   "size",
   "quality",
   "aspectRatio",
+  "seconds",
+  "images",
+  "inputReference",
   "generationStatus",
   "errorMessage",
   "taskId",
@@ -127,7 +133,7 @@ const COMPARE_KEYS = [
  *
  * 改进点（相较旧版全量 clone 快照）：
  * 1. 快照使用轻量 JSON 序列化，而非 clone DOM 节点 → 内存 ~10x 降低
- * 2. undo/redo 使用差异还原：只更新变化的节点 → 性能大幅提升
+ * 2. undo/redo 对属性变化增量还原，对层级变化完整还原 → 正确性与性能兼顾
  * 3. 通过稳定 __historyId 跟踪节点身份 → 精确匹配
  */
 interface HistoryState {
@@ -271,9 +277,7 @@ export function useCanvasHistory(
     const selectedHistoryIds: string[] = [];
     if (app.editor?.list) {
       app.editor.list.forEach((selectedEl: any) => {
-        if (selectedEl.__historyId) {
-          selectedHistoryIds.push(selectedEl.__historyId);
-        }
+        selectedHistoryIds.push(ensureHistoryId(selectedEl));
       });
     }
 
@@ -305,14 +309,94 @@ export function useCanvasHistory(
 
   // ── 差异还原核心 ──────────────────────────────────────────────────────────
 
-  /** 清理单个 VideoNode 的 DOM 视频层 */
+  /** 清理节点树中的 VideoNode DOM 视频层 */
   const cleanUpSingleNode = (node: any) => {
+    if (node?.children) {
+      [...node.children].forEach((child: any) => cleanUpSingleNode(child));
+    }
     if (
       (node.tag === "VideoNode" || node.__tag === "VideoNode") &&
       typeof node.removeVideoLayer === "function"
     ) {
       node.removeVideoLayer();
     }
+  };
+
+  const collectNodeMap = (nodes: any[], map: Map<string, any>) => {
+    nodes.forEach((node) => {
+      const historyId = node.__historyId as string | undefined;
+      if (historyId) map.set(historyId, node);
+      if (node.children?.length) collectNodeMap(node.children, map);
+    });
+  };
+
+  const collectSerializedMap = (dataList: any[], map: Map<string, any>) => {
+    dataList.forEach((data) => {
+      if (data.__historyId) map.set(data.__historyId, data);
+      if (Array.isArray(data.children)) {
+        collectSerializedMap(data.children, map);
+      }
+    });
+  };
+
+  const getStructureShape = (dataList: any[]): any[] =>
+    dataList.map((data) => ({
+      id: data.__historyId,
+      children: Array.isArray(data.children)
+        ? getStructureShape(data.children)
+        : [],
+    }));
+
+  const getStructureSignature = (dataList: any[]): string =>
+    JSON.stringify(getStructureShape(dataList));
+
+  const restoreSelection = (
+    nodeMap: Map<string, any>,
+    selectedHistoryIds: string[],
+  ) => {
+    const app = canvasAppRef.value;
+    if (!app?.editor || selectedHistoryIds.length === 0) return;
+    const toSelect = selectedHistoryIds
+      .map((historyId) => nodeMap.get(historyId))
+      .filter(Boolean);
+    if (toSelect.length) app.editor.select(toSelect);
+  };
+
+  const restoreFullTree = (targetState: HistoryState) => {
+    const app = canvasAppRef.value;
+    if (!app?.tree) return;
+
+    app.lockLayout();
+    try {
+      const preservedOverlays: any[] = [];
+      for (const child of [...app.tree.children]) {
+        const childAny = child as any;
+        if (
+          child.tag === "SimulateElement" ||
+          child.__tag === "SimulateElement" ||
+          childAny.isCropOverlay ||
+          childAny.isTaskOverlay
+        ) {
+          preservedOverlays.push(child);
+          child.remove();
+          continue;
+        }
+        cleanUpSingleNode(child);
+        child.remove();
+      }
+
+      targetState.serialized.forEach((data) => {
+        const node = deserializeNode(data);
+        if (node) app.tree.add(node);
+      });
+      preservedOverlays.forEach((overlay) => app.tree.add(overlay));
+    } finally {
+      app.unlockLayout();
+    }
+
+    const restoredMap = new Map<string, any>();
+    collectNodeMap(app.tree.children, restoredMap);
+    restoreSelection(restoredMap, targetState.selectedHistoryIds);
   };
 
   /** 比较两个序列化数据对象的可跟踪属性是否相同 */
@@ -354,18 +438,7 @@ export function useCanvasHistory(
     return patch;
   };
 
-  /**
-   * 差异还原：将画布从当前状态还原到目标状态，只修改变化的节点。
-   *
-   * 策略：
-   * 1. 构建当前节点 Map (historyId → DOM node) 和当前序列化 Map
-   * 2. 遍历目标快照：
-   *    - 如果节点存在且属性未变 → 保留原节点
-   *    - 如果节点存在但属性变了 → node.set(patch) 原位更新
-   *    - 如果节点不存在 → 反序列化创建新节点
-   * 3. 删除不在目标中的节点
-   * 4. 如果节点顺序变了 → 最小化重排
-   */
+  /** 属性变化增量恢复；层级或顺序变化时完整恢复节点树。 */
   const restoreToDiff = (targetState: HistoryState) => {
     const app = canvasAppRef.value;
     if (!app?.tree) return;
@@ -378,106 +451,37 @@ export function useCanvasHistory(
       (c: any) =>
         c.tag !== "SimulateElement" &&
         c.__tag !== "SimulateElement" &&
-        !c.isCropOverlay,
+        !c.isCropOverlay &&
+        !c.isTaskOverlay,
     );
+    currentChildren.forEach(ensureHistoryIdDeep);
+    const currentSerialized = currentChildren.map(serializeNode);
+    if (
+      getStructureSignature(currentSerialized) !==
+      getStructureSignature(targetState.serialized)
+    ) {
+      restoreFullTree(targetState);
+      return;
+    }
 
-    // 构建当前节点索引
     const currentMap = new Map<string, any>();
     const currentSerializedMap = new Map<string, any>();
-    for (const child of currentChildren) {
-      const hid = child.__historyId as string;
-      if (hid) {
-        currentMap.set(hid, child);
-        currentSerializedMap.set(hid, serializeNode(child));
+    const targetSerializedMap = new Map<string, any>();
+    collectNodeMap(currentChildren, currentMap);
+    collectSerializedMap(currentSerialized, currentSerializedMap);
+    collectSerializedMap(targetState.serialized, targetSerializedMap);
+
+    for (const [historyId, targetData] of targetSerializedMap) {
+      const existing = currentMap.get(historyId);
+      const existingData = currentSerializedMap.get(historyId);
+      if (!existing || !existingData || !hasPropertyDiff(targetData, existingData)) {
+        continue;
       }
+      const patch = buildPatch(targetData, existingData);
+      if (Object.keys(patch).length) existing.set(patch);
     }
 
-    // 目标节点 ID 集合
-    const targetIds = new Set<string>();
-    for (const data of targetState.serialized) {
-      if (data.__historyId) targetIds.add(data.__historyId);
-    }
-
-    // 第一步：删除不在目标中的节点
-    for (const [hid, node] of currentMap) {
-      if (!targetIds.has(hid)) {
-        cleanUpSingleNode(node);
-        node.remove();
-        currentMap.delete(hid);
-      }
-    }
-
-    // 第二步：遍历目标快照，更新或创建节点
-    const finalChildren: any[] = [];
-    for (const targetData of targetState.serialized) {
-      const hid = targetData.__historyId;
-      const existing = hid ? currentMap.get(hid) : null;
-
-      if (existing) {
-        // 节点已存在 — 检查是否需要属性更新
-        const currentSerialized = currentSerializedMap.get(hid);
-        if (
-          currentSerialized &&
-          hasPropertyDiff(targetData, currentSerialized)
-        ) {
-          const patch = buildPatch(targetData, currentSerialized);
-          if (Object.keys(patch).length > 0) {
-            existing.set(patch);
-          }
-        }
-        finalChildren.push(existing);
-      } else {
-        // 节点不存在 — 创建新节点
-        const newNode = deserializeNode(targetData);
-        if (newNode) {
-          finalChildren.push(newNode);
-        }
-      }
-    }
-
-    // 第三步：检查顺序是否需要调整
-    const currentOrder = app.tree.children
-      .filter(
-        (c: any) =>
-          c.tag !== "SimulateElement" &&
-          c.__tag !== "SimulateElement" &&
-          !c.isCropOverlay,
-      )
-      .map((c: any) => c.__historyId);
-    const targetOrder = finalChildren.map((c: any) => c.__historyId);
-
-    const orderChanged =
-      currentOrder.length !== targetOrder.length ||
-      currentOrder.some((id: string, i: number) => id !== targetOrder[i]);
-
-    if (orderChanged) {
-      // 需要重排：先把所有当前节点从 tree 移除（不销毁），再按目标顺序添加
-      // 注意：只移除非 SimulateElement 节点
-      for (const child of [...app.tree.children]) {
-        if (
-          child.tag !== "SimulateElement" &&
-          (child as any).__tag !== "SimulateElement"
-        ) {
-          child.remove();
-        }
-      }
-      for (const child of finalChildren) {
-        app.tree.add(child);
-      }
-    }
-
-    // 第四步：恢复选中状态
-    if (app.editor && targetState.selectedHistoryIds.length > 0) {
-      const toSelect = targetState.selectedHistoryIds
-        .map((hid) => {
-          // 从 finalChildren 中找，因为 tree.children 可能还包含 SimulateElement
-          return finalChildren.find((c: any) => c.__historyId === hid);
-        })
-        .filter(Boolean);
-      if (toSelect.length > 0) {
-        app.editor.select(toSelect);
-      }
-    }
+    restoreSelection(currentMap, targetState.selectedHistoryIds);
   };
 
   // ── 持久化 ────────────────────────────────────────────────────────────────

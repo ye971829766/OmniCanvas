@@ -36,6 +36,7 @@ export class AiService {
   private YUNWU_CHAT_MODEL = process.env.YUNWU_CHAT_MODEL || "gpt-4o-mini";
   private MAX_REFERENCE_IMAGES = 16;
   private ALLOWED_OUTPUT_FORMATS = new Set(["png", "jpeg", "webp"]);
+  private readonly imageHostUrlCache = new Map<string, string>();
 
   constructor(
     private readonly filesService: FilesService,
@@ -1869,58 +1870,164 @@ export class AiService {
     };
   }
 
-  async uploadImageToHost(base64: string): Promise<string> {
-    if (!base64 || typeof base64 !== "string") return base64;
-    if (
-      base64.startsWith("http://") ||
-      base64.startsWith("https://") ||
-      base64.startsWith("[")
-    ) {
-      return base64;
+  private isLocalImageUrl(value: string): boolean {
+    try {
+      const url = new URL(value);
+      return ["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(
+        url.hostname,
+      );
+    } catch {
+      return value.startsWith("/files/") || value.startsWith("files/");
     }
-    const url = process.env.IMAGE_HOST_UPLOAD_URL || "";
+  }
+
+  private getImageFilename(source: string, mimeType: string): string {
+    if (source.startsWith("http://") || source.startsWith("https://")) {
+      try {
+        const filename = new URL(source).pathname.split("/").pop();
+        if (filename && filename.includes(".")) return filename;
+      } catch {
+        // Fall through to a generated filename.
+      }
+    }
+
+    const extension =
+      mimeType === "image/jpeg"
+        ? "jpg"
+        : mimeType === "image/webp"
+          ? "webp"
+          : mimeType === "image/gif"
+            ? "gif"
+            : "png";
+    return `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${extension}`;
+  }
+
+  private async resolveImageUploadSource(source: string): Promise<{
+    blob: Blob;
+    dataUrl: string;
+    filename: string;
+  }> {
+    const dataUrlMatch = source.match(
+      /^data:([^;,]+);base64,([\s\S]+)$/i,
+    );
+    if (dataUrlMatch) {
+      const mimeType = dataUrlMatch[1] || "image/png";
+      const payload = dataUrlMatch[2];
+      if (!payload) throw new Error("Invalid image data URL");
+      const bytes = Buffer.from(payload, "base64");
+      return {
+        blob: new Blob([bytes], { type: mimeType }),
+        dataUrl: source,
+        filename: this.getImageFilename(source, mimeType),
+      };
+    }
+
+    if (this.isLocalImageUrl(source)) {
+      const response = await fetch(source);
+      if (!response.ok) {
+        throw new Error(`Failed to read local image: HTTP ${response.status}`);
+      }
+      const mimeType =
+        response.headers.get("content-type")?.split(";")[0] || "image/png";
+      if (!mimeType.startsWith("image/")) {
+        throw new Error(`Local asset is not an image: ${mimeType}`);
+      }
+      const bytes = Buffer.from(await response.arrayBuffer());
+      return {
+        blob: new Blob([bytes], { type: mimeType }),
+        dataUrl: `data:${mimeType};base64,${bytes.toString("base64")}`,
+        filename: this.getImageFilename(source, mimeType),
+      };
+    }
+
+    const formattedBase64 = source.startsWith("data:")
+      ? source
+      : `data:image/png;base64,${source}`;
+    return this.resolveImageUploadSource(formattedBase64);
+  }
+
+  async uploadImageToHost(source: string): Promise<string> {
+    if (!source || typeof source !== "string") return source;
+    if (source.startsWith("[")) return source;
+
+    const isHttpUrl =
+      source.startsWith("http://") || source.startsWith("https://");
+    if (isHttpUrl && !this.isLocalImageUrl(source)) return source;
+
+    const cachedUrl = this.imageHostUrlCache.get(source);
+    if (cachedUrl) return cachedUrl;
+
+    const url =
+      process.env.IMAGE_HOST_UPLOAD_URL ||
+      "https://img.scdn.io/api/v1.php";
     const apiKey = process.env.IMAGE_HOST_API_KEY || "";
-
-    // If no image host is configured, skip upload and fall back to inline base64.
-    if (!url) {
-      return base64;
-    }
-
-    let formattedBase64 = base64;
-    if (!base64.startsWith("data:")) {
-      formattedBase64 = `data:image/png;base64,${base64}`;
-    }
+    let fallback = source;
 
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(apiKey ? { "X-API-Key": apiKey } : {}),
-        },
-        body: JSON.stringify({
-          base64: formattedBase64,
-          filename: `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.png`,
-        }),
-      });
+      const image = await this.resolveImageUploadSource(source);
+      fallback = image.dataUrl;
+      const uploadUrl = new URL(url);
+      const isScdn =
+        uploadUrl.hostname === "img.scdn.io" &&
+        uploadUrl.pathname.endsWith("/api/v1.php");
+      const sendUpload = async () => {
+        if (isScdn) {
+          const form = new FormData();
+          form.append("image", image.blob, image.filename);
+          form.append("outputFormat", "auto");
+          form.append(
+            "cdn_domain",
+            process.env.IMAGE_HOST_CDN_DOMAIN || "cloudflareimg.cdn.sn",
+          );
+          form.append(
+            "storage_destination",
+            process.env.IMAGE_HOST_STORAGE_DESTINATION || "local",
+          );
+          return fetch(url, {
+            method: "POST",
+            headers: apiKey ? { "X-API-Key": apiKey } : undefined,
+            body: form,
+          });
+        }
+
+        return fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(apiKey ? { "X-API-Key": apiKey } : {}),
+          },
+          body: JSON.stringify({
+            base64: image.dataUrl,
+            filename: image.filename,
+          }),
+        });
+      };
+
+      let response = await sendUpload();
+      if (response.status === 429) {
+        const retryAfterSeconds = Number(
+          response.headers.get("retry-after") || 5,
+        );
+        const retryDelay = Number.isFinite(retryAfterSeconds)
+          ? Math.min(Math.max(retryAfterSeconds * 1000, 100), 10_000)
+          : 5_000;
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        response = await sendUpload();
+      }
 
       const resData = (await response.json()) as any;
-      if (
-        response.ok &&
-        resData &&
-        resData.success &&
-        resData.data &&
-        resData.data.url
-      ) {
-        return resData.data.url;
+      const hostedUrl = resData?.url || resData?.data?.url;
+      if (response.ok && resData?.success && hostedUrl) {
+        if (isHttpUrl) this.imageHostUrlCache.set(source, hostedUrl);
+        return hostedUrl;
       }
       throw new Error(resData?.message || `HTTP ${response.status}`);
     } catch (err: any) {
       console.warn(
-        "[uploadImageToHost] failed, falling back to base64:",
+        "[uploadImageToHost] failed, falling back to inline image data:",
         err.message,
       );
-      return base64;
+      return fallback;
     }
   }
 

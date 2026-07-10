@@ -14,10 +14,6 @@ export function useCanvasEntrance(
   let cleanup: (() => void) | null = null;
 
   function attach(app: LeaferApp) {
-    const { ChildEvent } = (window as any).__leafer_exports__ ?? {};
-    // Leafer's ChildEvent is re-exported from leafer-ui
-    // We import it via a dynamic side-effect import instead
-
     // Listen for nodes added to the tree
     const handler = (event: any) => {
       const node = event.target ?? event.child;

@@ -24,7 +24,7 @@
     "docker:deploy": "docker compose up -d --build",
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest",
+    "test": "vitest run --pool=forks --poolOptions.forks.singleFork",
     "test:ui": "vitest --ui"
   },
   "dependencies": {

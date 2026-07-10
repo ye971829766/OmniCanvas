@@ -109,7 +109,7 @@ export const planDesignTool: AgentTool = {
         step: ++stepNum,
         title: `制作：${deliverable}`,
         action:
-          `1. add_frame(${dims.replace('x', ', ')}, x: ${(stepNum - 1) * 1400}) ` +
+          `1. add_frame(refId: "${artboardId}", ${dims.replace('x', ', ')}, x: ${(stepNum - 1) * 1400}) ` +
           `2. generate_image("${request}", parentId: "${artboardId}") ` +
           `3. add_text(标题, parentId: "${artboardId}") ` +
           `4. auto_layout("hero") ` +

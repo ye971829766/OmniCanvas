@@ -4,6 +4,7 @@ import { AgentService } from './agent.service';
 import { AgentMemory } from './agent.memory';
 import { exportRegistry } from './export-registry';
 import { OptionalAuthGuard } from '../auth/auth.guard';
+import type { AgentAssetInput } from './agent-assets';
 
 @Controller('agent')
 @UseGuards(OptionalAuthGuard)
@@ -49,7 +50,7 @@ export class AgentController {
   @Post(':sessionId/chat')
   async chat(
     @Param('sessionId') sessionId: string,
-    @Body() body: { message: string; images?: string[]; canvasState?: any[]; userId?: string; username?: string },
+    @Body() body: { message: string; images?: string[]; assets?: AgentAssetInput[]; canvasState?: any[]; userId?: string; username?: string },
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
@@ -64,6 +65,7 @@ export class AgentController {
       body?.images,
       body?.canvasState,
       { userId, username },
+      body?.assets,
     );
     await this.pipe(res, sink.stream());
   }
@@ -111,6 +113,11 @@ export class AgentController {
   getHistory(@Param('sessionId') sessionId: string) {
     const raw = this.memory.get(sessionId) || [];
     return this.transformToLegacyFormat(raw);
+  }
+
+  @Get(':sessionId/plan')
+  getPlan(@Param('sessionId') sessionId: string) {
+    return this.memory.getPlan(sessionId);
   }
 
 
@@ -231,4 +238,3 @@ export class AgentController {
     return result;
   }
 }
-

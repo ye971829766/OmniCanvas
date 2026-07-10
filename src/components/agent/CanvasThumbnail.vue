@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onUnmounted } from 'vue';
 import type { App as LeaferApp } from 'leafer-ui';
 import { Image } from 'lucide-vue-next';
 

@@ -1,5 +1,18 @@
 import { type Ref } from "vue";
-import { App, Frame, DragEvent, DropEvent } from "leafer-ui";
+import {
+  App,
+  Frame,
+  DragEvent,
+  DropEvent,
+  ChildEvent,
+  MoveEvent,
+} from "leafer-ui";
+import {
+  findFrameDropTarget,
+  hasLayerAncestorInSet,
+  isSameLayerNode,
+  moveLayerNodesWithRollback,
+} from "@/utils/layerTree";
 
 /**
  * Composable for managing frame drawing, dropping elements into frames,
@@ -15,10 +28,69 @@ export function useCanvasFrame(
   let frameDragEndHandler: (() => void) | null = null;
   let drawingFrame: Frame | null = null;
   let currentMousePos: { x: number; y: number } | null = null;
+  let editorMovedDuringDrag = false;
+  let frameDropFallbackQueued = false;
+
+  const attachFrameDropFallback = () => {
+    const canvasApp = canvasAppRef.value;
+    const editor = canvasApp?.editor;
+    if (!canvasApp?.tree || !editor || (canvasApp as any)._hasFrameDropFallback) {
+      return;
+    }
+    (canvasApp as any)._hasFrameDropFallback = true;
+
+    const resetEditorMoveState = () => {
+      editorMovedDuringDrag = false;
+    };
+    editor.on(DragEvent.START, resetEditorMoveState);
+    editor.on(MoveEvent.START, resetEditorMoveState);
+    editor.on("editor.move", () => {
+      editorMovedDuringDrag = true;
+    });
+    const handleEditorMoveEnd = (event: any) => {
+      if (!editorMovedDuringDrag || frameDropFallbackQueued) return;
+      editorMovedDuringDrag = false;
+      frameDropFallbackQueued = true;
+
+      Promise.resolve().then(() => {
+        frameDropFallbackQueued = false;
+        const selected = [...editor.list].filter((node: any) => !!node?.parent);
+        const selectedSet = new Set(selected);
+        const nodes = selected.filter(
+          (node: any) =>
+            !hasLayerAncestorInSet(node, selectedSet, canvasApp.tree),
+        );
+        const target = findFrameDropTarget(canvasApp.tree, nodes, {
+          x: event.x,
+          y: event.y,
+        });
+        const movingNodes = target
+          ? nodes.filter((node: any) => !isSameLayerNode(node.parent, target))
+          : [];
+        if (
+          target &&
+          movingNodes.length &&
+          moveLayerNodesWithRollback(
+            canvasApp,
+            movingNodes,
+            target,
+            target.children.length,
+          )
+        ) {
+          editor.select(nodes);
+          recordHistory();
+        }
+      });
+    };
+    editor.on(DragEvent.END, handleEditorMoveEnd);
+    editor.on(MoveEvent.END, handleEditorMoveEnd);
+  };
 
   const attachFrameListeners = (frame: Frame) => {
     const canvasApp = canvasAppRef.value;
-    if (!canvasApp) return;
+    const frameAny = frame as any;
+    if (!canvasApp || frameAny._hasCanvasFrameListeners) return;
+    frameAny._hasCanvasFrameListeners = true;
 
     // Enable drag and drop behavior on the drawing frame
     frame.on(DragEvent.ENTER, () => {
@@ -29,12 +101,32 @@ export function useCanvasFrame(
       frame.set({ stroke: "", strokeWidth: 0 });
     });
     frame.on(DropEvent.DROP, (dropEvent: any) => {
+      dropEvent.stop?.();
       frame.set({ stroke: "", strokeWidth: 0 });
-      dropEvent.list.forEach((leaf: any) => {
-        if (leaf !== frame) {
-          leaf.dropTo(frame);
-        }
-      });
+      const dropList = dropEvent.list?.list || dropEvent.list || [];
+      const candidates = Array.from(dropList).filter(
+        (leaf: any) =>
+          leaf &&
+          !isSameLayerNode(leaf, frame) &&
+          !isSameLayerNode(leaf.parent, frame),
+      ) as any[];
+      const candidateSet = new Set(candidates);
+      const leaves = candidates.filter(
+        (leaf) =>
+          !hasLayerAncestorInSet(leaf, candidateSet, canvasApp.tree),
+      );
+      if (
+        leaves.length &&
+        moveLayerNodesWithRollback(
+          canvasApp,
+          leaves,
+          frame,
+          frame.children.length,
+        )
+      ) {
+        canvasApp.editor?.select(leaves);
+        recordHistory();
+      }
     });
 
     // Handle element drag-out behavior
@@ -91,6 +183,10 @@ export function useCanvasFrame(
     };
 
     canvasApp.editor.on("editor.move", onEditorMove);
+    frame.on(ChildEvent.DESTROY, () => {
+      canvasApp.editor?.off("editor.move", onEditorMove);
+      frameAny._hasCanvasFrameListeners = false;
+    });
   };
 
   const enableFrameDraw = () => {
@@ -204,6 +300,7 @@ export function useCanvasFrame(
   return {
     enableFrameDraw,
     disableFrameDraw,
+    attachFrameDropFallback,
     attachFrameListeners,
   };
 }

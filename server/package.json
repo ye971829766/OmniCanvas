@@ -12,7 +12,9 @@
     "typescript": "^5.9.3"
   },
   "scripts": {
-    "dev": "bun --watch run src/main.ts"
+    "dev": "bun --watch run src/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.74",

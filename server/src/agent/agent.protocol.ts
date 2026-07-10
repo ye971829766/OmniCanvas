@@ -11,7 +11,7 @@
 /** Protocol version. Bump on breaking changes. */
 export const AGENT_PROTOCOL_VERSION = 2;
 
-export type CanvasNodeType = 'image_gen' | 'video_gen' | 'text' | 'rect' | 'frame';
+export type CanvasNodeType = 'image_gen' | 'video_gen' | 'text' | 'rect' | 'frame' | 'group' | 'image';
 
 /** A node the agent asks the canvas to create. */
 export interface CanvasNodeSpec {
@@ -87,8 +87,27 @@ export type AgentEvent =
   | { type: 'tool_result'; id: string; tool: string; output: unknown }
   | { type: 'canvas_op'; op: CanvasOp }
   | { type: 'progress'; tool: string; message: string; percent?: number }
+  | { type: 'plan'; plan: AgentPlan }
   | { type: 'usage'; promptTokens: number; completionTokens: number; steps: number; toolCalls: number; elapsedMs: number }
   | { type: 'final'; text: string }
   | { type: 'error'; message: string }
   | { type: 'keepalive' }
   | { type: 'done' };
+
+export interface AgentPlanStep {
+  id: string;
+  title: string;
+  description?: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  platform?: string;
+  deliverable?: string;
+  tools?: string[];
+  completionTool?: string;
+}
+
+export interface AgentPlan {
+  id: string;
+  title: string;
+  sourceAssetId?: string;
+  steps: AgentPlanStep[];
+}

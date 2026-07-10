@@ -11,6 +11,7 @@ import ToolActivity from "./ToolActivity.vue";
 import ToolCallCard from "./ToolCallCard.vue";
 import ToolCallGroup from "./ToolCallGroup.vue";
 import OptionPreviewCard from "./OptionPreviewCard.vue";
+import AgentPlanCard from "./AgentPlanCard.vue";
 import { Image } from "primevue";
 import OmniCanvasAvatar from "@/assets/plot_twist_avatar.jpg";
 import logoImg from "@/assets/logo.jpg";
@@ -148,6 +149,11 @@ function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
     "generate_image",
     "generate_video",
     "collect_inspiration",
+    "edit_image",
+    "remove_background",
+    "inpaint_image",
+    "upscale_image",
+    "plan_ecommerce_suite",
   ]);
 
   const blocks: ToolRenderBlock[] = [];
@@ -425,6 +431,7 @@ function parseUserText(text: string) {
 
 
               <!-- Interleaved Blocks Rendering (Text -> Tool -> Text -> Tool) -->
+              <AgentPlanCard v-if="m.plan" :plan="m.plan" />
               <div
                 v-if="m.blocks && m.blocks.length"
                 class="flex flex-col gap-1.5"
@@ -584,7 +591,11 @@ function parseUserText(text: string) {
                   <OptionPreviewCard
                     v-if="
                       (tool.name === 'generate_image' ||
-                        tool.name === 'generate_video') &&
+                        tool.name === 'generate_video' ||
+                        tool.name === 'edit_image' ||
+                        tool.name === 'remove_background' ||
+                        tool.name === 'inpaint_image' ||
+                        tool.name === 'upscale_image') &&
                       tool.output?.refId &&
                       nodeStates[tool.output.refId]
                     "

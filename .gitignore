@@ -57,3 +57,6 @@ server/test.mp4
 client_secret_*.json
 server/client_secret_*.json
 
+.codex-build-check
+
+图床.md

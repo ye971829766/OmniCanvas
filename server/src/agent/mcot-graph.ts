@@ -18,7 +18,12 @@ export async function runMCotLoop(
   ctx: ToolContext,
   refId: string,
   requirements: string,
-  maxAttempts = 2
+  maxAttempts = 2,
+  analysisContext?: {
+    referenceAssetId?: string;
+    platform?: string;
+    deliverable?: string;
+  },
 ): Promise<{ success: boolean; image?: string; attempts: number; analysis?: any }> {
   const state: GraphState = { refId, attempt: 0, maxAttempts, fixed: false };
   let lastAnalysis: any;
@@ -45,7 +50,7 @@ export async function runMCotLoop(
     if (!analyzeTool) break;
 
     const analyzeResult = await analyzeTool.execute(
-      { imageBase64: state.lastImage, requirements, targetRefId: refId },
+      { imageBase64: state.lastImage, requirements, targetRefId: refId, ...analysisContext },
       ctx
     );
 

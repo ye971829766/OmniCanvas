@@ -96,7 +96,12 @@ watch(activeWorkspaceId, (newId) => {
 </script>
 
 <template>
-  <div class="w-full h-full relative flex">
+  <div
+    class="board-shell w-full h-full relative flex"
+    :class="{
+      'agent-panel-open': Boolean(activeWorkspaceId) && !agentPanelCollapsed,
+    }"
+  >
     <ConfirmDialog></ConfirmDialog>
 
     <!-- Full Page Layout Skeleton during initial network loading -->
@@ -104,10 +109,14 @@ watch(activeWorkspaceId, (newId) => {
 
     <!-- Actual Workspace View after loading -->
     <template v-else>
-      <Sidebar v-model:activeWorkspaceId="activeWorkspaceId" />
+      <Sidebar
+        v-model:activeWorkspaceId="activeWorkspaceId"
+        class="workspace-sidebar"
+      />
       <Canvas
         v-if="activeWorkspaceId"
         ref="canvasRef"
+        class="workspace-canvas"
         :active-workspace-id="activeWorkspaceId"
         :agent-panel-collapsed="agentPanelCollapsed"
         @toggle-agent="agentPanelCollapsed = !agentPanelCollapsed"
@@ -151,3 +160,48 @@ watch(activeWorkspaceId, (newId) => {
     </template>
   </div>
 </template>
+
+<style scoped>
+.board-shell {
+  --sidebar-expanded-width: 288px;
+  --canvas-toolbar-safe-width: 371px;
+  --agent-panel-width: clamp(
+    320px,
+    calc(
+      100vw - var(--sidebar-expanded-width) -
+        var(--canvas-toolbar-safe-width)
+    ),
+    420px
+  );
+  box-sizing: border-box;
+  padding-right: 0;
+  transition: padding-right 0.25s cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+.board-shell.agent-panel-open {
+  padding-right: var(--agent-panel-width);
+}
+
+@media (max-width: 640px) {
+  .board-shell {
+    --agent-panel-width: 100vw;
+  }
+
+  .board-shell.agent-panel-open {
+    padding-right: 0;
+    overflow: hidden;
+  }
+
+  .board-shell.agent-panel-open > .workspace-sidebar,
+  .board-shell.agent-panel-open > .workspace-canvas {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-shell {
+    transition: none;
+  }
+}
+</style>

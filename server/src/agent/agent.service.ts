@@ -45,6 +45,8 @@ interface TurnUsage {
 }
 
 import { TokensService } from "../tokens/tokens.service";
+import { FilesService } from "../files/files.service";
+import { normalizeAgentAssets, type AgentAssetInput } from "./agent-assets";
 
 @Injectable()
 export class AgentService {
@@ -62,13 +64,14 @@ export class AgentService {
 
   // ── Timeout configuration ─────────────────────────────────────────────────
   private readonly LLM_TIMEOUT_MS = 90_000;
-  private readonly TOOL_TIMEOUT_MS = 45_000;
+  private readonly TOOL_TIMEOUT_MS = 75_000;
 
   constructor(
     private readonly ai: AiService,
     private readonly memory: AgentMemory,
     private readonly modelConfigService: ModelConfigService,
     private readonly tokensService: TokensService,
+    private readonly filesService: FilesService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -83,6 +86,7 @@ export class AgentService {
     images?: string[],
     canvasState?: any[],
     userInfo?: { userId?: string; username?: string },
+    assets?: AgentAssetInput[],
   ): EventSink {
     const sink = new EventSink();
     const abortController = new AbortController();
@@ -98,6 +102,7 @@ export class AgentService {
           canvasState,
           abortController.signal,
           userInfo,
+          assets,
         ),
       );
     };
@@ -166,6 +171,7 @@ export class AgentService {
     canvasState?: any[],
     abortSignal?: AbortSignal,
     userInfo?: { userId?: string; username?: string },
+    assets?: AgentAssetInput[],
   ): Promise<void> {
     const usage: TurnUsage = {
       promptTokens: 0,
@@ -176,7 +182,11 @@ export class AgentService {
     };
 
     try {
-      if (!userInput.trim() && (!images || images.length === 0)) {
+      if (
+        !userInput.trim() &&
+        (!images || images.length === 0) &&
+        (!assets || assets.length === 0)
+      ) {
         sink.emit({ type: "error", message: "请输入任务内容。" });
         return;
       }
@@ -193,6 +203,7 @@ export class AgentService {
         images,
         canvasState,
         abortSignal,
+        assets,
       );
     } finally {
       const elapsedMs = Date.now() - usage.startedAt;
@@ -240,6 +251,7 @@ export class AgentService {
     images?: string[],
     canvasState?: any[],
     abortSignal?: AbortSignal,
+    incomingAssets?: AgentAssetInput[],
   ): Promise<void> {
     const config = await this.modelConfigService.getConfig();
     let systemPrompt = config.agentConfig?.systemPrompt || SYSTEM_PROMPT;
@@ -271,10 +283,46 @@ ${videoModelInfo || "- None"}
 
     const history = this.memory.get(sessionId);
     const screenshot = this.memory.getScreenshot(sessionId);
+    const normalizedAssets = normalizeAgentAssets(incomingAssets);
+    const currentAssets = [];
+    for (const asset of normalizedAssets) {
+      if (asset.publicUrl) {
+        currentAssets.push(asset);
+        continue;
+      }
+      const publicUrl = await this.ai.uploadImageToHost(asset.url);
+      currentAssets.push(
+        /^https?:\/\//i.test(publicUrl) &&
+          !/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(
+            publicUrl,
+          )
+          ? { ...asset, publicUrl }
+          : asset,
+      );
+    }
+    const sessionAssets = this.memory.registerAssets(sessionId, currentAssets);
+    if (sessionAssets.length > 0) {
+      systemPrompt += `\n\n<session_assets>\n${sessionAssets
+        .slice(-16)
+        .map(
+          (asset) =>
+            `- assetId: "${asset.id}"; name: "${asset.name || "image"}"; url: "${asset.publicUrl || asset.url}"`,
+        )
+        .join("\n")}\n</session_assets>\nThese are durable session assets. Use exact IDs and never invent one.`;
+    }
 
     let userContent: string | any[] = userInput;
-    if (screenshot || (images && images.length > 0)) {
-      const parts: any[] = [{ type: "text", text: userInput }];
+    if (screenshot || currentAssets.length > 0 || (images && images.length > 0)) {
+      const assetContext = currentAssets.length
+        ? `\n\n<attached_assets>\n${currentAssets
+            .map(
+              (asset) =>
+                `- assetId: "${asset.id}"; name: "${asset.name || "image"}"; url: "${asset.publicUrl || asset.url}"; ` +
+                `type: "${asset.mimeType || "image"}"; dimensions: ${asset.width || "?"}x${asset.height || "?"}`,
+            )
+            .join("\n")}\n</attached_assets>\nUse these exact assetId values in image tools. Do not invent asset IDs.`
+        : "";
+      const parts: any[] = [{ type: "text", text: `${userInput}${assetContext}` }];
       if (screenshot) {
         const uploadedUrl = await this.ai.uploadImageToHost(screenshot);
         parts.push({
@@ -290,6 +338,13 @@ ${videoModelInfo || "- None"}
             image: uploadedUrl,
           });
         }
+      }
+      for (const asset of currentAssets) {
+        parts.push({
+          type: "image",
+          image:
+            asset.publicUrl || (await this.ai.uploadImageToHost(asset.url)),
+        });
       }
       userContent = parts;
     }
@@ -332,11 +387,13 @@ ${videoModelInfo || "- None"}
       sessionId,
       sink,
       ai: this.ai,
+      files: this.filesService,
       origin,
       newRefId: (prefix = "n") =>
         `${prefix}_${Math.random().toString(36).slice(2, 10)}`,
       memory: this.memory,
       canvasState: canvasState ?? [],
+      assets: sessionAssets,
       abortSignal,
       agentService: this,
     } as any;
@@ -468,6 +525,7 @@ ${videoModelInfo || "- None"}
         }
 
         sink.emit({ type: "tool_call", id: call.id, tool: call.name, input });
+        this.memory.updatePlanForTool(sessionId, call.name, input, false);
         const tool = TOOL_MAP.get(call.name);
         let content: any;
         if (!tool) {
@@ -485,6 +543,7 @@ ${videoModelInfo || "- None"}
               tool: call.name,
               output: result.output,
             });
+            this.memory.updatePlanForTool(sessionId, call.name, input, true);
 
             // MCoT visual check image cache handling
             const output = result.output as any;
@@ -514,14 +573,20 @@ ${videoModelInfo || "- None"}
 
         // 🆕 MCoT Checkpoint checklist
         if (
-          (call.name === "generate_image" || call.name === "generate_video") &&
+          (call.name === "generate_image" ||
+            call.name === "generate_video" ||
+            call.name === "edit_image") &&
           content &&
           content.refId
         ) {
+          const ecommerceVerification = content.platform
+            ? ` Include platform: "${content.platform}", deliverable: "${content.deliverable || "design"}"` +
+              `${content.referenceAssetId ? `, and referenceAssetId: "${content.referenceAssetId}"` : ""}.`
+            : "";
           content.mcotCheckpoint =
             `[MCoT Checkpoint] You have just generated media node "${content.refId}". ` +
-            `To ensure premium design quality, you MUST take a screenshot of it using the "export_node_image" tool, ` +
-            `and then call "analyze_design" to run a visual self-critique. Do NOT output a final response to the user ` +
+            `To ensure premium design quality, you MUST call "verify_design" for this node.${ecommerceVerification} ` +
+            `Do NOT output a final response to the user ` +
             `until you have analyzed the design, evaluated the score, and performed any necessary adjustments.`;
         }
 
