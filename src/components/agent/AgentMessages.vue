@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from "vue";
+import { ref, watch, nextTick, onBeforeUnmount } from "vue";
 import { RotateCcw, ChevronDown } from "lucide-vue-next";
 import {
   IncremarkContent,
@@ -34,6 +34,7 @@ function getToolActiveNameText(name: string): string {
 }
 
 function getThinkingText(m: ChatMessage): string {
+  if (m.progress?.message) return m.progress.message;
   if (m.tools && m.tools.length > 0) {
     const activeTool = m.tools.find((t) => !t.done);
     if (activeTool) {
@@ -62,6 +63,7 @@ const emit = defineEmits<{
 
 const scrollRef = ref<any>(null);
 const userScrolledUp = ref(false);
+let autoScrollTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scrollToBottom() {
   scrollRef.value?.scrollToBottom();
@@ -81,15 +83,29 @@ watch(
 );
 
 watch(
-  () => props.messages.length,
-  async () => {
-    await nextTick();
-    if (!userScrolledUp.value) {
-      scrollToBottom();
-      setTimeout(() => scrollToBottom(), 120);
-    }
+  () =>
+    props.messages
+      .map(
+        (message) =>
+          `${message.id}:${message.text.length}:${message.tools.length}:` +
+          `${message.tools.filter((tool) => tool.done).length}:` +
+          `${message.progress?.message || ""}`,
+      )
+      .join("|"),
+  () => {
+    if (userScrolledUp.value) return;
+    if (autoScrollTimer) clearTimeout(autoScrollTimer);
+    autoScrollTimer = setTimeout(async () => {
+      await nextTick();
+      if (!userScrolledUp.value) scrollToBottom();
+      autoScrollTimer = null;
+    }, 80);
   },
 );
+
+onBeforeUnmount(() => {
+  if (autoScrollTimer) clearTimeout(autoScrollTimer);
+});
 
 function handleScroll() {
   if (scrollRef.value) {
@@ -397,7 +413,10 @@ function parseUserText(text: string) {
                 aria-live="polite"
                 v-if="
                   m.streaming &&
-                  (!m.text || !m.text.trim() || m.tools?.some((t) => !t.done))
+                  (m.progress?.message ||
+                    !m.text ||
+                    !m.text.trim() ||
+                    m.tools?.some((t) => !t.done))
                 "
                 aria-label="AI 正在思考"
               >

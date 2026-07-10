@@ -216,6 +216,9 @@ export function useCanvas(
     redo,
     loadCanvasState,
     saveCanvasState,
+    beginTransaction: beginHistoryTransaction,
+    commitTransaction: commitHistoryTransaction,
+    rollbackTransaction: rollbackHistoryTransaction,
   } = useCanvasHistory(canvasApp, activeWorkspaceIdRef);
 
   // Sub-composable for frame creation and containment logic
@@ -402,6 +405,7 @@ export function useCanvas(
   let moveStartHandler: (() => void) | null = null;
   let moveEndHandler: (() => void) | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let lastCanvasSize: { width: number; height: number } | null = null;
   let watchedElements: any[] = [];
   const onPropertyChange = (e: any) => {
     const app = canvasApp.value;
@@ -581,6 +585,7 @@ export function useCanvas(
         editBoxType: "box",
         hideOnMove: false,
         stroke: "#007aff",
+
         circle: {
           width: 14,
           height: 14,
@@ -597,6 +602,7 @@ export function useCanvas(
       wheel: { preventDefault: true, zoomSpeed: 0.05 },
       touch: { preventDefault: true },
       pointer: { preventDefaultMenu: true },
+      move: { dragOut: true },
       tree: {
         type: "design",
       },
@@ -623,7 +629,16 @@ export function useCanvas(
     app.on(PointerEvent.TAP, (e: PointerEvent) => {
       if (e.ctrlKey || e.metaKey) {
         const target = e.target as any;
-        const invalidTags = new Set(["Leafer", "App", "Viewport", "Editor", "EditBox", "Page", "ImageGen", "VideoGen"]);
+        const invalidTags = new Set([
+          "Leafer",
+          "App",
+          "Viewport",
+          "Editor",
+          "EditBox",
+          "Page",
+          "ImageGen",
+          "VideoGen",
+        ]);
         let checkNode = target;
         let isInvalid = false;
         while (checkNode && checkNode !== (app.tree as any)) {
@@ -639,126 +654,140 @@ export function useCanvas(
         }
 
         if (target && !isInvalid && typeof target.export === "function") {
-          target.export("png").then((res: any) => {
-            if (res && res.data) {
-              const base64DataUrl = res.data.startsWith("data:") ? res.data : `data:image/png;base64,${res.data}`;
-              
-              // Create floating ghost thumbnail
-              const ghost = document.createElement("img");
-              ghost.src = base64DataUrl;
-              ghost.style.position = "fixed";
-              ghost.style.zIndex = "999999";
-              ghost.style.pointerEvents = "none";
-              ghost.style.width = "80px";
-              ghost.style.height = "80px";
-              ghost.style.objectFit = "cover";
-              ghost.style.borderRadius = "8px";
-              ghost.style.border = "2px solid #ffffff";
-              ghost.style.boxShadow = "0 8px 24px rgba(0,0,0,0.25)";
-              
-              // Set start position (centered on client cursor coordinates)
-              const startX = (e as any).clientX || (e as any).x || window.innerWidth / 2;
-              const startY = (e as any).clientY || (e as any).y || window.innerHeight / 2;
-              ghost.style.left = `${startX - 40}px`;
-              ghost.style.top = `${startY - 40}px`;
-              
-              document.body.appendChild(ghost);
-              
-              // Find target DOM element (chat input container)
-              const targetEl = document.querySelector(".agent-input-wrap");
-              
-              const startAnimation = () => {
-                const finalTargetEl = document.querySelector(".agent-input-wrap");
-                let endX = window.innerWidth - 210; // Predicted center of the 420px panel on the right
-                let endY = window.innerHeight - 120; // Predicted height of input attachments area
-                if (finalTargetEl) {
-                  const rect = finalTargetEl.getBoundingClientRect();
-                  // Only use real DOM coordinates if the panel is already positioned on the right
-                  if (rect.left > window.innerWidth - 500 && rect.top > 0) {
-                    endX = rect.left + rect.width / 2;
-                    endY = rect.top + 40;
-                  }
-                }
-                
-                // Setup Bezier control points for the curve
-                const P0 = { x: startX - 40, y: startY - 40 };
-                const P2 = { x: endX - 40, y: endY - 40 };
-                const P1 = {
-                  x: (P0.x + P2.x) / 2,
-                  y: Math.min(P0.y, P2.y) - 150, // Curve upwards by 150px
-                };
-                
-                const anim = { progress: 0 };
-                
-                // Animate along Bezier curve using GSAP
-                gsap.to(anim, {
-                  progress: 1,
-                  duration: 0.7,
-                  ease: "power2.out",
-                  onUpdate: () => {
-                    const t = anim.progress;
-                    const x = (1 - t) * (1 - t) * P0.x + 2 * (1 - t) * t * P1.x + t * t * P2.x;
-                    const y = (1 - t) * (1 - t) * P0.y + 2 * (1 - t) * t * P1.y + t * t * P2.y;
-                    
-                    const scale = 1 - t * 0.7; // Shrink to 0.3
-                    const opacity = 1 - t * 0.4; // Fade slightly
-                    
-                    ghost.style.left = `${x}px`;
-                    ghost.style.top = `${y}px`;
-                    ghost.style.transform = `scale(${scale})`;
-                    ghost.style.opacity = `${opacity}`;
-                  },
-                  onComplete: () => {
-                    ghost.remove();
-                    
-                    // Dispatch custom event to push reference image to AgentInput
-                    window.dispatchEvent(
-                      new CustomEvent("agent:add-reference-image", {
-                        detail: { image: base64DataUrl },
-                      })
-                    );
-                    
-                    // Pulse/bounce animation on the agent input panel to signify insertion
-                    if (finalTargetEl) {
-                      gsap.fromTo(
-                        finalTargetEl,
-                        { scale: 1 },
-                        {
-                          scale: 1.02,
-                          duration: 0.12,
-                          yoyo: true,
-                          repeat: 1,
-                          ease: "power1.inOut",
-                        }
-                      );
+          target
+            .export("png")
+            .then((res: any) => {
+              if (res && res.data) {
+                const base64DataUrl = res.data.startsWith("data:")
+                  ? res.data
+                  : `data:image/png;base64,${res.data}`;
+
+                // Create floating ghost thumbnail
+                const ghost = document.createElement("img");
+                ghost.src = base64DataUrl;
+                ghost.style.position = "fixed";
+                ghost.style.zIndex = "999999";
+                ghost.style.pointerEvents = "none";
+                ghost.style.width = "80px";
+                ghost.style.height = "80px";
+                ghost.style.objectFit = "cover";
+                ghost.style.borderRadius = "8px";
+                ghost.style.border = "2px solid #ffffff";
+                ghost.style.boxShadow = "0 8px 24px rgba(0,0,0,0.25)";
+
+                // Set start position (centered on client cursor coordinates)
+                const startX =
+                  (e as any).clientX || (e as any).x || window.innerWidth / 2;
+                const startY =
+                  (e as any).clientY || (e as any).y || window.innerHeight / 2;
+                ghost.style.left = `${startX - 40}px`;
+                ghost.style.top = `${startY - 40}px`;
+
+                document.body.appendChild(ghost);
+
+                // Find target DOM element (chat input container)
+                const targetEl = document.querySelector(".agent-input-wrap");
+
+                const startAnimation = () => {
+                  const finalTargetEl =
+                    document.querySelector(".agent-input-wrap");
+                  let endX = window.innerWidth - 210; // Predicted center of the 420px panel on the right
+                  let endY = window.innerHeight - 120; // Predicted height of input attachments area
+                  if (finalTargetEl) {
+                    const rect = finalTargetEl.getBoundingClientRect();
+                    // Only use real DOM coordinates if the panel is already positioned on the right
+                    if (rect.left > window.innerWidth - 500 && rect.top > 0) {
+                      endX = rect.left + rect.width / 2;
+                      endY = rect.top + 40;
                     }
-                    
-                    // Show success toast
-                    window.dispatchEvent(
-                      new CustomEvent("canvas:toast", {
-                        detail: {
-                          severity: "success",
-                          summary: "已添加参考图",
-                          detail: "该元素已成功添加到 AI 对话面板作为参考图",
-                          life: 2000,
-                        },
-                      }),
-                    );
-                  },
-                });
-              };
-              
-              if (!targetEl) {
-                // If closed, trigger panel open first, then start animation after slide-in
-                window.dispatchEvent(new CustomEvent("agent:open-panel"));
-                setTimeout(startAnimation, 300);
-              } else {
-                startAnimation();
+                  }
+
+                  // Setup Bezier control points for the curve
+                  const P0 = { x: startX - 40, y: startY - 40 };
+                  const P2 = { x: endX - 40, y: endY - 40 };
+                  const P1 = {
+                    x: (P0.x + P2.x) / 2,
+                    y: Math.min(P0.y, P2.y) - 150, // Curve upwards by 150px
+                  };
+
+                  const anim = { progress: 0 };
+
+                  // Animate along Bezier curve using GSAP
+                  gsap.to(anim, {
+                    progress: 1,
+                    duration: 0.7,
+                    ease: "power2.out",
+                    onUpdate: () => {
+                      const t = anim.progress;
+                      const x =
+                        (1 - t) * (1 - t) * P0.x +
+                        2 * (1 - t) * t * P1.x +
+                        t * t * P2.x;
+                      const y =
+                        (1 - t) * (1 - t) * P0.y +
+                        2 * (1 - t) * t * P1.y +
+                        t * t * P2.y;
+
+                      const scale = 1 - t * 0.7; // Shrink to 0.3
+                      const opacity = 1 - t * 0.4; // Fade slightly
+
+                      ghost.style.left = `${x}px`;
+                      ghost.style.top = `${y}px`;
+                      ghost.style.transform = `scale(${scale})`;
+                      ghost.style.opacity = `${opacity}`;
+                    },
+                    onComplete: () => {
+                      ghost.remove();
+
+                      // Dispatch custom event to push reference image to AgentInput
+                      window.dispatchEvent(
+                        new CustomEvent("agent:add-reference-image", {
+                          detail: { image: base64DataUrl },
+                        }),
+                      );
+
+                      // Pulse/bounce animation on the agent input panel to signify insertion
+                      if (finalTargetEl) {
+                        gsap.fromTo(
+                          finalTargetEl,
+                          { scale: 1 },
+                          {
+                            scale: 1.02,
+                            duration: 0.12,
+                            yoyo: true,
+                            repeat: 1,
+                            ease: "power1.inOut",
+                          },
+                        );
+                      }
+
+                      // Show success toast
+                      window.dispatchEvent(
+                        new CustomEvent("canvas:toast", {
+                          detail: {
+                            severity: "success",
+                            summary: "已添加参考图",
+                            detail: "该元素已成功添加到 AI 对话面板作为参考图",
+                            life: 2000,
+                          },
+                        }),
+                      );
+                    },
+                  });
+                };
+
+                if (!targetEl) {
+                  // If closed, trigger panel open first, then start animation after slide-in
+                  window.dispatchEvent(new CustomEvent("agent:open-panel"));
+                  setTimeout(startAnimation, 300);
+                } else {
+                  startAnimation();
+                }
               }
-            }
-          }).catch((err: any) => {
-            console.error("Failed to export target element:", err);
-          });
+            })
+            .catch((err: any) => {
+              console.error("Failed to export target element:", err);
+            });
         }
       }
     });
@@ -806,7 +835,26 @@ export function useCanvas(
     resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
+        const tree = app.tree as any;
+        const scale = tree.scaleX || tree.scale || 1;
+        const previousSize = lastCanvasSize;
+        const worldCenter = previousSize
+          ? {
+              x: (previousSize.width / 2 - (tree.x || 0)) / scale,
+              y: (previousSize.height / 2 - (tree.y || 0)) / scale,
+            }
+          : null;
+
         app.resize({ width, height });
+
+        if (worldCenter && width > 0 && height > 0) {
+          tree.set({
+            x: width / 2 - worldCenter.x * scale,
+            y: height / 2 - worldCenter.y * scale,
+          });
+        }
+
+        lastCanvasSize = { width, height };
       }
     });
     resizeObserver.observe(canvasRef.value);
@@ -1527,6 +1575,10 @@ export function useCanvas(
     toolbarStyle,
     toolbarVersion,
     recordHistoryDebounced,
+    beginHistoryTransaction,
+    commitHistoryTransaction,
+    rollbackHistoryTransaction,
+    undo,
     addImageGenNode,
     addVideoGenNode,
   };

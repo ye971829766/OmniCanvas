@@ -1,10 +1,14 @@
-import { ref, watch, type Ref, reactive } from "vue";
-import { Text, Rect, Frame, Group, Image } from "leafer-ui";
+import { onBeforeUnmount, ref, watch, type Ref, reactive } from "vue";
+import { Text, Rect, Frame, Group, Image, MoveEvent, ZoomEvent } from "leafer-ui";
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/utils";
 import { getAgentHistory, deleteAgentSession, stopAgent } from "@/utils/api";
 import { useUser } from "./useUser";
+import {
+  createHiddenReasoningStreamFilter,
+  stripHiddenReasoning,
+} from "@/utils/agentText";
 
 /**
  * useAgent — drives the Lovart-style chat panel.
@@ -45,11 +49,26 @@ export interface ChatMessage {
   error?: string;
   /** Optional timestamp string e.g. Jun 15, 2026 */
   timestamp?: string;
+  progress?: { tool?: string; message: string; percent?: number };
+}
+
+interface AgentHistoryControls {
+  begin?: () => void;
+  commit?: () => boolean;
+  rollback?: () => boolean;
+  undo?: () => void;
 }
 
 type CanvasNodeSpec = {
   refId: string;
-  type: "image_gen" | "video_gen" | "text" | "rect" | "frame";
+  type:
+    | "image_gen"
+    | "video_gen"
+    | "text"
+    | "rect"
+    | "frame"
+    | "group"
+    | "image";
   parentId?: string;
   x?: number;
   y?: number;
@@ -116,7 +135,7 @@ function isInternalToolError(message: unknown) {
 
 export function stripInternalToolErrors(text: string) {
   if (!text) return "";
-  return text
+  return stripHiddenReasoning(text)
     .replace(
       /\n{0,2}\s*⚠️\s+[a-z_]+:\s+(?:Parameter\s+"[^"]+"\s+must be[^\n]*|Missing required parameter[^\n]*|Tool\s+[a-z_]+\s+timed out[^\n]*)/g,
       "",
@@ -265,10 +284,12 @@ export function useAgent(
   activeWorkspaceIdRef?: Ref<string | number | null>,
   /** Called after each agent-placed node so the background can show a ripple */
   onAgentPlace?: (worldX: number, worldY: number) => void,
+  historyControls?: AgentHistoryControls,
 ) {
   const messages = ref<ChatMessage[]>([]);
   const running = ref(false);
   const loadingHistory = ref(false);
+  const canUndoLastRun = ref(false);
   // Use a fixed sessionId stored in localStorage, independent of workspaceId
   const getOrCreateSessionId = () => {
     const stored = localStorage.getItem('agent_session_id');
@@ -295,6 +316,11 @@ export function useAgent(
   const nodeStates = ref<Record<string, NodeState>>({});
   let abort: AbortController | null = null;
   let localRefSeq = 1;
+  let applyingCanvasOp = false;
+  let runCanvasChanged = false;
+  let lastAgentRippleAt = 0;
+  let lastUserViewportInteractionAt = 0;
+  let attachedApp: any = null;
 
   const ensureNodeRefId = (node: any) => {
     if (!node) return "";
@@ -414,19 +440,48 @@ export function useAgent(
     { immediate: true },
   );
 
-  // Listen to child.add on app.tree globally to update nodeMap and nodeStates
+  const markUserViewportInteraction = () => {
+    lastUserViewportInteractionAt = Date.now();
+    attachedApp?.tree?.zoomLayer?.killAnimate?.();
+  };
+
+  const invalidateUndoAfterExternalChange = () => {
+    if (!running.value && !applyingCanvasOp && canUndoLastRun.value) {
+      canUndoLastRun.value = false;
+    }
+  };
+
+  const detachCanvasListeners = () => {
+    if (!attachedApp?.tree) return;
+    attachedApp.tree.off("child.add", handleChildAdd);
+    attachedApp.tree.off("child.remove", invalidateUndoAfterExternalChange);
+    attachedApp.tree.off(MoveEvent.MOVE, markUserViewportInteraction);
+    attachedApp.tree.off(ZoomEvent.ZOOM, markUserViewportInteraction);
+    attachedApp.off?.("property.change", invalidateUndoAfterExternalChange);
+    attachedApp = null;
+  };
+
+  const handleChildAdd = (e: any) => {
+    trackNode(e.child);
+    invalidateUndoAfterExternalChange();
+  };
+
   watch(
     () => canvasApp.value,
     (app) => {
-      if (app?.tree) {
-        app.tree.on("child.add", (e: any) => {
-          const child = e.child;
-          trackNode(child);
-        });
-      }
+      detachCanvasListeners();
+      if (!app?.tree) return;
+      attachedApp = app;
+      app.tree.on("child.add", handleChildAdd);
+      app.tree.on("child.remove", invalidateUndoAfterExternalChange);
+      app.tree.on(MoveEvent.MOVE, markUserViewportInteraction);
+      app.tree.on(ZoomEvent.ZOOM, markUserViewportInteraction);
+      app.on?.("property.change", invalidateUndoAfterExternalChange);
     },
     { immediate: true },
   );
+
+  onBeforeUnmount(detachCanvasListeners);
 
   const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -497,8 +552,11 @@ export function useAgent(
     const app = canvasApp.value;
     if (!app?.tree) return;
 
-    switch (op.op) {
+    applyingCanvasOp = true;
+    try {
+      switch (op.op) {
       case "set_frame": {
+        runCanvasChanged = true;
         const existing = findAgentFrame() as any;
         const frameData = {
           x: existing?.x ?? 0,
@@ -518,14 +576,12 @@ export function useAgent(
           trackNode(frame);
         }
         recordHistory?.();
-        setTimeout(() => {
-          zoomToNode("agent_frame");
-        }, 80);
         break;
       }
 
 
       case "add_node": {
+        runCanvasChanged = true;
         const n = op.node;
         const { x, y } = resolveXY(n);
         let leaferNode: any = null;
@@ -695,12 +751,11 @@ export function useAgent(
             app.tree.add(leaferNode);
           }
 
-          // Notify caller so it can play a background ripple at the drop point
-          onAgentPlace?.(x, y);
-
-          setTimeout(() => {
-            zoomToNode(n.refId);
-          }, 80);
+          const now = Date.now();
+          if (now - lastAgentRippleAt > 500) {
+            onAgentPlace?.(x, y);
+            lastAgentRippleAt = now;
+          }
 
           recordHistory?.();
         }
@@ -731,13 +786,11 @@ export function useAgent(
       case "update_node": {
         const node = nodeMap.get(op.refId);
         if (node) {
+          runCanvasChanged = true;
           const patch = buildNodePatch((op.patch ?? {}) as any);
           node.set(patch);
           trackNode(node);
           recordHistory?.();
-          setTimeout(() => {
-            zoomToNode(op.refId);
-          }, 80);
         }
         break;
       }
@@ -746,6 +799,7 @@ export function useAgent(
       case "remove_node": {
         const node = nodeMap.get(op.refId);
         if (node) {
+          runCanvasChanged = true;
           node.remove();
           nodeMap.delete(op.refId);
           delete nodeStates.value[op.refId];
@@ -755,7 +809,8 @@ export function useAgent(
       }
 
       case "focus_node": {
-        zoomToNode(op.refId);
+        // Agent operations never take over the camera. Users can focus the
+        // referenced result explicitly from the conversation UI.
         break;
       }
 
@@ -791,7 +846,47 @@ export function useAgent(
         break;
       }
     }
+    } finally {
+      applyingCanvasOp = false;
+    }
   }
+
+  const assistantTextFilters = new WeakMap<
+    object,
+    ReturnType<typeof createHiddenReasoningStreamFilter>
+  >();
+
+  const filterAssistantChunk = (assistant: ChatMessage, chunk: string) => {
+    let filter = assistantTextFilters.get(assistant);
+    if (!filter) {
+      filter = createHiddenReasoningStreamFilter();
+      assistantTextFilters.set(assistant, filter);
+    }
+    return filter.push(chunk);
+  };
+
+  const flushAssistantFilter = (assistant: ChatMessage) => {
+    const filter = assistantTextFilters.get(assistant);
+    if (!filter) return "";
+    assistantTextFilters.delete(assistant);
+    return filter.flush();
+  };
+
+  const appendVisibleText = (assistant: ChatMessage, chunk: string) => {
+    if (!chunk) return;
+    assistant.text += chunk;
+    assistant.blocks ||= [];
+    const lastBlock = assistant.blocks[assistant.blocks.length - 1];
+    if (lastBlock?.type === "text") {
+      lastBlock.text += chunk;
+    } else {
+      assistant.blocks.push({
+        id: `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        type: "text",
+        text: chunk,
+      });
+    }
+  };
 
   /** Handle one decoded AgentEvent from the SSE stream. */
   function handleEvent(ev: any, assistant: ChatMessage) {
@@ -802,22 +897,17 @@ export function useAgent(
 
     switch (ev.type) {
       case "thinking": {
-        const chunk = ev.text || "";
-        assistant.text += chunk;
-
-        const lastBlock = blocks[blocks.length - 1];
-        if (lastBlock && lastBlock.type === "text") {
-          lastBlock.text += chunk;
-        } else {
-          blocks.push({
-            id: `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            type: "text",
-            text: chunk,
-          });
-        }
+        const chunk = filterAssistantChunk(assistant, ev.text || "");
+        if (!chunk) break;
+        appendVisibleText(assistant, chunk);
         break;
       }
       case "progress":
+        assistant.progress = {
+          tool: ev.tool,
+          message: stripHiddenReasoning(String(ev.message || "正在处理…")),
+          percent: typeof ev.percent === "number" ? ev.percent : undefined,
+        };
         break;
       case "tool_call": {
         const toolItem: ToolCallItem = {
@@ -861,6 +951,8 @@ export function useAgent(
         applyCanvasOp(ev.op as CanvasOp);
         break;
       case "final": {
+        const tail = flushAssistantFilter(assistant);
+        appendVisibleText(assistant, tail);
         const finalText = stripInternalToolErrors(ev.text ?? "");
         if (!assistant.text.trim()) {
           assistant.text = finalText;
@@ -872,6 +964,7 @@ export function useAgent(
             text: finalText,
           });
         }
+        assistant.progress = undefined;
         break;
       }
       case "error": {
@@ -917,12 +1010,14 @@ export function useAgent(
 
       const base: any = {
         tag,
+        name: node.name,
         x: node.x,
         y: node.y,
         width: node.width,
         height: node.height,
       };
       base.refId = ensureNodeRefId(node);
+      base.selected = !!app.editor?.hasItem?.(node);
       
       if (parentNode && parentNode !== app.tree) {
         base.parentId = parentNode.refId;
@@ -1007,6 +1102,10 @@ export function useAgent(
     const text = input.trim();
     if ((!text && (!attachments || attachments.length === 0)) || running.value) return;
 
+    canUndoLastRun.value = false;
+    runCanvasChanged = false;
+    historyControls?.begin?.();
+
     messages.value.push({
       id: uid(),
       role: "user",
@@ -1058,7 +1157,7 @@ export function useAgent(
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (true) {
+      streamLoop: while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -1078,8 +1177,10 @@ export function useAgent(
             continue;
           }
           if (ev.type === "done") {
+            const tail = flushAssistantFilter(assistant);
+            appendVisibleText(assistant, tail);
             assistant.streaming = false;
-            return;
+            break streamLoop;
           }
           handleEvent(ev, assistant);
         }
@@ -1089,6 +1190,9 @@ export function useAgent(
         assistant.text += `\n\n⚠️ 连接失败: ${e?.message ?? e}`;
       }
     } finally {
+      const committed = historyControls?.commit?.() ?? runCanvasChanged;
+      canUndoLastRun.value =
+        runCanvasChanged && committed !== false && !!historyControls?.undo;
       assistant.streaming = false;
       running.value = false;
       abort = null;
@@ -1104,7 +1208,12 @@ export function useAgent(
     if (assistant && assistant.role === "assistant" && assistant.streaming) {
       assistant.streaming = false;
     }
-    running.value = false;
+  }
+
+  function undoLastRun() {
+    if (!canUndoLastRun.value) return;
+    historyControls?.undo?.();
+    canUndoLastRun.value = false;
   }
 
   function reset() {
@@ -1120,34 +1229,62 @@ export function useAgent(
     deleteAgentSession(sessionId.value).catch(() => {});
   }
 
-  function zoomToNode(refId?: string) {
+  function zoomToNode(
+    refId?: string,
+    options: { force?: boolean; select?: boolean } = {},
+  ) {
     const app = canvasApp.value;
     if (!app?.tree) return;
+    if (
+      !options.force &&
+      Date.now() - lastUserViewportInteractionAt < 2500
+    ) {
+      return;
+    }
+
     let node: any = null;
     if (refId) {
       node = nodeMap.get(refId);
-    }
-    if (!node) {
+      if (!node) {
+        app.tree.find((child: any) => {
+          if (child.refId === refId || child.id === refId) {
+            node = child;
+            return true;
+          }
+          return false;
+        });
+      }
+    } else {
       node = findAgentFrame();
-    }
-    if (!node && refId) {
-      app.tree.find((child: any) => {
-        if (child.refId === refId || child.id === refId) {
-          node = child;
-          return true;
-        }
-        return false;
-      });
     }
 
     if (node) {
       try {
         const agentFrame = findAgentFrame();
-        if (app.editor && node !== agentFrame) {
+        if (options.select !== false && app.editor && node !== agentFrame) {
           app.editor.select(node);
         }
-        // [top, right, bottom, left] padding: 420px on right leaves room for 380px Agent Panel
-        (app.tree as any).zoom(node, [80, 420, 80, 80], undefined, 0.85);
+
+        const canvasRect = (app.view as HTMLElement)?.getBoundingClientRect?.();
+        const panelRect = (
+          document.querySelector(".agent-panel") as HTMLElement | null
+        )?.getBoundingClientRect();
+        const panelOverlapsCanvas =
+          !!canvasRect &&
+          !!panelRect &&
+          panelRect.width > 0 &&
+          panelRect.left < canvasRect.right &&
+          panelRect.right > canvasRect.left;
+        const rightPadding = panelOverlapsCanvas
+          ? Math.min(panelRect!.width + 24, Math.max(64, canvasRect!.width * 0.42))
+          : 64;
+
+        (app.tree as any).zoom(
+          node,
+          [64, rightPadding, 64, 64],
+          undefined,
+          0.45,
+        );
       } catch (err) {
         console.warn("Failed to zoom to node:", err);
       }
@@ -1177,14 +1314,15 @@ export function useAgent(
   return {
     messages,
     running,
+    canUndoLastRun,
     loadingHistory,
     send,
     retryLastMessage,
     stop,
+    undoLastRun,
     reset,
     sessionId,
     nodeStates,
     zoomToNode,
   };
 }
-

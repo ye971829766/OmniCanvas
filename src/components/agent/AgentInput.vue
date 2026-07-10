@@ -6,7 +6,6 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Mention from "@tiptap/extension-mention";
 import {
   Plus,
-  BookOpen,
   Lightbulb,
   Square,
   ArrowUp,
@@ -89,6 +88,17 @@ const mentionCommandCallback = ref<any>(null);
 
 const modelsList = ref<any[]>([]);
 
+interface MentionOption {
+  id: string;
+  name: string;
+  itemType: "element" | "model";
+  url?: string;
+  iconUrl?: string;
+  tag?: string;
+  parentName?: string;
+  purpose?: "image" | "video" | string;
+}
+
 const loadModels = async () => {
   try {
     const config = await getModelConfig();
@@ -134,16 +144,22 @@ onMounted(() => {
 
 const canvasElements = computed(() => {
   if (!props.canvasApp?.tree?.children) return [];
-  return props.canvasApp.tree.children
-    .filter((child: any) => {
-      const tag = child.tag || child.__tag;
-      return tag !== "ImageGen" && tag !== "VideoGen";
-    })
-    .map((child: any) => {
+  const elements: any[] = [];
+
+  const visit = (child: any, parentName = "") => {
+    if (!child) return;
+    const tag = child.tag || child.__tag;
+    if (
+      !tag ||
+      tag === "SimulateElement" ||
+      tag.startsWith("Edit") ||
+      child.isTaskOverlay
+    ) {
+      return;
+    }
+
       let url = "";
       let type = "shape";
-
-      const tag = child.tag || child.__tag;
       if (tag === "Image") {
         url = child.url || "";
         type = "image";
@@ -153,6 +169,8 @@ const canvasElements = computed(() => {
       } else if (tag === "ImageGen" && child.images?.length > 0) {
         url = child.images[0] || "";
         type = "image";
+      } else if (tag === "VideoGen") {
+        type = "video";
       }
 
       let name = child.name;
@@ -168,43 +186,69 @@ const canvasElements = computed(() => {
         else name = tag || "元素";
       }
 
-      return {
-        id: child.innerId ?? child.id,
+      const refId =
+        child.refId ||
+        `node_${String(child.innerId ?? child.id ?? Date.now())}`;
+      child.refId = refId;
+
+      elements.push({
+        refId,
         name,
+        parentName,
         tag,
         url,
         type,
-      };
-    });
+      });
+
+      if (child.children?.length) {
+        child.children.forEach((nested: any) => visit(nested, name));
+      }
+  };
+
+  props.canvasApp.tree.children.forEach((child: any) => visit(child));
+
+  const nameCounts = new Map<string, number>();
+  elements.forEach((element) => {
+    nameCounts.set(element.name, (nameCounts.get(element.name) || 0) + 1);
+  });
+
+  return elements.map((element) => ({
+    ...element,
+    displayName:
+      (nameCounts.get(element.name) || 0) > 1
+        ? `${element.name} · ${String(element.refId).slice(-6)}`
+        : element.name,
+  }));
 });
 
-const mentionOptions = computed(() => {
+const mentionOptions = computed<MentionOption[]>(() => {
   const elements = canvasElements.value.map((el: any) => ({
-    id: el.name,
-    name: el.name,
+    id: `element:${el.refId}`,
+    name: el.displayName,
     url: el.url,
     tag: el.tag,
-    itemType: "element",
+    parentName: el.parentName,
+    itemType: "element" as const,
   }));
 
   const imageModels = modelsList.value
     .filter((m: any) => m.purpose === "image")
     .map((m: any) => ({
-      id: m.name,
+      id: `model:${m.id}`,
       name: m.name,
       iconUrl: m.iconUrl,
       purpose: m.purpose,
-      itemType: "model",
+      itemType: "model" as const,
     }));
 
   const videoModels = modelsList.value
     .filter((m: any) => m.purpose === "video")
     .map((m: any) => ({
-      id: m.name,
+      id: `model:${m.id}`,
       name: m.name,
       iconUrl: m.iconUrl,
       purpose: m.purpose,
-      itemType: "model",
+      itemType: "model" as const,
     }));
 
   return [...elements, ...imageModels, ...videoModels];
@@ -266,7 +310,7 @@ const editor = useEditor({
                 const option =
                   filteredMentions.value[selectedMentionIndex.value];
                 if (option) {
-                  insertMention(option.name);
+                  insertMention(option);
                 }
                 return true;
               }
@@ -345,12 +389,40 @@ watch(
   },
 );
 
-function insertMention(name: string) {
+function insertMention(item: Pick<MentionOption, "id" | "name">) {
   if (mentionCommandCallback.value) {
-    mentionCommandCallback.value({ id: name, label: name });
+    mentionCommandCallback.value({ id: item.id, label: item.name });
     editor.value?.chain().focus().insertContent(" ").run();
     showMentions.value = false;
   }
+}
+
+function getStructuredPromptText() {
+  const documentJson = editor.value?.getJSON();
+  if (!documentJson) return "";
+
+  const serializeNode = (node: any): string => {
+    if (node.type === "text") return node.text || "";
+    if (node.type === "hardBreak") return "\n";
+    if (node.type === "mention") {
+      const id = String(node.attrs?.id || "");
+      const label = String(node.attrs?.label || id);
+      if (id.startsWith("element:")) {
+        return `@${label} [refId:${id.slice("element:".length)}]`;
+      }
+      if (id.startsWith("model:")) {
+        return `@${label} [modelId:${id.slice("model:".length)}]`;
+      }
+      return `@${label}`;
+    }
+
+    const content = Array.isArray(node.content)
+      ? node.content.map(serializeNode).join("")
+      : "";
+    return node.type === "paragraph" ? `${content}\n` : content;
+  };
+
+  return serializeNode(documentJson).trim();
 }
 
 function clearInput() {
@@ -420,21 +492,8 @@ function insertSuggestion() {
   }
 }
 
-function insertBrand() {
-  if (editor.value) {
-    editor.value
-      .chain()
-      .focus()
-      .insertContent([
-        { type: "mention", attrs: { id: "set_brand", label: "set_brand" } },
-        { type: "text", text: " " },
-      ])
-      .run();
-  }
-}
-
 function handleSubmit() {
-  const text = editor.value?.getText() || "";
+  const text = getStructuredPromptText();
   if ((text.trim() || attachments.value.length > 0) && !props.running) {
     emit("submit", { text, attachments: [...attachments.value] });
     attachments.value = [];
@@ -520,7 +579,7 @@ function handleSubmit() {
             <div
               class="mention-item"
               :class="{ active: idx === selectedMentionIndex }"
-              @click="insertMention(item.id)"
+              @click="insertMention(item)"
               @mouseenter="selectedMentionIndex = idx"
             >
               <!-- Thumbnail / Icon -->
@@ -565,7 +624,12 @@ function handleSubmit() {
               </div>
 
               <!-- Name -->
-              <span class="mention-item-name">{{ item.name }}</span>
+              <span class="mention-item-copy">
+                <span class="mention-item-name">{{ item.name }}</span>
+                <span v-if="item.parentName" class="mention-item-context">
+                  位于 {{ item.parentName }}
+                </span>
+              </span>
             </div>
           </template>
         </div>
@@ -1042,6 +1106,20 @@ function handleSubmit() {
   font-size: var(--text-base);
   font-weight: 500;
   color: var(--p-text-color, #0f172a);
+}
+
+.mention-item-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mention-item-context {
+  color: var(--p-text-muted-color);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Attachments preview list */

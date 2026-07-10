@@ -61,6 +61,15 @@ import {
 } from "vue";
 import { App, ZoomEvent, MoveEvent } from "leafer-ui";
 import { Map as MapIcon } from "lucide-vue-next";
+import {
+  clientPointToWorld,
+  createMinimapTransform,
+  getViewportWorldRect,
+  getZoomLayerPositionForViewportCenter,
+  minimapRectsEqual,
+  type MinimapRect,
+  type MinimapTransform,
+} from "@/utils/minimapGeometry";
 
 const props = defineProps({
   canvasApp: {
@@ -91,6 +100,9 @@ const togglePopover = (event: Event) => {
 
 const onPopoverShow = () => {
   isVisible.value = true;
+  transform = null;
+  transformContentBounds = null;
+  transformViewportSize = null;
   // Canvas mounts after show — wait a tick then paint
   setTimeout(scheduleRender, 50);
 };
@@ -98,21 +110,14 @@ const onPopoverShow = () => {
 const onPopoverHide = () => {
   isVisible.value = false;
   isDragging.value = false;
+  dragTransform = null;
+  cancelViewportUpdate();
 };
 
-/** Cached transform from last render — for hit testing & pan scale */
-interface MinimapTransform {
-  /** world units per minimap pixel (vue-flow viewScale) */
-  viewScale: number;
-  viewBoxX: number;
-  viewBoxY: number;
-  viewBoxW: number;
-  viewBoxH: number;
-  elementW: number;
-  elementH: number;
-}
-
 let transform: MinimapTransform | null = null;
+let dragTransform: MinimapTransform | null = null;
+let transformContentBounds: MinimapRect | null = null;
+let transformViewportSize: { width: number; height: number } | null = null;
 
 // ── Color helpers ──────────────────────────────────────────────────
 
@@ -166,6 +171,7 @@ function collectElements(
   node: any,
   out: ElementRect[],
   isDark: boolean,
+  sceneRoot: any,
   depth = 0,
 ) {
   if (!node || depth > 32) return;
@@ -181,8 +187,8 @@ function collectElements(
     if (SKIP_TAGS.has(tag) || tag.startsWith("Edit")) continue;
     if (child.isTaskOverlay) continue;
 
-    // Prefer world bounds so nested Group/Frame children are correct
-    const wb = child.worldBoxBounds;
+    // Scene-relative bounds exclude the zoom layer's camera transform.
+    const wb = child.getBounds?.("box", sceneRoot);
     let x: number;
     let y: number;
     let w: number;
@@ -211,21 +217,14 @@ function collectElements(
     }
 
     if (child.children?.length) {
-      collectElements(child, out, isDark, depth + 1);
+      collectElements(child, out, isDark, sceneRoot, depth + 1);
     }
   }
 }
 
 // ── Bounds helpers (vue-flow getRectOfNodes / getBoundsofRects) ────
 
-interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-function getRectOfElements(elements: ElementRect[]): Rect | null {
+function getRectOfElements(elements: ElementRect[]): MinimapRect | null {
   if (elements.length === 0) return null;
   let minX = Infinity;
   let minY = Infinity;
@@ -240,34 +239,24 @@ function getRectOfElements(elements: ElementRect[]): Rect | null {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
-function getBoundsofRects(a: Rect, b: Rect): Rect {
-  const minX = Math.min(a.x, b.x);
-  const minY = Math.min(a.y, b.y);
-  const maxX = Math.max(a.x + a.width, b.x + b.width);
-  const maxY = Math.max(a.y + a.height, b.y + b.height);
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+function getViewportSize(app: App) {
+  const viewEl = app.view as HTMLElement;
+  return {
+    width: app.width || viewEl?.clientWidth || window.innerWidth,
+    height: app.height || viewEl?.clientHeight || window.innerHeight,
+  };
 }
 
-function getViewportWorld(app: App): Rect {
-  const tree = app.tree as any;
-  const zoom = tree.scaleX || tree.scale || 1;
-  const panX = tree.x || 0;
-  const panY = tree.y || 0;
-  const viewEl = app.view as HTMLElement;
-  const containerW = viewEl?.clientWidth || window.innerWidth;
-  const containerH = viewEl?.clientHeight || window.innerHeight;
-  return {
-    x: -panX / zoom,
-    y: -panY / zoom,
-    width: containerW / zoom,
-    height: containerH / zoom,
-  };
+function getViewportWorld(app: App): MinimapRect {
+  const zoomLayer = (app as any).zoomLayer || app.tree;
+  return getViewportWorldRect(zoomLayer as any, getViewportSize(app));
 }
 
 // ── Render ─────────────────────────────────────────────────────────
 
 function render() {
   renderScheduled = false;
+  rafId = null;
 
   if (!isVisible.value) return;
 
@@ -299,40 +288,42 @@ function render() {
   ctx.fillRect(0, 0, cw, ch);
 
   const elements: ElementRect[] = [];
-  collectElements(app.tree, elements, isDark);
+  collectElements(app.tree, elements, isDark, app.tree);
 
   const nodesBB = getRectOfElements(elements);
   const viewBB = getViewportWorld(app);
-  // vue-flow: union of nodes + viewport so the mask hole always fits
-  const boundingRect = nodesBB ? getBoundsofRects(nodesBB, viewBB) : viewBB;
+  const viewportSizeChanged =
+    !transformViewportSize ||
+    Math.abs(transformViewportSize.width - viewBB.width) > 0.001 ||
+    Math.abs(transformViewportSize.height - viewBB.height) > 0.001;
+  if (
+    !dragTransform &&
+    (!transform ||
+      viewportSizeChanged ||
+      !minimapRectsEqual(nodesBB, transformContentBounds))
+  ) {
+    transform = createMinimapTransform(
+      nodesBB,
+      viewBB,
+      { width: cw, height: ch },
+      OFFSET_SCALE,
+    );
+    transformContentBounds = nodesBB ? { ...nodesBB } : null;
+    transformViewportSize = {
+      width: viewBB.width,
+      height: viewBB.height,
+    };
+  }
 
-  // viewScale = max(scaledW, scaledH) — content fits inside element
-  const viewScale = Math.max(
-    boundingRect.width / cw || 1,
-    boundingRect.height / ch || 1,
-  );
-
-  const viewWidth = viewScale * cw;
-  const viewHeight = viewScale * ch;
-  const offset = OFFSET_SCALE * viewScale;
-
-  // vue-flow viewBox: center content with offset padding
-  const viewBoxX =
-    boundingRect.x - (viewWidth - boundingRect.width) / 2 - offset;
-  const viewBoxY =
-    boundingRect.y - (viewHeight - boundingRect.height) / 2 - offset;
-  const viewBoxW = viewWidth + offset * 2;
-  const viewBoxH = viewHeight + offset * 2;
-
-  transform = {
-    viewScale,
+  const activeTransform = dragTransform || transform;
+  if (!activeTransform) return;
+  const {
     viewBoxX,
     viewBoxY,
     viewBoxW,
     viewBoxH,
-    elementW: cw,
-    elementH: ch,
-  };
+    worldPerPixel,
+  } = activeTransform;
 
   const worldToMini = (wx: number, wy: number) => ({
     x: ((wx - viewBoxX) / viewBoxW) * cw,
@@ -349,7 +340,7 @@ function render() {
     const drawW = Math.max(rw, 1);
     const drawH = Math.max(rh, 1);
     const r = Math.min(
-      NODE_BORDER_RADIUS / viewScale,
+      NODE_BORDER_RADIUS / worldPerPixel,
       Math.min(drawW, drawH) / 2,
       4,
     );
@@ -370,11 +361,17 @@ function render() {
   // Outer rect
   ctx.rect(0, 0, cw, ch);
   // Inner hole (viewport) — reverse winding for evenodd
-  const holeX = vp.x;
-  const holeY = vp.y;
-  const holeW = Math.max(vpW, 2);
-  const holeH = Math.max(vpH, 2);
-  ctx.rect(holeX, holeY, holeW, holeH);
+  const viewportX = vp.x;
+  const viewportY = vp.y;
+  const viewportW = Math.max(vpW, 2);
+  const viewportH = Math.max(vpH, 2);
+  const holeX = Math.max(0, viewportX);
+  const holeY = Math.max(0, viewportY);
+  const holeRight = Math.min(cw, viewportX + viewportW);
+  const holeBottom = Math.min(ch, viewportY + viewportH);
+  const holeW = Math.max(0, holeRight - holeX);
+  const holeH = Math.max(0, holeBottom - holeY);
+  if (holeW > 0 && holeH > 0) ctx.rect(holeX, holeY, holeW, holeH);
   // vue-flow maskColor = rgb(240, 240, 240, 0.6)
   ctx.fillStyle = isDark
     ? "rgba(0, 0, 0, 0.45)"
@@ -383,11 +380,13 @@ function render() {
   ctx.restore();
 
   // Subtle viewport border (maskStroke) for readability when hole is large
-  ctx.strokeStyle = isDark
-    ? "rgba(255, 255, 255, 0.25)"
-    : "rgba(0, 0, 0, 0.15)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(holeX + 0.5, holeY + 0.5, holeW - 1, holeH - 1);
+  if (holeW > 0 && holeH > 0) {
+    ctx.strokeStyle = isDark
+      ? "rgba(255, 255, 255, 0.25)"
+      : "rgba(0, 0, 0, 0.15)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(holeX + 0.5, holeY + 0.5, holeW - 1, holeH - 1);
+  }
 }
 
 function scheduleRender() {
@@ -400,35 +399,49 @@ function scheduleRender() {
 
 function clientToWorld(clientX: number, clientY: number) {
   const canvas = minimapCanvas.value;
-  if (!canvas || !transform) return null;
+  const activeTransform = dragTransform || transform;
+  if (!canvas || !activeTransform) return null;
 
   const rect = canvas.getBoundingClientRect();
-  const mx = clientX - rect.left;
-  const my = clientY - rect.top;
-
-  const worldX = (mx / transform.elementW) * transform.viewBoxW + transform.viewBoxX;
-  const worldY = (my / transform.elementH) * transform.viewBoxH + transform.viewBoxY;
-  return { worldX, worldY };
+  return clientPointToWorld(clientX, clientY, rect, activeTransform);
 }
 
+let viewportRafId: number | null = null;
+let pendingViewportCenter: { worldX: number; worldY: number } | null = null;
+
 function setViewportCenter(worldX: number, worldY: number) {
-  const app = props.canvasApp;
-  if (!app?.tree) return;
+  pendingViewportCenter = { worldX, worldY };
+  if (viewportRafId !== null) return;
 
-  const tree = app.tree as any;
-  const zoom = tree.scaleX || tree.scale || 1;
-  const viewEl = app.view as HTMLElement;
-  const containerW = viewEl?.clientWidth || window.innerWidth;
-  const containerH = viewEl?.clientHeight || window.innerHeight;
+  viewportRafId = requestAnimationFrame(() => {
+    viewportRafId = null;
+    const center = pendingViewportCenter;
+    pendingViewportCenter = null;
+    const app = props.canvasApp;
+    if (!center || !app?.tree) return;
 
-  try {
-    tree.set({
-      x: -(worldX * zoom - containerW / 2),
-      y: -(worldY * zoom - containerH / 2),
-    });
-    scheduleRender();
-  } catch (err) {
-    console.warn("Minimap navigation failed:", err);
+    const zoomLayer = (app as any).zoomLayer || app.tree;
+    const position = getZoomLayerPositionForViewportCenter(
+      center.worldX,
+      center.worldY,
+      zoomLayer as any,
+      getViewportSize(app),
+    );
+
+    try {
+      zoomLayer.set(position);
+      scheduleRender();
+    } catch (err) {
+      console.warn("Minimap navigation failed:", err);
+    }
+  });
+}
+
+function cancelViewportUpdate() {
+  pendingViewportCenter = null;
+  if (viewportRafId !== null) {
+    cancelAnimationFrame(viewportRafId);
+    viewportRafId = null;
   }
 }
 
@@ -437,7 +450,8 @@ function zoomByWheel(deltaY: number, deltaMode: number, ctrlKey: boolean) {
   if (!app?.tree) return;
 
   const tree = app.tree as any;
-  const zoom = tree.scaleX || tree.scale || 1;
+  const zoomLayer = (app as any).zoomLayer || tree;
+  const zoom = zoomLayer.scaleX || zoomLayer.scale || 1;
 
   // vue-flow wheel zoom math
   const factor = ctrlKey ? 10 : 1;
@@ -462,7 +476,13 @@ function zoomByWheel(deltaY: number, deltaMode: number, ctrlKey: boolean) {
 
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return;
+  if (!transform) render();
+  dragTransform = transform ? { ...transform } : null;
   isDragging.value = true;
+
+  const app = props.canvasApp;
+  const zoomLayer = (app as any)?.zoomLayer || app?.tree;
+  zoomLayer?.killAnimate?.();
 
   const canvas = minimapCanvas.value;
   canvas?.setPointerCapture(e.pointerId);
@@ -480,6 +500,7 @@ function onPointerMove(e: PointerEvent) {
 
 function onPointerUp(e: PointerEvent) {
   isDragging.value = false;
+  dragTransform = null;
   const canvas = minimapCanvas.value;
   if (canvas) {
     try {
@@ -488,6 +509,7 @@ function onPointerUp(e: PointerEvent) {
       /* already released */
     }
   }
+  scheduleRender();
 }
 
 function onWheel(e: WheelEvent) {
@@ -519,6 +541,10 @@ watch(
   () => props.canvasApp,
   (newApp, oldApp) => {
     if (oldApp) cleanupListeners(oldApp);
+    transform = null;
+    dragTransform = null;
+    transformContentBounds = null;
+    transformViewportSize = null;
     if (newApp) setupListeners(newApp);
   },
   { immediate: true },
@@ -540,6 +566,7 @@ onUnmounted(() => {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
+  cancelViewportUpdate();
   if (props.canvasApp) cleanupListeners(props.canvasApp);
 });
 </script>

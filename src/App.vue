@@ -1,6 +1,27 @@
 <template>
   <router-view />
+  <AuthModal />
+  <Toast position="top-center" />
 </template>
+
+<script setup lang="ts">
+import { watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import Toast from "primevue/toast";
+import AuthModal from "@/components/auth/AuthModal.vue";
+import { useUser } from "@/composables/useUser";
+
+const route = useRoute();
+const router = useRouter();
+const { isLoggedIn, isInitializing } = useUser();
+
+watch([isLoggedIn, isInitializing], ([loggedIn, initializing]) => {
+  if (initializing) return;
+  if (!loggedIn && route.path !== "/login") {
+    router.push("/login");
+  }
+});
+</script>
 
 <style>
 /*

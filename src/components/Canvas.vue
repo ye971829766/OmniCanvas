@@ -105,7 +105,12 @@
       />
     </div>
 
-    <div class="absolute right-3 top-4 z-40 flex items-center gap-3">
+    <div
+      class="absolute top-4 z-40 flex items-center gap-3 canvas-top-controls"
+      :style="{
+        right: agentPanelCollapsed ? '12px' : 'min(432px, calc(100% - 96px))',
+      }"
+    >
       <ZoomController :canvas-app="canvasApp" />
       <button
         class="agent-launcher-btn cursor-pointer flex items-center justify-center"
@@ -300,6 +305,10 @@ const {
   toolbarStyle,
   toolbarVersion,
   recordHistoryDebounced,
+  beginHistoryTransaction,
+  commitHistoryTransaction,
+  rollbackHistoryTransaction,
+  undo,
   addImageGenNode,
   addVideoGenNode,
 } = useCanvas(
@@ -1134,6 +1143,10 @@ function triggerAgentRipple(worldX: number, worldY: number): void {
 defineExpose({
   canvasApp,
   recordHistoryDebounced,
+  beginHistoryTransaction,
+  commitHistoryTransaction,
+  rollbackHistoryTransaction,
+  undo,
   triggerAgentRipple,
 });
 </script>
@@ -1212,6 +1225,10 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+.canvas-top-controls {
+  transition: right 0.25s ease;
 }
 
 /* Demo Info */

@@ -8,15 +8,10 @@ import AgentPanel from "../components/AgentPanel.vue";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.vue";
 import { getWorkspaces } from "@/utils/api";
 import { useUser } from "@/composables/useUser";
-import AuthModal from "@/components/auth/AuthModal.vue";
 
 const route = useRoute();
 const router = useRouter();
-const {
-  isLoggedIn,
-  fetchProfile,
-  isInitializing: isUserInitializing,
-} = useUser();
+const { isLoggedIn } = useUser();
 
 const canvasRef = ref<any>(null);
 const agentPanelCollapsed = ref(false);
@@ -25,17 +20,6 @@ const workspaces = ref<any[]>([]);
 const isInitializing = ref(true);
 
 const validateAndSetWorkspace = async () => {
-  if (isUserInitializing.value) {
-    return;
-  }
-  if (!isLoggedIn.value) {
-    workspaces.value = [];
-    activeWorkspaceId.value = null;
-    isInitializing.value = false;
-    router.push("/login");
-    return;
-  }
-
   const queryId = route.query.projectId;
   try {
     workspaces.value = await getWorkspaces();
@@ -66,7 +50,6 @@ const handleOpenAgentPanel = () => {
 };
 
 onMounted(async () => {
-  await fetchProfile();
   await validateAndSetWorkspace();
   window.addEventListener("agent:open-panel", handleOpenAgentPanel);
 });
@@ -75,20 +58,11 @@ onBeforeUnmount(() => {
   window.removeEventListener("agent:open-panel", handleOpenAgentPanel);
 });
 
-watch(
-  [isLoggedIn, isUserInitializing],
-  ([loggedIn, initializing]) => {
-    if (initializing) return;
-    if (!loggedIn) {
-      workspaces.value = [];
-      activeWorkspaceId.value = null;
-      router.push("/login");
-    } else {
-      validateAndSetWorkspace();
-    }
-  },
-  { immediate: true }
-);
+watch(isLoggedIn, (loggedIn) => {
+  if (loggedIn) {
+    validateAndSetWorkspace();
+  }
+});
 
 // Sync query parameter changes (including page load, history navigation) to state with validation
 watch(
@@ -124,11 +98,9 @@ watch(activeWorkspaceId, (newId) => {
 <template>
   <div class="w-full h-full relative flex">
     <ConfirmDialog></ConfirmDialog>
-    <Toast position="top-center" />
-    <AuthModal />
 
     <!-- Full Page Layout Skeleton during initial network loading -->
-    <WorkspaceSkeleton v-if="isInitializing || !isLoggedIn" />
+    <WorkspaceSkeleton v-if="isInitializing" />
 
     <!-- Actual Workspace View after loading -->
     <template v-else>
@@ -170,6 +142,10 @@ watch(activeWorkspaceId, (newId) => {
         :workspace-id="activeWorkspaceId"
         :canvas-app="canvasRef.canvasApp"
         :record-history="canvasRef.recordHistoryDebounced"
+        :begin-history-transaction="canvasRef.beginHistoryTransaction"
+        :commit-history-transaction="canvasRef.commitHistoryTransaction"
+        :rollback-history-transaction="canvasRef.rollbackHistoryTransaction"
+        :undo-history="canvasRef.undo"
         :on-agent-place="canvasRef.triggerAgentRipple"
       />
     </template>

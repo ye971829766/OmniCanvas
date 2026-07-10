@@ -254,6 +254,7 @@ export const queryCanvasTool: AgentTool = {
   name: 'query_canvas',
   description:
     'Get a summary of all nodes currently on the canvas, including those added by the user manually. ' +
+    'Nodes with selected=true are the user\'s current explicit selection and should be preferred for references like "this" or "selected elements". ' +
     'Use this to check what exists before modifying, repositioning, or removing nodes. ' +
     'Returns a list of nodes with their tag, position, size, and key properties.',
   parameters: {

@@ -8,6 +8,10 @@ import { TOOL_MAP } from "./tool.registry";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { AgentMemory } from "./agent.memory";
 import { ModelConfigService } from "../model-config/model-config.service";
+import {
+  HiddenReasoningStreamFilter,
+  stripHiddenReasoning,
+} from "./text-sanitizer";
 // No planner imports
 
 /** Extract a meaningful root-cause message from AI SDK wrapped errors. */
@@ -369,14 +373,18 @@ ${videoModelInfo || "- None"}
 
       let text = "";
       const toolCalls: any[] = [];
+      const visibleText = new HiddenReasoningStreamFilter();
 
       for await (const chunk of result.fullStream) {
         if (abortSignal?.aborted) {
           throw new DOMException("Agent run aborted", "AbortError");
         }
         if (chunk.type === "text-delta") {
-          text += chunk.text;
-          sink.emit({ type: "thinking", text: chunk.text });
+          const safeChunk = visibleText.push(chunk.text);
+          if (safeChunk) {
+            text += safeChunk;
+            sink.emit({ type: "thinking", text: safeChunk });
+          }
         } else if (chunk.type === "tool-call") {
           toolCalls.push({
             id: chunk.toolCallId,
@@ -388,6 +396,13 @@ ${videoModelInfo || "- None"}
           });
         }
       }
+
+      const trailingText = visibleText.flush();
+      if (trailingText) {
+        text += trailingText;
+        sink.emit({ type: "thinking", text: trailingText });
+      }
+      text = stripHiddenReasoning(text);
 
       // Track usage
       const currentUsage = await result.usage;

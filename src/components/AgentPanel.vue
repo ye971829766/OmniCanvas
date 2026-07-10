@@ -15,11 +15,16 @@ import AgentHeader from "./agent/AgentHeader.vue";
 import AgentMessages from "./agent/AgentMessages.vue";
 import AgentInput from "./agent/AgentInput.vue";
 import { useConfirm } from "primevue/useconfirm";
+import { Undo2 } from "lucide-vue-next";
 const confirm = useConfirm();
 
 const props = defineProps<{
   canvasApp: Ref<any> | any;
   recordHistory?: () => void;
+  beginHistoryTransaction?: () => void;
+  commitHistoryTransaction?: () => boolean;
+  rollbackHistoryTransaction?: () => boolean;
+  undoHistory?: () => void;
   collapsed: boolean;
   onAgentPlace?: (node: any) => void;
   workspaceId?: string | number;
@@ -38,10 +43,12 @@ watch(
 const {
   messages,
   running,
+  canUndoLastRun,
   loadingHistory,
   send,
   retryLastMessage,
   stop,
+  undoLastRun,
   reset,
   nodeStates,
   zoomToNode,
@@ -50,6 +57,12 @@ const {
   props.recordHistory,
   toRef(props, "workspaceId") as any,
   props.onAgentPlace as any,
+  {
+    begin: props.beginHistoryTransaction,
+    commit: props.commitHistoryTransaction,
+    rollback: props.rollbackHistoryTransaction,
+    undo: props.undoHistory,
+  },
 );
 
 const collapsed = computed({
@@ -98,10 +111,10 @@ const bottomRef = ref<HTMLElement | null>(null);
 
 onMounted(() => {
   if (collapsed.value) {
-    gsap.set(containerRef.value, { width: 0, opacity: 0 });
+    gsap.set(containerRef.value, { xPercent: 100, opacity: 0 });
     isVisible.value = false;
   } else {
-    gsap.set(containerRef.value, { width: 420, opacity: 1 });
+    gsap.set(containerRef.value, { xPercent: 0, opacity: 1 });
     isVisible.value = true;
   }
 });
@@ -110,7 +123,7 @@ watch(collapsed, (isCollapsed) => {
   if (isCollapsed) {
     // Smooth exit animation first, hide display after animation finishes
     gsap.to(containerRef.value, {
-      width: 0,
+      xPercent: 100,
       opacity: 0,
       duration: 0.25,
       ease: "power2.inOut",
@@ -123,9 +136,9 @@ watch(collapsed, (isCollapsed) => {
     isVisible.value = true;
     gsap.fromTo(
       containerRef.value,
-      { width: 0, opacity: 0 },
+      { xPercent: 100, opacity: 0 },
       {
-        width: 420,
+        xPercent: 0,
         opacity: 1,
         duration: 0.25,
         ease: "power2.inOut",
@@ -191,6 +204,10 @@ function useSuggestion(s: string) {
   input.value = s;
   submit();
 }
+
+function handleZoomToNode(refId: string) {
+  zoomToNode(refId, { force: true, select: true });
+}
 </script>
 
 <template>
@@ -199,7 +216,7 @@ function useSuggestion(s: string) {
     class="agent-panel"
     :style="{ display: isVisible ? 'flex' : 'none' }"
   >
-    <div class="w-[420px] flex flex-col h-full min-h-0 shrink-0">
+    <div class="w-full flex flex-col h-full min-h-0 shrink-0">
       <!-- Header -->
       <div ref="headerRef" class="panel-header-row">
         <AgentHeader
@@ -220,7 +237,7 @@ function useSuggestion(s: string) {
           :running="running"
           :elapsed-time="elapsedTime"
           @use-suggestion="useSuggestion"
-          @zoom-to-node="zoomToNode"
+          @zoom-to-node="handleZoomToNode"
           @scroll="onScroll"
           @retry="retryLastMessage"
         />
@@ -228,6 +245,15 @@ function useSuggestion(s: string) {
 
       <!-- Bottom Layout Group -->
       <div ref="bottomRef" class="agent-panel-bottom">
+        <button
+          v-if="canUndoLastRun && !running"
+          class="undo-agent-run"
+          type="button"
+          @click="undoLastRun"
+        >
+          <Undo2 :size="14" />
+          撤销本次 AI 修改
+        </button>
         <!-- Input Wrap -->
         <AgentInput
           v-model="input"
@@ -243,13 +269,19 @@ function useSuggestion(s: string) {
 
 <style scoped>
 .agent-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 90;
+  width: min(420px, calc(100vw - 16px));
   height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--surface-panel);
   border-left: 1px solid var(--border-color);
   overflow: hidden;
-  flex-shrink: 0;
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.08);
+  will-change: transform, opacity;
 }
 
 .panel-header-row {
@@ -265,6 +297,26 @@ function useSuggestion(s: string) {
   flex-direction: column;
   background: var(--surface-panel);
   z-index: 50;
+}
+
+.undo-agent-run {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 12px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.undo-agent-run:hover {
+  color: var(--text-primary);
+  background: var(--p-surface-100);
 }
 
 .scroll-to-bottom-btn {

@@ -2,9 +2,6 @@
   <div
     class="w-full h-full flex flex-col items-center justify-center bg-[var(--p-surface-50)] text-[var(--p-text-color)] relative overflow-hidden login-splash-viewport"
   >
-    <AuthModal />
-
-    <!-- Background Matrix & Glows -->
     <div class="absolute inset-0 login-grid-bg"></div>
     <div
       class="absolute top-1/4 left-1/4 w-[400px] h-[400px] rounded-full bg-[var(--p-primary-color)]/10 blur-[100px] animate-blob-float pointer-events-none"
@@ -13,11 +10,9 @@
       class="absolute bottom-1/4 right-1/4 w-[350px] h-[350px] rounded-full bg-emerald-500/10 blur-[90px] animate-blob-float-delayed pointer-events-none"
     ></div>
 
-    <!-- Glass Container -->
     <div
       class="z-10 flex flex-col md:flex-row items-stretch max-w-4xl w-[92%] rounded-3xl bg-[var(--glass-bg)] border border-[var(--glass-border)] shadow-2xl backdrop-blur-xl overflow-hidden login-portal-box"
     >
-      <!-- Left Side: Brand Showcase -->
       <div
         class="hidden md:flex flex-col justify-between p-10 flex-1 border-r border-[var(--glass-border)] bg-[var(--p-surface-0)]/20 relative overflow-hidden"
       >
@@ -52,41 +47,39 @@
         </div>
       </div>
 
-      <!-- Right Side: Auth Card -->
       <div
-        class="flex flex-col justify-center items-center p-8 md:p-12 w-full md:w-[420px] text-center bg-[var(--p-surface-0)]/50 backdrop-blur-md"
+        class="flex flex-col justify-center p-8 md:p-10 w-full md:w-[420px] bg-[var(--p-surface-0)]/50 backdrop-blur-md"
       >
-        <div class="w-24 h-24 mb-6 relative flex items-center justify-center">
+        <div class="flex items-center gap-3 mb-6 md:hidden">
           <img
             src="@/assets/logo.jpg"
-            @error="handleLogoError"
-            ref="logoRef"
             alt="OmniCanvas Logo"
-            class="w-24 h-24 rounded-2xl object-cover shadow-md"
+            class="w-8 h-8 rounded-lg object-cover shadow-sm"
           />
+          <span class="text-lg font-bold text-[var(--p-text-color)]"
+            >OmniCanvas</span
+          >
         </div>
 
-        <h3
-          class="text-2xl font-bold text-[var(--p-text-color)] tracking-tight mb-2"
-        >
-          需要登录以继续 {{ isLoggedIn }} {{ isInitializing }}
-        </h3>
-        <p
-          class="text-sm text-[var(--p-text-muted-color)] leading-relaxed mb-8 px-2"
-        >
-          为了保障您的设计工程与工作空间数据安全，请先登录或注册您的 OmniCanvas
-          账号。
-        </p>
+        <div class="mb-6 text-left">
+          <h3
+            class="text-2xl font-bold text-[var(--p-text-color)] tracking-tight mb-2"
+          >
+            {{ isLogin ? "欢迎回来" : "创建账号" }}
+          </h3>
+          <p class="text-sm text-[var(--p-text-muted-color)] leading-relaxed">
+            {{
+              isLogin
+                ? "登录以访问您的工作空间与设计工程。"
+                : "注册 OmniCanvas 账号，开始您的创意之旅。"
+            }}
+          </p>
+        </div>
 
-        <Button
-          label="立即登录 / 注册"
-          icon="pi pi-user-plus"
-          class="w-full !py-3.5 !rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-md"
-          @click="openAuthModal('login')"
-        />
+        <AuthForm />
 
         <div
-          class="mt-8 flex items-center gap-6 text-xs text-[var(--p-text-secondary)] font-medium"
+          class="mt-6 flex items-center justify-center gap-6 text-xs text-[var(--p-text-secondary)] font-medium"
         >
           <span class="flex items-center gap-1.5">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -97,8 +90,8 @@
             云端同步
           </span>
           <span class="flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> AI
-            赋能
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            AI 赋能
           </span>
         </div>
       </div>
@@ -107,39 +100,28 @@
 </template>
 
 <script setup lang="ts">
-import { watch, ref } from "vue";
+import { computed, watch, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useUser } from "@/composables/useUser";
-import AuthModal from "@/components/auth/AuthModal.vue";
+import AuthForm from "@/components/auth/AuthForm.vue";
 
 const router = useRouter();
-const { isLoggedIn, openAuthModal, isInitializing } = useUser();
-const logoRef = ref<HTMLImageElement | null>(null);
+const { isLoggedIn, isInitializing, authModalMode } = useUser();
 
-// Fallback to emoji if logo image fails to load
-const handleLogoError = () => {
-  if (logoRef.value) {
-    logoRef.value.style.display = "none";
-    const parent = logoRef.value.parentElement;
-    if (parent) {
-      const fallback = document.createElement("div");
-      fallback.className =
-        "w-24 h-24 rounded-2xl bg-gradient-to-tr from-[var(--p-primary-color)] to-emerald-500 flex items-center justify-center text-white text-4xl shadow-md";
-      fallback.innerText = "🎨";
-      parent.appendChild(fallback);
-    }
-  }
-};
+const isLogin = computed(() => authModalMode.value === "login");
 
-// Redirect to canvas if already logged in
+onMounted(() => {
+  authModalMode.value = "login";
+});
+
 watch(
-  [isLoggedIn],
-  ([loggedIn]) => {
-    if (loggedIn) {
-      router.push("/canvas");
+  [isLoggedIn, isInitializing],
+  ([loggedIn, initializing]) => {
+    if (!initializing && loggedIn) {
+      router.replace("/canvas");
     }
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 );
 </script>
 

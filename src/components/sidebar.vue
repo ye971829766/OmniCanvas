@@ -369,8 +369,6 @@
       </template>
     </Dialog>
 
-    <!-- Auth and Profile Modals -->
-    <AuthModal />
     <UserProfileModal />
   </div>
 </template>
@@ -395,7 +393,6 @@ import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import { useTheme } from "@/composables/useTheme";
 import { useUser } from "@/composables/useUser";
-import AuthModal from "@/components/auth/AuthModal.vue";
 import UserProfileModal from "@/components/auth/UserProfileModal.vue";
 
 const { isDark, toggleTheme } = useTheme();
@@ -406,7 +403,6 @@ const {
   displayName,
   openAuthModal,
   openProfileModal,
-  fetchProfile,
 } = useUser();
 
 const props = defineProps<{
@@ -442,7 +438,6 @@ const loadWorkspaces = async () => {
 };
 
 onMounted(async () => {
-  await fetchProfile();
   await loadWorkspaces();
 });
 

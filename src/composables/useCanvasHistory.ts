@@ -146,6 +146,9 @@ export function useCanvasHistory(
   let isRestoring = false;
   let debounceTimeout: any = null;
   let saveTimeout: any = null;
+  let transactionActive = false;
+  let transactionDirty = false;
+  let transactionStartState: HistoryState | null = null;
 
   // ── 序列化 / 反序列化 ──────────────────────────────────────────────────────
 
@@ -259,6 +262,45 @@ export function useCanvasHistory(
       child.__historyId = data.__historyId;
     }
     return child;
+  };
+
+  const captureCurrentState = (): HistoryState | null => {
+    const app = canvasAppRef.value;
+    if (!app?.tree) return null;
+
+    const selectedHistoryIds: string[] = [];
+    if (app.editor?.list) {
+      app.editor.list.forEach((selectedEl: any) => {
+        if (selectedEl.__historyId) {
+          selectedHistoryIds.push(selectedEl.__historyId);
+        }
+      });
+    }
+
+    const serialized = app.tree.children
+      .filter(
+        (child: any) =>
+          child.tag !== "SimulateElement" &&
+          child.__tag !== "SimulateElement" &&
+          !child.isCropOverlay &&
+          !child.isTaskOverlay &&
+          !isLeftoverTaskOverlay(child),
+      )
+      .map((child: any) => {
+        ensureHistoryIdDeep(child);
+        return serializeNode(child);
+      });
+
+    return { serialized, selectedHistoryIds };
+  };
+
+  const statesEqual = (a: HistoryState | null, b: HistoryState | null) => {
+    if (!a || !b) return false;
+    return (
+      JSON.stringify(a.serialized) === JSON.stringify(b.serialized) &&
+      JSON.stringify(a.selectedHistoryIds) ===
+        JSON.stringify(b.selectedHistoryIds)
+    );
   };
 
   // ── 差异还原核心 ──────────────────────────────────────────────────────────
@@ -544,6 +586,11 @@ export function useCanvasHistory(
     const app = canvasAppRef.value;
     if (!app?.tree) return;
 
+    if (transactionActive) {
+      transactionDirty = true;
+      return;
+    }
+
     if (debounceTimeout) {
       clearTimeout(debounceTimeout);
       debounceTimeout = null;
@@ -554,39 +601,16 @@ export function useCanvasHistory(
       history.splice(currentIndex + 1);
     }
 
-    // 为所有节点确保有 historyId
-    app.tree.children.forEach((child: any) => {
-      if (
-        child.tag !== "SimulateElement" &&
-        child.__tag !== "SimulateElement" &&
-        !child.isCropOverlay
-      ) {
-        ensureHistoryIdDeep(child);
-      }
-    });
+    const nextState = captureCurrentState();
+    if (!nextState) return;
 
-    // 获取选中元素的 historyId
-    const selectedHistoryIds: string[] = [];
-    if (app.editor && app.editor.list) {
-      app.editor.list.forEach((selectedEl: any) => {
-        if (selectedEl.__historyId) {
-          selectedHistoryIds.push(selectedEl.__historyId);
-        }
-      });
+    if (currentIndex >= 0 && statesEqual(history[currentIndex], nextState)) {
+      if (immediateSave) saveCanvasState();
+      else saveCanvasStateDebounced();
+      return;
     }
 
-    // 使用 JSON 序列化（非 clone）保存快照
-    const serialized = app.tree.children
-      .filter(
-        (child: any) =>
-          child.tag !== "SimulateElement" &&
-          child.__tag !== "SimulateElement" &&
-          !child.isCropOverlay &&
-          !child.isTaskOverlay &&
-          !isLeftoverTaskOverlay(child),
-      )
-      .map((child: any) => serializeNode(child));
-    history.push({ serialized, selectedHistoryIds });
+    history.push(nextState);
     currentIndex = history.length - 1;
 
     if (immediateSave) {
@@ -601,6 +625,10 @@ export function useCanvasHistory(
     immediateSave = false,
   ) => {
     if (isRestoring) return;
+    if (transactionActive) {
+      transactionDirty = true;
+      return;
+    }
     const actualDelay = typeof delay === "number" ? delay : 100;
     if (debounceTimeout) {
       clearTimeout(debounceTimeout);
@@ -608,6 +636,57 @@ export function useCanvasHistory(
     debounceTimeout = setTimeout(() => {
       recordHistory(immediateSave);
     }, actualDelay);
+  };
+
+  const beginTransaction = () => {
+    if (transactionActive) return;
+
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = null;
+      recordHistory();
+    }
+
+    transactionStartState = captureCurrentState();
+    transactionDirty = false;
+    transactionActive = !!transactionStartState;
+  };
+
+  const commitTransaction = () => {
+    if (!transactionActive) return false;
+
+    const startState = transactionStartState;
+    const endState = captureCurrentState();
+    transactionActive = false;
+    transactionStartState = null;
+
+    const changed =
+      transactionDirty &&
+      !!startState &&
+      !!endState &&
+      !statesEqual(startState, endState);
+    transactionDirty = false;
+
+    if (changed) recordHistory();
+    return changed;
+  };
+
+  const rollbackTransaction = () => {
+    if (!transactionActive || !transactionStartState) return false;
+
+    const startState = transactionStartState;
+    transactionActive = false;
+    transactionDirty = false;
+    transactionStartState = null;
+
+    isRestoring = true;
+    try {
+      restoreToDiff(startState);
+      saveCanvasStateDebounced();
+    } finally {
+      isRestoring = false;
+    }
+    return true;
   };
 
   // ── Undo / Redo ───────────────────────────────────────────────────────────
@@ -667,5 +746,8 @@ export function useCanvasHistory(
     canRedo: () => currentIndex < history.length - 1,
     loadCanvasState,
     saveCanvasState,
+    beginTransaction,
+    commitTransaction,
+    rollbackTransaction,
   };
 }
