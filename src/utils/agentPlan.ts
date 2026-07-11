@@ -12,6 +12,7 @@ export function updateAgentPlanFromTool(
   tool: string,
   input: any,
   completed: boolean,
+  failed = false,
 ): AgentPlan | undefined {
   if (!plan) return plan;
   const candidates = plan.steps.filter((step) => matchesPlanStep(step, tool, input));
@@ -20,7 +21,8 @@ export function updateAgentPlanFromTool(
     candidates.find((item) => item.status === "pending");
   if (!step) return plan;
 
-  if (completed && step.completionTool === tool) step.status = "completed";
+  if (failed) step.status = "failed";
+  else if (completed && step.completionTool === tool) step.status = "completed";
   else if (step.status === "pending") step.status = "in_progress";
   return plan;
 }

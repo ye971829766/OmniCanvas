@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref, watch, type Ref, reactive } from "vue";
-import { Text, Rect, Frame, Group, Image, MoveEvent, ZoomEvent } from "leafer-ui";
+import { Text, Rect, Frame, Group, MoveEvent, ZoomEvent } from "leafer-ui";
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 import { getRandomCoordinates, getNonOverlappingCoordinates } from "@/utils/utils";
@@ -23,6 +23,8 @@ import {
   createHiddenReasoningStreamFilter,
   stripHiddenReasoning,
 } from "@/utils/agentText";
+import { serializeCanvasForAgent } from "@/utils/agentCanvasContext";
+import { createFitImage } from "@/utils/leaferImage";
 
 /**
  * useAgent — drives the Lovart-style chat panel.
@@ -45,8 +47,10 @@ export interface ToolCallItem {
 }
 
 export type MessageBlock =
+  | { id: string; type: "update"; text: string }
   | { id: string; type: "text"; text: string }
-  | { id: string; type: "tools"; tools: ToolCallItem[] };
+  | { id: string; type: "tools"; tools: ToolCallItem[] }
+  | { id: string; type: "plan"; plan: AgentPlan };
 
 export interface ChatMessage {
   id: string;
@@ -57,6 +61,8 @@ export interface ChatMessage {
   tools: ToolCallItem[];
   /** chronological stream blocks */
   blocks?: MessageBlock[];
+  /** current streamed step text before it becomes an update or final answer */
+  liveText?: string;
   streaming: boolean;
   images?: string[];
   /** Optional error text when message encountered error */
@@ -66,6 +72,9 @@ export interface ChatMessage {
   progress?: { tool?: string; message: string; percent?: number };
   /** Structured task plan shown separately from conversational text. */
   plan?: AgentPlan;
+  /** Duration reported by the backend usage event. */
+  elapsedMs?: number;
+  runStatus?: "running" | "completed" | "failed" | "stopped";
 }
 
 interface AgentHistoryControls {
@@ -90,6 +99,7 @@ type CanvasNodeSpec = {
   y?: number;
   width?: number;
   height?: number;
+  preserveLayout?: boolean;
   prompt?: string;
   model?: string;
   size?: string;
@@ -164,7 +174,19 @@ export function stripInternalToolErrors(text: string) {
     .trimStart();
 }
 
-function parseHistoryMessage(
+function unwrapToolOutput(value: any) {
+  if (
+    value &&
+    typeof value === "object" &&
+    (value.type === "json" || value.type === "text") &&
+    "value" in value
+  ) {
+    return value.value;
+  }
+  return value;
+}
+
+export function parseHistoryMessage(
   msg: any,
   index: number,
   allMessages: any[]
@@ -227,7 +249,7 @@ function parseHistoryMessage(
           if (toolResult) {
             if (Array.isArray(toolResult.content)) {
               const resPart = toolResult.content.find((p: any) => p.type === "tool-result" && p.toolCallId === toolCallId);
-              output = resPart?.result ?? resPart?.output; // support both result and output properties
+              output = unwrapToolOutput(resPart?.result ?? resPart?.output);
             } else {
               try {
                 output = typeof toolResult.content === "string" ? JSON.parse(toolResult.content) : toolResult.content;
@@ -274,31 +296,109 @@ function parseHistoryMessage(
       }
     }
 
-    const text = stripInternalToolErrors(rawText);
-    const blocks: MessageBlock[] = [];
-    if (tools.length > 0) {
-      if (text) blocks.push({ id: `${id}-txt`, type: "text", text });
-      blocks.push({ id: `${id}-tls`, type: "tools", tools });
-    } else if (text) {
-      blocks.push({ id: `${id}-txt`, type: "text", text });
-    }
-
     const historicalPlan = tools
       .map((tool) => tool.output?.plan)
       .find((plan) => plan && Array.isArray(plan.steps));
+    const visibleText = stripInternalToolErrors(rawText);
+    const isToolStep = tools.length > 0;
+    const blocks: MessageBlock[] = [];
+    if (isToolStep && visibleText) {
+      blocks.push({ id: `${id}-update`, type: "update", text: visibleText });
+    }
+    if (isToolStep) {
+      blocks.push({ id: `${id}-tools`, type: "tools", tools });
+    }
+    if (historicalPlan) {
+      blocks.push({ id: `${id}-plan`, type: "plan", plan: historicalPlan });
+    }
+    if (!isToolStep && visibleText) {
+      blocks.push({ id: `${id}-final`, type: "text", text: visibleText });
+    }
 
     return {
       id,
       role: "assistant",
-      text,
+      text: isToolStep ? "" : visibleText,
       tools,
       blocks,
       streaming: false,
       plan: historicalPlan,
+      runStatus: "completed",
     };
   }
 
   return null;
+}
+
+export function buildChatMessagesFromHistory(
+  rawHistory: any[],
+  savedPlan: AgentPlan | null = null,
+): ChatMessage[] {
+  const parsed: ChatMessage[] = [];
+  rawHistory.forEach((msg, index) => {
+    const parsedMessage = parseHistoryMessage(msg, index, rawHistory);
+    if (!parsedMessage) return;
+
+    const previous = parsed[parsed.length - 1];
+    if (parsedMessage.role === "assistant" && previous?.role === "assistant") {
+      if (parsedMessage.text) previous.text = parsedMessage.text;
+      if (parsedMessage.tools.length) previous.tools.push(...parsedMessage.tools);
+      if (parsedMessage.blocks?.length) {
+        previous.blocks ||= [];
+        previous.blocks.push(...parsedMessage.blocks);
+      }
+      if (parsedMessage.plan) previous.plan = parsedMessage.plan;
+      return;
+    }
+    parsed.push(parsedMessage);
+  });
+
+  if (!savedPlan) return parsed;
+  const planOwner = [...parsed].reverse().find(
+    (message) =>
+      message.role === "assistant" &&
+      (message.plan?.id === savedPlan.id ||
+        message.tools.some(
+          (tool) =>
+            tool.output?.plan?.id === savedPlan.id ||
+            tool.name === "plan_ecommerce_suite" ||
+            tool.name === "plan_design",
+        )),
+  );
+  if (planOwner) {
+    planOwner.plan = savedPlan;
+    planOwner.blocks ||= [];
+    const planBlock = planOwner.blocks.find(
+      (block) => block.type === "plan" && block.plan.id === savedPlan.id,
+    );
+    if (planBlock?.type === "plan") planBlock.plan = savedPlan;
+    else {
+      planOwner.blocks.push({
+        id: `${planOwner.id}-plan-${savedPlan.id}`,
+        type: "plan",
+        plan: savedPlan,
+      });
+    }
+    return parsed;
+  }
+
+  parsed.push({
+    id: `plan-${savedPlan.id}`,
+    role: "assistant",
+    text: "",
+    tools: [],
+    blocks: [
+      {
+        id: `plan-${savedPlan.id}-block`,
+        type: "plan",
+        plan: savedPlan,
+      },
+    ],
+    streaming: false,
+    plan: savedPlan,
+    runStatus: "completed",
+  });
+  return parsed;
 }
 
 export function useAgent(
@@ -409,53 +509,7 @@ export function useAgent(
         getAgentPlan(sessionId.value).catch(() => null),
       ]);
       if (Array.isArray(rawHistory)) {
-        const parsed: ChatMessage[] = [];
-        rawHistory.forEach((msg, idx) => {
-          const parsedMsg = parseHistoryMessage(msg, idx, rawHistory);
-          if (parsedMsg) {
-            if (parsedMsg.role === "assistant" && parsed.length > 0 && parsed[parsed.length - 1].role === "assistant") {
-              const last = parsed[parsed.length - 1];
-              if (parsedMsg.text) {
-                if (last.text) {
-                  last.text += "\n\n" + parsedMsg.text;
-                } else {
-                  last.text = parsedMsg.text;
-                }
-              }
-              if (parsedMsg.tools && parsedMsg.tools.length > 0) {
-                last.tools.push(...parsedMsg.tools);
-              }
-              // Rebuild blocks from merged state so rendering stays consistent
-              const rebuiltBlocks: typeof last.blocks = [];
-              if (last.tools.length > 0) {
-                if (last.text) rebuiltBlocks.push({ id: `${last.id}-txt`, type: "text", text: last.text });
-                rebuiltBlocks.push({ id: `${last.id}-tls`, type: "tools", tools: last.tools });
-              } else if (last.text) {
-                rebuiltBlocks.push({ id: `${last.id}-txt`, type: "text", text: last.text });
-              }
-              last.blocks = rebuiltBlocks;
-            } else {
-              parsed.push(parsedMsg);
-            }
-          }
-        });
-        if (savedPlan) {
-          const lastAssistant = [...parsed].reverse().find((message) => message.role === "assistant");
-          if (lastAssistant) {
-            lastAssistant.plan = savedPlan;
-          } else {
-            parsed.push({
-              id: `plan-${savedPlan.id}`,
-              role: "assistant",
-              text: "",
-              tools: [],
-              blocks: [],
-              streaming: false,
-              plan: savedPlan,
-            });
-          }
-        }
-        messages.value = parsed;
+        messages.value = buildChatMessagesFromHistory(rawHistory, savedPlan);
       }
     } catch (err) {
       console.error("Failed to load agent chat history:", err);
@@ -528,9 +582,16 @@ export function useAgent(
   const uid = () => Math.random().toString(36).slice(2, 10);
 
   /** place a node somewhere sensible if the agent didn't give coordinates */
-  function resolveXY(node: CanvasNodeSpec) {
+  function resolveXY(node: CanvasNodeSpec, usesParentCoordinates = false) {
     if (typeof node.x === "number" && typeof node.y === "number") {
       return { x: node.x, y: node.y };
+    }
+
+    if (usesParentCoordinates) {
+      return {
+        x: typeof node.x === "number" ? node.x : 0,
+        y: typeof node.y === "number" ? node.y : 0,
+      };
     }
 
     // 获取画布上所有元素的边界框
@@ -625,7 +686,7 @@ export function useAgent(
       case "add_node": {
         runCanvasChanged = true;
         const n = op.node;
-        const { x, y } = resolveXY(n);
+        const { x, y } = resolveXY(n, Boolean(n.parentId));
         let leaferNode: any = null;
 
         if (n.type === "image_gen") {
@@ -642,6 +703,7 @@ export function useAgent(
             generationStatus: "generating", // placeholder shows spinner immediately
             editable: true,
             images: (n as any).images || [],
+            preserveGeneratedLayout: n.preserveLayout === true,
           });
           nodeStates.value[n.refId] = {
             refId: n.refId,
@@ -758,7 +820,7 @@ export function useAgent(
 
         } else if (n.type === "image") {
           // Static image from URL
-          leaferNode = new Image({
+          leaferNode = createFitImage({
             x,
             y,
             width: n.width ?? 400,
@@ -931,20 +993,36 @@ export function useAgent(
     return filter.flush();
   };
 
-  const appendVisibleText = (assistant: ChatMessage, chunk: string) => {
+  const appendLiveText = (assistant: ChatMessage, chunk: string) => {
     if (!chunk) return;
-    assistant.text += chunk;
+    assistant.liveText = `${assistant.liveText || ""}${chunk}`;
+  };
+
+  const flushLiveUpdate = (assistant: ChatMessage) => {
+    const text = stripInternalToolErrors(assistant.liveText || "").trim();
+    assistant.liveText = "";
+    if (!text) return;
     assistant.blocks ||= [];
     const lastBlock = assistant.blocks[assistant.blocks.length - 1];
-    if (lastBlock?.type === "text") {
-      lastBlock.text += chunk;
-    } else {
-      assistant.blocks.push({
-        id: `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        type: "text",
-        text: chunk,
-      });
-    }
+    if (lastBlock?.type === "update" && lastBlock.text.trim() === text) return;
+    assistant.blocks.push({
+      id: `blk_update_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      type: "update",
+      text,
+    });
+  };
+
+  const setFinalText = (assistant: ChatMessage, text: string) => {
+    const finalText = stripInternalToolErrors(text).trim();
+    if (!finalText) return;
+    assistant.text = finalText;
+    assistant.liveText = "";
+    assistant.blocks ||= [];
+    assistant.blocks.push({
+      id: `blk_final_${Date.now()}`,
+      type: "text",
+      text: finalText,
+    });
   };
 
   function updatePlanFromTool(
@@ -952,8 +1030,9 @@ export function useAgent(
     tool: string,
     input: any,
     completed: boolean,
+    failed = false,
   ) {
-    updateAgentPlanFromTool(assistant.plan, tool, input, completed);
+    updateAgentPlanFromTool(assistant.plan, tool, input, completed, failed);
   }
 
   /** Handle one decoded AgentEvent from the SSE stream. */
@@ -967,7 +1046,7 @@ export function useAgent(
       case "thinking": {
         const chunk = filterAssistantChunk(assistant, ev.text || "");
         if (!chunk) break;
-        appendVisibleText(assistant, chunk);
+        appendLiveText(assistant, chunk);
         break;
       }
       case "progress":
@@ -977,15 +1056,23 @@ export function useAgent(
           percent: typeof ev.percent === "number" ? ev.percent : undefined,
         };
         break;
-      case "plan":
-        assistant.plan = {
+      case "plan": {
+        const nextPlan: AgentPlan = {
           ...ev.plan,
           steps: Array.isArray(ev.plan?.steps)
             ? ev.plan.steps.map((step: AgentPlanStep) => ({ ...step }))
             : [],
         };
+        assistant.plan = nextPlan;
+        blocks.push({
+          id: `blk_plan_${nextPlan.id}_${Date.now()}`,
+          type: "plan",
+          plan: nextPlan,
+        });
         break;
+      }
       case "tool_call": {
+        flushLiveUpdate(assistant);
         const toolItem: ToolCallItem = {
           id: ev.id,
           name: ev.tool,
@@ -1008,11 +1095,16 @@ export function useAgent(
         break;
       }
       case "tool_result": {
+        const failed = Boolean(
+          ev.output?.error ||
+            ev.output?.status === "error" ||
+            ev.output?.status === "failed",
+        );
         const chip = assistant.tools.find((t) => t.id === ev.id);
         if (chip) {
           chip.done = true;
           chip.output = ev.output;
-          updatePlanFromTool(assistant, ev.tool, chip.input, true);
+          updatePlanFromTool(assistant, ev.tool, chip.input, true, failed);
         }
         for (const blk of blocks) {
           if (blk.type === "tools") {
@@ -1030,21 +1122,15 @@ export function useAgent(
         break;
       case "final": {
         const tail = flushAssistantFilter(assistant);
-        appendVisibleText(assistant, tail);
-        const finalText = stripInternalToolErrors(ev.text ?? "");
-        if (!assistant.text.trim()) {
-          assistant.text = finalText;
-        }
-        if (!blocks.some((b) => b.type === "text" && b.text.trim())) {
-          blocks.unshift({
-            id: `blk_final_${Date.now()}`,
-            type: "text",
-            text: finalText,
-          });
-        }
+        appendLiveText(assistant, tail);
+        setFinalText(assistant, ev.text || assistant.liveText || "");
         assistant.progress = undefined;
+        assistant.runStatus = "completed";
         break;
       }
+      case "usage":
+        if (Number.isFinite(ev.elapsedMs)) assistant.elapsedMs = ev.elapsedMs;
+        break;
       case "error": {
         if (!isInternalToolError(ev.message)) {
           const raw = String(ev.message ?? "");
@@ -1058,6 +1144,7 @@ export function useAgent(
                   : raw || "服务发生异常，请稍后再试。";
           assistant.error = friendly;
         }
+        assistant.runStatus = "failed";
         break;
       }
     }
@@ -1109,118 +1196,6 @@ export function useAgent(
     );
   }
 
-  /** 序列化当前画布状态，供 Agent 感知画布全貌 */
-  function serializeCanvasForAgent(): any[] {
-    const app = canvasApp.value;
-    if (!app?.tree) return [];
-    
-    if (app.tree.children) {
-      app.tree.children.forEach(scanTreeAndPopulateNodeMap);
-    }
-
-    const serializedList: any[] = [];
-
-    function serializeNode(node: any, parentNode?: any) {
-      if (!node) return;
-      if (node === app.tree) {
-        if (node.children) {
-          node.children.forEach((child: any) => serializeNode(child, node));
-        }
-        return;
-      }
-
-      const tag = node.__tag || node.tag;
-      if (tag === "SimulateElement") return;
-
-      const base: any = {
-        tag,
-        name: node.name,
-        x: node.x,
-        y: node.y,
-        width: node.width,
-        height: node.height,
-      };
-      base.refId = ensureNodeRefId(node);
-      base.selected = !!app.editor?.hasItem?.(node);
-      
-      if (parentNode && parentNode !== app.tree) {
-        base.parentId = parentNode.refId;
-      }
-
-      // Serialize all relevant Leafer properties per node type
-      if (tag === "Text") {
-        base.text = node.text;
-        base.fontSize = node.fontSize;
-        base.fontFamily = node.fontFamily;
-        base.fill = node.fill;
-        base.fontWeight = node.fontWeight;
-        base.textAlign = node.textAlign;
-        base.lineHeight = node.lineHeight;
-        base.letterSpacing = node.letterSpacing;
-        base.stroke = node.stroke;
-        base.strokeWidth = node.strokeWidth;
-      } else if (tag === "Image") {
-        base.url = node.url;
-        base.cornerRadius = node.cornerRadius;
-      } else if (tag === "ImageGen") {
-        base.prompt = node.prompt;
-        base.model = node.model;
-        base.size = node.size;
-        base.quality = node.quality;
-        base.aspectRatio = node.aspectRatio;
-        base.generationStatus = node.generationStatus;
-        base.images = node.images;
-      } else if (tag === "VideoGen") {
-        base.prompt = node.prompt;
-        base.model = node.model;
-        base.seconds = node.seconds;
-        base.size = node.size;
-        base.generationStatus = node.generationStatus;
-        base.inputReference = node.inputReference;
-      } else if (tag === "VideoNode") {
-        base.videoUrl = node.videoUrl;
-        base.thumbnailUrl = node.thumbnailUrl;
-      } else if (tag === "Rect") {
-        base.fill = node.fill;
-        base.cornerRadius = node.cornerRadius;
-        base.stroke = node.stroke;
-        base.strokeWidth = node.strokeWidth;
-        if (node.shadow) base.shadow = node.shadow;
-      } else if (tag === "Ellipse" || tag === "Polygon" || tag === "Star") {
-        base.fill = node.fill;
-        base.stroke = node.stroke;
-      } else if (tag === "Frame") {
-        base.fill = node.fill;
-        base.flow = node.flow;
-        base.flowAlign = node.flowAlign;
-        base.flowWrap = node.flowWrap;
-        base.gap = node.gap;
-        base.padding = node.padding;
-        base.type = "frame";
-      } else if (tag === "Group") {
-        base.type = "group";
-      }
-
-      // Common visual props — always include when non-default
-      if (node.opacity !== undefined && node.opacity !== 1) base.opacity = node.opacity;
-      if (node.rotation) base.rotation = node.rotation;
-      if (node.scaleX !== undefined && node.scaleX !== 1) base.scaleX = node.scaleX;
-      if (node.scaleY !== undefined && node.scaleY !== 1) base.scaleY = node.scaleY;
-      if (node.zIndex) base.zIndex = node.zIndex;
-      if (node.shadow && tag !== "Rect") base.shadow = node.shadow; // Rect handled above
-
-      serializedList.push(base);
-
-      const isContainer = tag === "Frame" || tag === "Group";
-      if (isContainer && node.children) {
-        node.children.forEach((child: any) => serializeNode(child, node));
-      }
-    }
-
-    serializeNode(app.tree);
-    return serializedList;
-  }
-
   /** Send a message and stream the agent's response. */
   async function send(
     input: string,
@@ -1244,12 +1219,16 @@ export function useAgent(
       ),
     };
     messages.value.push(userMessage);
+    const runStartedAt = Date.now();
     const assistant = reactive<ChatMessage>({
       id: uid(),
       role: "assistant",
       text: "",
       tools: [],
+      blocks: [],
+      liveText: "",
       streaming: true,
+      runStatus: "running",
     });
     messages.value.push(assistant);
     running.value = true;
@@ -1279,7 +1258,9 @@ export function useAgent(
           body: JSON.stringify({
             message: text,
             assets,
-            canvasState: serializeCanvasForAgent(),
+            canvasState: serializeCanvasForAgent(canvasApp.value, {
+              ensureRefId: ensureNodeRefId,
+            }),
             userId: currentUser.value?.id,
             username: currentUser.value?.username,
           }),
@@ -1314,8 +1295,14 @@ export function useAgent(
           }
           if (ev.type === "done") {
             const tail = flushAssistantFilter(assistant);
-            appendVisibleText(assistant, tail);
+            appendLiveText(assistant, tail);
+            if (!assistant.text.trim() && assistant.liveText?.trim()) {
+              setFinalText(assistant, assistant.liveText);
+            }
             assistant.streaming = false;
+            if (assistant.runStatus === "running") {
+              assistant.runStatus = assistant.error ? "failed" : "completed";
+            }
             break streamLoop;
           }
           handleEvent(ev, assistant);
@@ -1324,11 +1311,15 @@ export function useAgent(
     } catch (e: any) {
       if (e?.name !== "AbortError") {
         assistant.error = e?.message ?? "连接失败，请稍后重试";
+        assistant.runStatus = "failed";
+      } else {
+        assistant.runStatus = "stopped";
       }
     } finally {
       const committed = historyControls?.commit?.() ?? runCanvasChanged;
       canUndoLastRun.value =
         runCanvasChanged && committed !== false && !!historyControls?.undo;
+      assistant.elapsedMs ??= Date.now() - runStartedAt;
       assistant.streaming = false;
       running.value = false;
       abort = null;
@@ -1343,6 +1334,7 @@ export function useAgent(
     const assistant = messages.value[messages.value.length - 1];
     if (assistant && assistant.role === "assistant" && assistant.streaming) {
       assistant.streaming = false;
+      assistant.runStatus = "stopped";
     }
   }
 

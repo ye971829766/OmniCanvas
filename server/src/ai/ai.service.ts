@@ -65,6 +65,30 @@ export class AiService {
     return typeof model === "string" && model.trim() ? model.trim() : fallback;
   }
 
+  private isGptImage2(model: string): boolean {
+    return model.trim().toLowerCase().includes("gpt-image-2");
+  }
+
+  private resolveImageRequestSize(
+    model: string,
+    size: unknown,
+    options: ImageModelOptionsResponse,
+  ): string {
+    const requested = typeof size === "string" ? size.trim() : "";
+    if (requested) return requested;
+    if (this.isGptImage2(model)) return "auto";
+    return options.defaults?.size || "1024x1024";
+  }
+
+  private resolveImageRequestQuality(model: string, quality: unknown): string {
+    const requested = typeof quality === "string" ? quality.trim().toLowerCase() : "";
+    if (!this.isGptImage2(model)) return requested;
+    if (["auto", "low", "medium", "high"].includes(requested)) return requested;
+    if (["hd", "2k", "4k"].includes(requested)) return "high";
+    if (["standard", "1k"].includes(requested)) return "medium";
+    return "high";
+  }
+
   async resolveModelMapping(
     purpose: YunwuApiPurpose,
     modelId: string,
@@ -154,6 +178,68 @@ export class AiService {
     }
   }
 
+  private isProviderCertificateError(error: unknown): boolean {
+    let current: any = error;
+    for (let depth = 0; current && depth < 6; depth++) {
+      const details = [current?.name, current?.code, current?.message]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (
+        details.includes("certificate") ||
+        details.includes("cert_") ||
+        details.includes("tls") ||
+        details.includes("ssl") ||
+        details.includes("self-signed") ||
+        details.includes("self signed") ||
+        details.includes("unable to verify")
+      ) {
+        return true;
+      }
+      current = current?.cause ?? current?.error;
+    }
+    return false;
+  }
+
+  /**
+   * Retry only certificate-handshake failures. These happen before the request
+   * body is accepted, so retrying cannot duplicate a paid generation request.
+   */
+  async fetchProvider(
+    input: string | URL,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const configuredRetries = Number(process.env.PROVIDER_TLS_RETRIES);
+    const maxRetries = Number.isFinite(configuredRetries)
+      ? Math.min(5, Math.max(0, Math.floor(configuredRetries)))
+      : 2;
+    const configuredDelay = Number(process.env.PROVIDER_TLS_RETRY_DELAY_MS);
+    const baseDelayMs = Number.isFinite(configuredDelay)
+      ? Math.min(5_000, Math.max(0, Math.floor(configuredDelay)))
+      : 150;
+
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fetch(input, init);
+      } catch (error) {
+        if (
+          !this.isProviderCertificateError(error) ||
+          attempt >= maxRetries
+        ) {
+          throw error;
+        }
+        const delayMs = Math.min(5_000, baseDelayMs * 2 ** attempt);
+        console.warn(
+          `[fetchProvider] TLS verification failed for ${input}; ` +
+            `retrying ${attempt + 1}/${maxRetries} in ${delayMs}ms`,
+        );
+        if (delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+  }
+
   async callYunwuApi(
     purpose: YunwuApiPurpose,
     path: string,
@@ -200,29 +286,7 @@ export class AiService {
         verbose: true,
       };
 
-      let response: Response;
-      try {
-        response = await fetch(url, init);
-      } catch (err: any) {
-        // Bun's fetch sometimes rejects valid provider CDNs with
-        // "unknown certificate verification error". Retry once with TLS
-        // verification disabled, scoped to this upstream request only.
-        const msg = String(err?.message || err).toLowerCase();
-        const isCertError =
-          msg.includes("certificate") ||
-          msg.includes("tls") ||
-          msg.includes("ssl") ||
-          msg.includes("self-signed") ||
-          msg.includes("unable to verify");
-        if (!isCertError) throw err;
-        console.warn(
-          `[callYunwuApi] TLS verification failed for ${url}; retrying without verification`,
-        );
-        response = await fetch(url, {
-          ...init,
-          tls: { rejectUnauthorized: false },
-        });
-      }
+      const response = await this.fetchProvider(url, init);
 
       const responseBody = await this.readJsonSafely(response);
       if (!response.ok) {
@@ -619,7 +683,7 @@ export class AiService {
           "2160x3840",
         ],
         qualities: ["auto", "low", "medium", "high"],
-        defaults: { size: "auto", quality: "auto" },
+        defaults: { size: "auto", quality: "high" },
         qualityMode: "quality",
         notes: [
           "Supports flexible custom resolutions when both edges are multiples of 16, the longest edge is <= 3840px, aspect ratio is <= 3:1, and total pixels are within provider limits.",
@@ -1112,6 +1176,20 @@ export class AiService {
     }
   }
 
+  private handleBackgroundTaskRejection(
+    taskId: string,
+    taskType: "image" | "video",
+    error: unknown,
+  ): void {
+    const message =
+      error instanceof Error ? error.message : String(error || "Generation failed");
+    console.error(
+      `[${taskType}GenerationTask] Task ${taskId} rejected before reaching its internal error handler:`,
+      error,
+    );
+    this.setTaskStatus(taskId, "error", { error: message });
+  }
+
   async runGenerationTaskInBackground(
     taskId: string,
     body: GenerateImageJsonRequest,
@@ -1160,6 +1238,16 @@ export class AiService {
 
       const route = await this.resolveChannelAndModel("image", model);
       const upstreamModel = route.upstreamModel;
+      const requestSize = this.resolveImageRequestSize(
+        upstreamModel || model,
+        body?.size,
+        options,
+      );
+      const requestQuality = this.resolveImageRequestQuality(
+        upstreamModel || model,
+        body?.quality,
+      );
+      const isGptImage2 = this.isGptImage2(upstreamModel || model);
 
       const useNativeGemini =
         (model.toLowerCase().includes("gemini") ||
@@ -1320,23 +1408,23 @@ export class AiService {
           );
           upstreamForm.append(
             "size",
-            typeof body?.size === "string" ? body.size : "1024x1024",
+            requestSize,
           );
           upstreamForm.append("output_format", outputFormat);
 
-          const quality =
-            typeof body?.quality === "string" ? body.quality.trim() : "";
-          if (quality) {
-            upstreamForm.append("quality", quality);
-            upstreamForm.append("image_size", quality);
-            upstreamForm.append("imageSize", quality);
+          if (requestQuality) {
+            upstreamForm.append("quality", requestQuality);
+            if (!isGptImage2) {
+              upstreamForm.append("image_size", requestQuality);
+              upstreamForm.append("imageSize", requestQuality);
+            }
           }
 
           const aspectRatio =
             typeof body?.aspectRatio === "string"
               ? body.aspectRatio.trim()
               : "";
-          if (aspectRatio) {
+          if (aspectRatio && !isGptImage2) {
             upstreamForm.append("aspectRatio", aspectRatio);
             upstreamForm.append("aspect_ratio", aspectRatio);
           }
@@ -1428,12 +1516,12 @@ export class AiService {
               prompt,
               typeof body?.style === "string" ? body.style : undefined,
             ),
-            size: typeof body?.size === "string" ? body.size : "1024x1024",
+            size: requestSize,
             n: body?.n || 1,
           };
 
-          if (typeof body?.quality === "string" && body.quality.trim()) {
-            generateParams.quality = body.quality.trim();
+          if (requestQuality) {
+            generateParams.quality = requestQuality;
           }
 
           const sdkResponse = await openAi.images.generate(
@@ -1492,7 +1580,9 @@ export class AiService {
     const taskId = crypto.randomUUID();
     this.setTaskStatus(taskId, "generating", {});
 
-    this.runGenerationTaskInBackground(taskId, body, originUrl);
+    void this.runGenerationTaskInBackground(taskId, body, originUrl).catch(
+      (error) => this.handleBackgroundTaskRejection(taskId, "image", error),
+    );
 
     return {
       type: "image",
@@ -1759,7 +1849,9 @@ export class AiService {
     const taskId = crypto.randomUUID();
     this.setTaskStatus(taskId, "generating", {});
 
-    this.runVideoGenerationTaskInBackground(taskId, body, originUrl);
+    void this.runVideoGenerationTaskInBackground(taskId, body, originUrl).catch(
+      (error) => this.handleBackgroundTaskRejection(taskId, "video", error),
+    );
 
     return {
       type: "video",

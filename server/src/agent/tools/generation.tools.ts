@@ -1,5 +1,11 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
-import { upsertCanvasNode } from '../canvas-state';
+import { getCanvasNodeMap, resolveNewCanvasRefId, upsertCanvasNode } from '../canvas-state';
+import {
+  buildEcommerceImagePrompt,
+  getGenerationAspectRatio,
+  getGptImageGenerationSize,
+  reservePlannedEcommercePlacement,
+} from '../ecommerce-plan';
 import { resolveReferencesToBase64 } from './image-reference';
 
 /**
@@ -16,6 +22,7 @@ export const generateImageTool: AgentTool = {
   parameters: {
     type: 'object',
     properties: {
+      refId: { type: 'string', description: 'Optional stable ID for batching dependent tool calls in the same response.' },
       prompt: { type: 'string', description: 'Detailed description of the image' },
       model: { type: 'string', description: 'Optional image model id. Usually omit unless the user selected one.' },
       aspectRatio: { type: 'string', description: 'Optional aspect ratio such as 1:1, 16:9, 3:4, or a provider-supported custom ratio.' },
@@ -33,33 +40,88 @@ export const generateImageTool: AgentTool = {
       y: { type: 'number', description: 'Y position in pixels. Omit if the parentId points to an auto-layout container.' },
       width: { type: 'number' },
       height: { type: 'number' },
-      parentId: { type: 'string', description: 'Parent node refId, e.g. "agent_frame" to place the image inside the artboard.' },
+      parentId: { type: 'string', description: 'Optional frame/group refId. Omit to place the generated image directly on the root canvas.' },
     },
     required: ['prompt'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const refId = ctx.newRefId('img');
-    const base64Images = await resolveReferencesToBase64(input.refImages, ctx);
-    const referenceAssetId = input.refImages?.find((ref: string) =>
+    const refId = resolveNewCanvasRefId(ctx, input.refId, 'img');
+    const plannedPlacement = reservePlannedEcommercePlacement(input, ctx);
+    const canvasNodes = getCanvasNodeMap(ctx);
+    const requestedParentId = plannedPlacement ? undefined : input.parentId;
+    const parentNode = requestedParentId ? canvasNodes.get(requestedParentId) : undefined;
+    const parentFrame = parentNode?.type === 'frame' ? parentNode : undefined;
+    const parentId = plannedPlacement ? undefined : parentNode?.refId ?? input.parentId;
+    const width = plannedPlacement?.width ?? input.width ?? parentFrame?.width;
+    const height = plannedPlacement?.height ?? input.height ?? parentFrame?.height;
+    const derivedAspectRatio =
+      typeof width === 'number' && width > 0 && typeof height === 'number' && height > 0
+        ? getGenerationAspectRatio(width, height)
+        : undefined;
+    const aspectRatio = plannedPlacement
+      ? derivedAspectRatio
+      : input.aspectRatio ?? derivedAspectRatio;
+    const x = plannedPlacement?.x ?? input.x ?? (parentId ? 0 : undefined);
+    const y = plannedPlacement?.y ?? input.y ?? (parentId ? 0 : undefined);
+    const preserveLayout = Boolean(
+      plannedPlacement ||
+      (parentFrame && typeof width === 'number' && typeof height === 'number'),
+    );
+    const plannedSize = plannedPlacement
+      ? getGptImageGenerationSize(plannedPlacement.width, plannedPlacement.height)
+      : undefined;
+    const size = input.size ?? plannedSize;
+    const quality = input.quality ?? (plannedPlacement ? 'high' : undefined);
+    const prompt = plannedPlacement
+      ? buildEcommerceImagePrompt(input.prompt, plannedPlacement)
+      : input.prompt;
+    const refImages = Array.isArray(input.refImages)
+      ? input.refImages.filter((ref: unknown): ref is string => typeof ref === 'string')
+      : [];
+    if (
+      plannedPlacement?.sourceAssetId &&
+      !refImages.includes(plannedPlacement.sourceAssetId)
+    ) {
+      refImages.unshift(plannedPlacement.sourceAssetId);
+    }
+
+    if (plannedPlacement) {
+      Object.assign(input, {
+        platform: plannedPlacement.platform,
+        deliverable: plannedPlacement.deliverable,
+        x,
+        y,
+        width,
+        height,
+        aspectRatio,
+        size,
+        quality,
+        refImages,
+      });
+      delete input.parentId;
+    }
+    const base64Images = await resolveReferencesToBase64(refImages, ctx);
+    const referenceAssetId = refImages.find((ref: string) =>
       ctx.assets?.some((asset) => asset.id === ref),
     );
 
     const nodeSpec = {
       refId,
       type: 'image_gen' as const,
-      parentId: input.parentId,
-      prompt: input.prompt,
+      parentId,
+      prompt,
       model: input.model,
-      aspectRatio: input.aspectRatio,
-      size: input.size,
-      quality: input.quality,
-      x: input.x,
-      y: input.y,
-      width: input.width,
-      height: input.height,
+      aspectRatio,
+      size,
+      quality,
+      x,
+      y,
+      width,
+      height,
+      preserveLayout,
       images: base64Images,
-      platform: input.platform,
-      deliverable: input.deliverable,
+      platform: plannedPlacement?.platform ?? input.platform,
+      deliverable: plannedPlacement?.deliverable ?? input.deliverable,
     };
 
     // 1. tell the canvas to create an ImageGen placeholder node
@@ -68,12 +130,12 @@ export const generateImageTool: AgentTool = {
     // 2. kick off the REAL generation through the existing AiService
     const res = await ctx.ai.generateImageFromJson(
       {
-        prompt: input.prompt,
+        prompt,
         model: input.model,
         style: input.style,
-        size: input.size,
-        aspectRatio: input.aspectRatio,
-        quality: input.quality,
+        size,
+        aspectRatio,
+        quality,
         images: base64Images,
       },
       ctx.origin,
@@ -99,8 +161,14 @@ export const generateImageTool: AgentTool = {
         refId,
         taskId: (res as any).taskId,
         status: (res as any).status,
-        platform: input.platform,
-        deliverable: input.deliverable,
+        parentId,
+        width,
+        height,
+        aspectRatio,
+        size,
+        quality,
+        platform: plannedPlacement?.platform ?? input.platform,
+        deliverable: plannedPlacement?.deliverable ?? input.deliverable,
         referenceAssetId,
         note: 'ImageGen node created and generation started. The canvas will poll for the result.',
       },
@@ -120,6 +188,7 @@ export const generateVideoTool: AgentTool = {
   parameters: {
     type: 'object',
     properties: {
+      refId: { type: 'string', description: 'Optional stable ID for batching dependent tool calls in the same response.' },
       prompt: { type: 'string' },
       model: { type: 'string', description: 'Optional video model id. Usually omit unless the user selected one.' },
       aspectRatio: { type: 'string', enum: ['16:9', '9:16', '1:1'] },
@@ -132,12 +201,12 @@ export const generateVideoTool: AgentTool = {
       },
       x: { type: 'number' },
       y: { type: 'number' },
-      parentId: { type: 'string', description: 'Parent node refId, e.g. "agent_frame" to place the video inside the artboard.' },
+      parentId: { type: 'string', description: 'Optional frame/group refId. Omit to place the generated video directly on the root canvas.' },
     },
     required: ['prompt'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const refId = ctx.newRefId('vid');
+    const refId = resolveNewCanvasRefId(ctx, input.refId, 'vid');
     const base64Images = await resolveReferencesToBase64(input.refImages, ctx);
     const inputReference = base64Images[0] || '';
 

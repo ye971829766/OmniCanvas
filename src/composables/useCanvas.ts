@@ -14,13 +14,13 @@ import {
   PropertyEvent,
   DragEvent,
   Cursor,
-  Image,
   Debug,
   Rect,
   Text,
   Box,
   PointerEvent,
 } from "leafer-ui";
+import { applyImagePaintMode, createFitImage } from "@/utils/leaferImage";
 
 // Suppress EventCreator repeat warnings from plugins
 Debug.showWarn = false;
@@ -897,14 +897,18 @@ export function useCanvas(
 
             let newWidth = node.width || 400;
             let newHeight = node.height || 300;
-            if (img.naturalWidth && img.naturalHeight) {
+            if (
+              node.preserveGeneratedLayout !== true &&
+              img.naturalWidth &&
+              img.naturalHeight
+            ) {
               newWidth = img.naturalWidth;
               newHeight = img.naturalHeight;
             }
 
             const parent = node.parent;
             if (parent) {
-              const imageNode = new Image({
+              const imageNode = createFitImage({
                 x: node.x,
                 y: node.y,
                 width: newWidth,
@@ -1124,7 +1128,7 @@ export function useCanvas(
             delete rawNode._pollingTaskId;
 
             // Update URL
-            rawNode.url = res.imageUrl;
+            applyImagePaintMode(rawNode, "fit", res.imageUrl);
 
             // Save history
             recordHistoryDebounced();

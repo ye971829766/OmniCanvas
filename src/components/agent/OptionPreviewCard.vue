@@ -1,18 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Download, Play } from "lucide-vue-next";
+import type { NodeState } from "@/composables/useAgent";
 
 const props = defineProps<{
   refId: string;
   title?: string;
-  state?: {
-    refId: string;
-    type: "image" | "video" | "text" | "rect" | string;
-    status: "generating" | "done" | "error";
-    url?: string;
-    thumbnailUrl?: string;
-    error?: string;
-  };
+  state?: NodeState;
+  compact?: boolean;
 }>();
 
 const emit = defineEmits<{ (e: "zoom", refId: string): void }>();
@@ -45,7 +40,17 @@ function downloadMedia(e: MouseEvent) {
 </script>
 
 <template>
-  <div class="preview-card" @click="emit('zoom', refId)">
+  <div
+    class="preview-card"
+    :class="{ compact }"
+    role="button"
+    tabindex="0"
+    title="定位到画布"
+    :aria-label="`${displayTitle}，点击定位到画布`"
+    @click="emit('zoom', refId)"
+    @keydown.enter="emit('zoom', refId)"
+    @keydown.space.prevent="emit('zoom', refId)"
+  >
     <!-- ── GENERATING: gradient mesh skeleton ──────────────────── -->
     <div v-if="!state || state.status === 'generating'" class="preview-mesh">
       <div class="mesh-gradient" />
@@ -66,14 +71,7 @@ function downloadMedia(e: MouseEvent) {
       class="preview-done"
     >
       <img :src="state.url" class="preview-img" />
-      <button
-        class="action-download-btn"
-        @click.stop="downloadMedia"
-        title="下载图片"
-        aria-label="下载图片"
-      >
-        <Download :size="16" />
-      </button>
+   
     </div>
 
     <!-- ── DONE: video ────────────────────────────────────────── -->
@@ -92,16 +90,7 @@ function downloadMedia(e: MouseEvent) {
         <Play :size="16" fill="currentColor" />
       </button>
 
-      <!-- Floating Download Button -->
-      <button
-        class="action-download-btn"
-        @click.stop="downloadMedia"
-        title="下载视频"
-        aria-label="下载视频"
-      >
-        <Download :size="16" />
-      </button>
-
+  
       <span class="video-badge">VIDEO</span>
       <div class="preview-overlay">
         <span class="preview-tip">点击定位画布</span>
@@ -125,39 +114,12 @@ function downloadMedia(e: MouseEvent) {
   letter-spacing: 0.2px;
 }
 
-/* ── Floating Download Button (Reference Image style) ──────────── */
-.action-download-btn {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 5;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-  transition: all 0.18s ease;
-}
-
-.action-download-btn:hover {
-  background: var(--accent-primary);
-  color: #ffffff;
-  transform: scale(1.08);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-}
 
 /* ── Card shell ─────────────────────────────────────────────────── */
 .preview-card {
   position: relative;
-  margin: 8px 0;
-  border-radius: 14px;
+  margin: 0;
+  border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
@@ -165,6 +127,16 @@ function downloadMedia(e: MouseEvent) {
     transform 0.18s cubic-bezier(0, 0, 0.2, 1),
     box-shadow 0.18s cubic-bezier(0, 0, 0.2, 1);
   border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.preview-card:focus-visible {
+  outline: 2px solid var(--p-primary-color, #6d28d9);
+  outline-offset: 2px;
+}
+
+.preview-card.compact {
+  width: 100%;
+  aspect-ratio: 1;
 }
 
 /* .preview-card:hover {
@@ -207,6 +179,14 @@ function downloadMedia(e: MouseEvent) {
   align-items: center;
   justify-content: center;
   gap: 12px;
+}
+
+.compact .preview-mesh,
+.compact .preview-error,
+.compact .preview-done {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .mesh-gradient {
@@ -301,15 +281,27 @@ function downloadMedia(e: MouseEvent) {
   position: relative;
   overflow: hidden;
   background: #111;
+  max-height: 280px;
 }
 
 .preview-img {
   width: 100%;
   height: auto;
-  max-height: 480px;
+  max-height: 280px;
   display: block;
   object-fit: contain;
 }
+
+.compact .preview-done {
+  max-height: none;
+}
+
+.compact .preview-img {
+  height: 100%;
+  max-height: none;
+}
+
+
 
 /* Overlay */
 .preview-overlay {

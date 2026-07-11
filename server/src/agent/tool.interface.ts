@@ -40,6 +40,7 @@ export interface AgentTool {
     type: 'object';
     properties: Record<string, any>;
     required?: string[];
+    additionalProperties?: boolean;
   };
   execute(input: any, ctx: ToolContext): Promise<ToolResult>;
 }

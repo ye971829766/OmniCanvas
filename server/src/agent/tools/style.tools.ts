@@ -1,7 +1,7 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
 import { PALETTES, ensureReadable } from '../design-knowledge/color-system';
 import { matchFontCombination, getFontSizeForRole } from '../design-knowledge/typography';
-import { getCanvasNodeMap, getFrame, setFrame, upsertCanvasNode } from '../canvas-state';
+import { getCanvasNodeMap, getFrame, upsertCanvasNode } from '../canvas-state';
 
 export const setBrandTool: AgentTool = {
   name: 'set_brand',
@@ -83,22 +83,29 @@ export const applyPaletteTool: AgentTool = {
       return { output: { error: `Palette with ID "${input.paletteId}" not found.` } };
     }
 
+    const fontCombo = matchFontCombination(palette.keywords.join(' '));
+    ctx.memory.setBrand(ctx.sessionId, {
+      palette: {
+        primary: palette.primary,
+        secondary: palette.secondary,
+        accent: palette.accent,
+        text: palette.text,
+        background: palette.background,
+      },
+      fontFamily: fontCombo.bodyFont,
+      styleKeywords: palette.keywords,
+    });
+
     const nodesMap = getCanvasNodeMap(ctx);
     if (nodesMap.size === 0) {
-      // If there are no nodes, update the frame background
-      ctx.sink.canvas({ op: 'set_frame', width: 1080, height: 1080, background: palette.background });
-      setFrame(ctx, { ...getFrame(ctx), background: palette.background });
-      return { output: { note: `Applied palette "${palette.label}" to the canvas frame background.` } };
+      return {
+        output: {
+          note: `Registered palette "${palette.label}" for subsequent canvas elements. No frame was created.`,
+        },
+      };
     }
 
-    // Update frame background first
     const frame = getFrame(ctx);
-    frame.background = palette.background;
-    setFrame(ctx, frame);
-    ctx.sink.canvas({ op: 'set_frame', width: frame.width, height: frame.height, background: palette.background });
-
-    // Match font combo from palette keywords
-    const fontCombo = matchFontCombination(palette.keywords.join(' '));
 
     const updated: string[] = [];
     for (const [refId, node] of nodesMap.entries()) {
@@ -135,7 +142,7 @@ export const applyPaletteTool: AgentTool = {
 
     return {
       output: {
-        note: `Applied palette "${palette.label}" to canvas. Updated ${updated.length} elements.`,
+        note: `Applied palette "${palette.label}" to ${updated.length} existing canvas elements without creating a frame.`,
         updatedRefIds: updated,
       },
     };

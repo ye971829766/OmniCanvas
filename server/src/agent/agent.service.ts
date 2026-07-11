@@ -1,11 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { streamText, type ModelMessage, jsonSchema } from "ai";
+import { streamText, type ModelMessage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { AiService } from "../ai/ai.service";
 import { EventSink } from "./event-sink";
 import type { ToolContext, ToolResult } from "./tool.interface";
 import { TOOL_MAP } from "./tool.registry";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { compactAgentSystemPrompt } from "./system-prompt";
 import { AgentMemory } from "./agent.memory";
 import { ModelConfigService } from "../model-config/model-config.service";
 import {
@@ -41,17 +41,67 @@ interface TurnUsage {
   completionTokens: number;
   steps: number;
   toolCalls: number;
+  modelCalls: number;
+  peakPromptTokens: number;
+  lastPromptTokens: number;
+  model: string;
   startedAt: number;
 }
 
+function requestsModelCatalog(userInput: string): boolean {
+  return /(?:\[modelId:[^\]]+\]|@[\w.-]+|\bmodel\b|\u6a21\u578b)/i.test(userInput);
+}
+
+const GENERATION_TOOL_NAMES = new Set([
+  "generate_image",
+  "generate_video",
+  "remove_background",
+  "upscale_image",
+  "inpaint_image",
+  "edit_image",
+]);
+
+const GENERATED_MEDIA_DEPENDENT_TOOLS = new Set([
+  "verify_design",
+  "export_node_image",
+  "review_and_adjust",
+  "analyze_design",
+  "remove_background",
+  "upscale_image",
+  "inpaint_image",
+  "edit_image",
+]);
+
 import { TokensService } from "../tokens/tokens.service";
 import { FilesService } from "../files/files.service";
-import { normalizeAgentAssets, type AgentAssetInput } from "./agent-assets";
+import {
+  formatAgentAssetForPrompt,
+  normalizeAgentAssets,
+  type AgentAsset,
+  type AgentAssetInput,
+} from "./agent-assets";
+import { sanitizeCanvasState } from "./canvas-context";
+import { selectAgentToolNames } from "./tool-selection";
+import { buildAgentSdkTools } from "./sdk-tools";
+import { InvalidToolCallGuard } from "./invalid-tool-call-guard";
+import { upsertCanvasNode } from "./canvas-state";
+import {
+  waitForGenerationTasks,
+  type PendingGenerationTask,
+  type SettledGenerationTask,
+} from "./generation-lifecycle";
 
 @Injectable()
 export class AgentService {
   private readonly logger = new Logger(AgentService.name);
-  private readonly MAX_STEPS = 100;
+  private readonly MAX_STEPS = Math.max(
+    8,
+    Number(process.env.AGENT_MAX_STEPS) || 40,
+  );
+  private readonly MAX_PROMPT_TOKENS_PER_TURN = Math.max(
+    50_000,
+    Number(process.env.AGENT_MAX_PROMPT_TOKENS) || 300_000,
+  );
   private readonly chatModel = process.env.AGENT_CHAT_MODEL || "gpt-4o-mini";
   /** Per-session mutex: prevents concurrent runs on the same session. */
   private readonly sessionLocks = new Map<string, Promise<void>>();
@@ -65,6 +115,18 @@ export class AgentService {
   // ── Timeout configuration ─────────────────────────────────────────────────
   private readonly LLM_TIMEOUT_MS = 90_000;
   private readonly TOOL_TIMEOUT_MS = 75_000;
+  private readonly GENERATION_TIMEOUT_MS = Math.max(
+    30_000,
+    Number(process.env.AGENT_GENERATION_TIMEOUT_MS) || 15 * 60_000,
+  );
+  private readonly VIDEO_GENERATION_TIMEOUT_MS = Math.max(
+    this.GENERATION_TIMEOUT_MS,
+    Number(process.env.AGENT_VIDEO_GENERATION_TIMEOUT_MS) || 55 * 60_000,
+  );
+  private readonly GENERATION_POLL_MS = Math.max(
+    250,
+    Number(process.env.AGENT_GENERATION_POLL_MS) || 1_000,
+  );
 
   constructor(
     private readonly ai: AiService,
@@ -114,9 +176,10 @@ export class AgentService {
           this.logger.error(e?.stack || e);
           sink.emit({ type: "error", message: extractErrorMessage(e) });
         }
-        sink.close();
       })
       .finally(() => {
+        sink.emit({ type: "done" });
+        sink.close();
         if (this.activeRuns.get(sessionId) === abortController) {
           this.activeRuns.delete(sessionId);
         }
@@ -178,6 +241,10 @@ export class AgentService {
       completionTokens: 0,
       steps: 0,
       toolCalls: 0,
+      modelCalls: 0,
+      peakPromptTokens: 0,
+      lastPromptTokens: 0,
+      model: this.chatModel,
       startedAt: Date.now(),
     };
 
@@ -210,6 +277,7 @@ export class AgentService {
       this.logger.log(
         `[session=${sessionId}] mode=react ` +
           `steps=${usage.steps} tools=${usage.toolCalls} ` +
+          `calls=${usage.modelCalls} peak=${usage.peakPromptTokens} ` +
           `tokens=${usage.promptTokens}+${usage.completionTokens} ` +
           `elapsed=${elapsedMs}ms`,
       );
@@ -217,7 +285,7 @@ export class AgentService {
         this.tokensService.recordTokenUsage({
           userId: userInfo?.userId,
           username: userInfo?.username,
-          model: this.chatModel,
+          model: usage.model,
           promptTokens: usage.promptTokens,
           completionTokens: usage.completionTokens,
           type: "agent",
@@ -229,13 +297,11 @@ export class AgentService {
         completionTokens: usage.completionTokens,
         steps: usage.steps,
         toolCalls: usage.toolCalls,
+        modelCalls: usage.modelCalls,
+        peakPromptTokens: usage.peakPromptTokens,
+        lastPromptTokens: usage.lastPromptTokens,
         elapsedMs,
       } as any);
-      if (abortSignal?.aborted) {
-        sink.emit({ type: "final", text: "已停止当前任务。" });
-      }
-      sink.emit({ type: "done" });
-      sink.close();
     }
   }
   // ═══════════════════════════════════════════════════════════════════════════
@@ -254,16 +320,18 @@ export class AgentService {
     incomingAssets?: AgentAssetInput[],
   ): Promise<void> {
     const config = await this.modelConfigService.getConfig();
-    let systemPrompt = config.agentConfig?.systemPrompt || SYSTEM_PROMPT;
+    let systemPrompt = compactAgentSystemPrompt(config.agentConfig?.systemPrompt);
     const chatModel = config.agentConfig?.chatModel || this.chatModel;
+    usage.model = chatModel;
 
-    try {
-      const imageModelsList = await this.modelConfigService.getEnabledMappingsByPurpose("image");
-      const videoModelsList = await this.modelConfigService.getEnabledMappingsByPurpose("video");
-      const imageModelInfo = imageModelsList.map(m => `- ID: "${m.id}", Name: "${m.label || m.id}"`).join("\n");
-      const videoModelInfo = videoModelsList.map(m => `- ID: "${m.id}", Name: "${m.label || m.id}"`).join("\n");
+    if (requestsModelCatalog(userInput)) {
+      try {
+        const imageModelsList = await this.modelConfigService.getEnabledMappingsByPurpose("image");
+        const videoModelsList = await this.modelConfigService.getEnabledMappingsByPurpose("video");
+        const imageModelInfo = imageModelsList.map(m => `- ID: "${m.id}", Name: "${m.label || m.id}"`).join("\n");
+        const videoModelInfo = videoModelsList.map(m => `- ID: "${m.id}", Name: "${m.label || m.id}"`).join("\n");
 
-      const modelInstructions = `
+        const modelInstructions = `
 <available_models>
 When the user mentions a specific model (e.g., "@ModelName" or "@ID") in their prompt, you must choose that model and pass its exact ID string to the "model" parameter of your tool call (e.g., generate_image or generate_video). Do not invent model IDs not listed below.
 
@@ -274,17 +342,18 @@ Available Video Generation Models:
 ${videoModelInfo || "- None"}
 </available_models>
 `;
-      systemPrompt += "\n\n" + modelInstructions;
-    } catch (e) {
-      this.logger.error("Failed to load models list for system prompt", e);
+        systemPrompt += "\n\n" + modelInstructions;
+      } catch (e) {
+        this.logger.error("Failed to load models list for system prompt", e);
+      }
     }
 
     const { modelInstance } = await this.buildClient(chatModel);
 
     const history = this.memory.get(sessionId);
-    const screenshot = this.memory.getScreenshot(sessionId);
+    const screenshot = this.memory.consumeScreenshot(sessionId);
     const normalizedAssets = normalizeAgentAssets(incomingAssets);
-    const currentAssets = [];
+    const currentAssets: AgentAsset[] = [];
     for (const asset of normalizedAssets) {
       if (asset.publicUrl) {
         currentAssets.push(asset);
@@ -301,13 +370,17 @@ ${videoModelInfo || "- None"}
       );
     }
     const sessionAssets = this.memory.registerAssets(sessionId, currentAssets);
+    const safeCanvasState = sanitizeCanvasState(canvasState ?? []);
+    const selectedToolNames = selectAgentToolNames({
+      userInput,
+      canvasNodeCount: safeCanvasState.length,
+      hasAssets: sessionAssets.length > 0 || !!images?.length,
+    });
+    systemPrompt += `\n\n<active_tools>\n${[...selectedToolNames].join(", ")}\n</active_tools>\n<frame_policy>Frames are optional. Use the root canvas or a Group by default. Create a frame only for a bounded, clipped, exportable, auto-layout, or multi-deliverable composition. If set_frame/add_frame is not listed above, do not create or assume agent_frame.</frame_policy>\nOnly call tools listed above. Issue independent tool calls together in the same response. For nested batches, assign explicit refId values to new frames/groups/nodes and reuse them as parentId. Wait for a result only when a later call depends on generated output.`;
     if (sessionAssets.length > 0) {
       systemPrompt += `\n\n<session_assets>\n${sessionAssets
         .slice(-16)
-        .map(
-          (asset) =>
-            `- assetId: "${asset.id}"; name: "${asset.name || "image"}"; url: "${asset.publicUrl || asset.url}"`,
-        )
+        .map((asset) => formatAgentAssetForPrompt(asset))
         .join("\n")}\n</session_assets>\nThese are durable session assets. Use exact IDs and never invent one.`;
     }
 
@@ -315,11 +388,7 @@ ${videoModelInfo || "- None"}
     if (screenshot || currentAssets.length > 0 || (images && images.length > 0)) {
       const assetContext = currentAssets.length
         ? `\n\n<attached_assets>\n${currentAssets
-            .map(
-              (asset) =>
-                `- assetId: "${asset.id}"; name: "${asset.name || "image"}"; url: "${asset.publicUrl || asset.url}"; ` +
-                `type: "${asset.mimeType || "image"}"; dimensions: ${asset.width || "?"}x${asset.height || "?"}`,
-            )
+            .map((asset) => formatAgentAssetForPrompt(asset, true))
             .join("\n")}\n</attached_assets>\nUse these exact assetId values in image tools. Do not invent asset IDs.`
         : "";
       const parts: any[] = [{ type: "text", text: `${userInput}${assetContext}` }];
@@ -349,10 +418,14 @@ ${videoModelInfo || "- None"}
       userContent = parts;
     }
 
+    const currentUserMessage = {
+      role: "user" as const,
+      content: userContent as any,
+    };
     const messages: ModelMessage[] = [
       { role: "system", content: systemPrompt },
       ...history,
-      { role: "user", content: userContent as any },
+      currentUserMessage,
     ];
 
     try {
@@ -392,33 +465,35 @@ ${videoModelInfo || "- None"}
       newRefId: (prefix = "n") =>
         `${prefix}_${Math.random().toString(36).slice(2, 10)}`,
       memory: this.memory,
-      canvasState: canvasState ?? [],
+      canvasState: safeCanvasState,
       assets: sessionAssets,
       abortSignal,
       agentService: this,
     } as any;
 
-    // Convert TOOL_MAP to SDK-compatible tools format
-    const sdkTools: Record<string, any> = {};
-    for (const [name, tool] of TOOL_MAP.entries()) {
-      sdkTools[name] = {
-        description: tool.description,
-        parameters: jsonSchema(tool.parameters),
-      };
-    }
+    const sdkTools = buildAgentSdkTools(selectedToolNames);
+    const invalidToolCallGuard = new InvalidToolCallGuard();
 
     for (let step = 0; step < this.MAX_STEPS; step++) {
       if (abortSignal?.aborted) {
         throw new DOMException("Agent run aborted", "AbortError");
       }
+      if (usage.promptTokens >= this.MAX_PROMPT_TOKENS_PER_TURN) {
+        sink.emit({
+          type: "final",
+          text: "已达到本轮 Agent 输入 token 预算，任务已安全停止。可继续发送指令从当前画布状态接着执行。",
+        });
+        break;
+      }
       usage.steps = step + 1;
 
       // Single turn with streamText
+      const modelMessages = this.memory.compactForModel(messages);
       const result = await this.withTimeout(
         Promise.resolve(
           streamText({
             model: modelInstance,
-            messages: messages as any,
+            messages: modelMessages as any,
             tools: sdkTools,
             toolChoice: "auto",
             abortSignal,
@@ -461,10 +536,29 @@ ${videoModelInfo || "- None"}
       }
       text = stripHiddenReasoning(text);
 
+      for (const call of toolCalls) {
+        call.input = this.normalizeToolInput(
+          call.name,
+          this.safeParse(call.args),
+        );
+      }
+
       // Track usage
       const currentUsage = await result.usage;
-      usage.promptTokens += currentUsage.inputTokens ?? 0;
+      const currentPromptTokens = currentUsage.inputTokens ?? 0;
+      usage.modelCalls++;
+      usage.lastPromptTokens = currentPromptTokens;
+      usage.peakPromptTokens = Math.max(
+        usage.peakPromptTokens,
+        currentPromptTokens,
+      );
+      usage.promptTokens += currentPromptTokens;
       usage.completionTokens += currentUsage.outputTokens ?? 0;
+      this.logger.debug(
+        `[session=${sessionId}] step=${step + 1} ` +
+          `input=${currentPromptTokens} output=${currentUsage.outputTokens ?? 0} ` +
+          `cumulativeInput=${usage.promptTokens} activeTools=${selectedToolNames.size}`,
+      );
 
       // Record assistant turn
       const contentParts: any[] = [];
@@ -477,7 +571,7 @@ ${videoModelInfo || "- None"}
             type: "tool-call" as const,
             toolCallId: t.id,
             toolName: t.name,
-            input: JSON.parse(t.args),
+            input: t.input,
           })),
         );
       }
@@ -496,9 +590,12 @@ ${videoModelInfo || "- None"}
       }
 
       const stepVisualObservations: any[] = [];
+      const pendingGenerationTasks: PendingGenerationTask[] = [];
+      const generationOutputs = new Map<string, Record<string, any>>();
+      let validToolCalls = 0;
       for (const call of toolCalls) {
         usage.toolCalls++;
-        const input = this.safeParse(call.args);
+        const input = call.input;
         if (abortSignal?.aborted) {
           throw new DOMException("Agent run aborted", "AbortError");
         }
@@ -523,13 +620,44 @@ ${videoModelInfo || "- None"}
           });
           continue;
         }
+        validToolCalls++;
+
+        if (
+          pendingGenerationTasks.length > 0 &&
+          this.requiresGeneratedMedia(
+            call.name,
+            input,
+            pendingGenerationTasks,
+          )
+        ) {
+          await this.settlePendingGenerations(
+            pendingGenerationTasks,
+            generationOutputs,
+            ctx,
+            sink,
+            abortSignal,
+          );
+        }
 
         sink.emit({ type: "tool_call", id: call.id, tool: call.name, input });
         this.memory.updatePlanForTool(sessionId, call.name, input, false);
         const tool = TOOL_MAP.get(call.name);
         let content: any;
         if (!tool) {
-          content = `Unknown tool: ${call.name}`;
+          content = { status: "error", error: `Unknown tool: ${call.name}` };
+          sink.emit({
+            type: "tool_result",
+            id: call.id,
+            tool: call.name,
+            output: content,
+          });
+          this.memory.updatePlanForTool(
+            sessionId,
+            call.name,
+            input,
+            true,
+            true,
+          );
         } else {
           try {
             const result = await this.withTimeout(
@@ -543,7 +671,12 @@ ${videoModelInfo || "- None"}
               tool: call.name,
               output: result.output,
             });
-            this.memory.updatePlanForTool(sessionId, call.name, input, true);
+            this.memory.updatePlanForTool(
+              sessionId,
+              call.name,
+              input,
+              true,
+            );
 
             // MCoT visual check image cache handling
             const output = result.output as any;
@@ -564,10 +697,29 @@ ${videoModelInfo || "- None"}
             } else {
               content = result.output;
             }
+            this.capturePendingGeneration(
+              call.name,
+              result.output,
+              pendingGenerationTasks,
+              generationOutputs,
+            );
           } catch (e: any) {
-            let errMsg = e?.message ?? "tool failed";
+            const errMsg = e?.message ?? "tool failed";
             this.logger.warn(`[session=${sessionId}] ${call.name}: ${errMsg}`);
-            content = { error: errMsg };
+            content = { status: "error", error: errMsg };
+            sink.emit({
+              type: "tool_result",
+              id: call.id,
+              tool: call.name,
+              output: content,
+            });
+            this.memory.updatePlanForTool(
+              sessionId,
+              call.name,
+              input,
+              true,
+              true,
+            );
           }
         }
 
@@ -606,6 +758,25 @@ ${videoModelInfo || "- None"}
         });
       }
 
+      if (pendingGenerationTasks.length > 0) {
+        await this.settlePendingGenerations(
+          pendingGenerationTasks,
+          generationOutputs,
+          ctx,
+          sink,
+          abortSignal,
+        );
+      }
+
+      if (invalidToolCallGuard.recordStep(toolCalls.length, validToolCalls)) {
+        sink.emit({
+          type: "final",
+          text:
+            "模型连续返回了无效的工具参数，任务已停止以避免重复消耗。请重试；如果问题持续，请切换到支持标准 OpenAI 工具调用的模型。",
+        });
+        break;
+      }
+
       // Append visual observations if any
       if (stepVisualObservations.length > 0) {
         const combinedParts: any[] = [];
@@ -619,13 +790,155 @@ ${videoModelInfo || "- None"}
       if (step === this.MAX_STEPS - 1) {
         sink.emit({
           type: "final",
-          text: "已达到安全步数上限（100步），为防止死循环任务已自动停止。",
+          text: `已达到安全步数上限（${this.MAX_STEPS} 步），为防止死循环，任务已自动停止。`,
         });
       }
     }
 
-    const historyToSave = messages.filter((m) => m.role !== "system");
+    const historyToSave = messages
+      .filter((m) => m.role !== "system")
+      .map((message) => {
+        if (
+          message !== currentUserMessage ||
+          currentAssets.length === 0 ||
+          !Array.isArray((message as any).content)
+        ) {
+          return message;
+        }
+
+        const nonImageParts = (message as any).content.filter(
+          (part: any) => part?.type !== "image",
+        );
+        return {
+          ...message,
+          content: [
+            ...nonImageParts,
+            ...currentAssets.map((asset) => ({
+              type: "image" as const,
+              image: asset.url,
+            })),
+          ],
+        } as ModelMessage;
+      });
     this.memory.set(sessionId, historyToSave as any);
+  }
+
+  private capturePendingGeneration(
+    toolName: string,
+    output: unknown,
+    pending: PendingGenerationTask[],
+    outputs: Map<string, Record<string, any>>,
+  ): void {
+    if (
+      !GENERATION_TOOL_NAMES.has(toolName) ||
+      !output ||
+      typeof output !== "object"
+    ) {
+      return;
+    }
+
+    const value = output as Record<string, any>;
+    const taskId = typeof value.taskId === "string" ? value.taskId : "";
+    const refId = typeof value.refId === "string" ? value.refId : "";
+    if (!taskId || !refId) return;
+
+    pending.push({
+      taskId,
+      refId,
+      kind: toolName === "generate_video" ? "video" : "image",
+    });
+    outputs.set(taskId, value);
+  }
+
+  private requiresGeneratedMedia(
+    toolName: string,
+    input: Record<string, any>,
+    pending: PendingGenerationTask[],
+  ): boolean {
+    if (GENERATED_MEDIA_DEPENDENT_TOOLS.has(toolName)) return true;
+    const refs = Array.isArray(input?.refImages) ? input.refImages : [];
+    return refs.some((ref: unknown) =>
+      pending.some((task) => task.refId === ref),
+    );
+  }
+
+  private async settlePendingGenerations(
+    pending: PendingGenerationTask[],
+    outputs: Map<string, Record<string, any>>,
+    ctx: ToolContext,
+    sink: EventSink,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    const tasks = pending.splice(0, pending.length);
+    if (tasks.length === 0) return;
+    const timeoutMs = tasks.some((task) => task.kind === "video")
+      ? this.VIDEO_GENERATION_TIMEOUT_MS
+      : this.GENERATION_TIMEOUT_MS;
+
+    sink.emit({
+      type: "progress",
+      tool: "generate_media",
+      message: `Waiting for ${tasks.length} media generation task(s) to finish...`,
+      percent: 0,
+    });
+
+    const settled = await waitForGenerationTasks(tasks, {
+      getTaskStatus: (taskId) => this.ai.getTaskStatus(taskId),
+      abortSignal,
+      timeoutMs,
+      pollIntervalMs: this.GENERATION_POLL_MS,
+      onProgress: (completed, total) => {
+        sink.emit({
+          type: "progress",
+          tool: "generate_media",
+          message: `Media generation progress: ${completed}/${total}`,
+          percent: Math.round((completed / total) * 100),
+        });
+      },
+    });
+
+    for (const task of settled) {
+      this.applySettledGeneration(task, outputs.get(task.taskId), ctx);
+      outputs.delete(task.taskId);
+    }
+
+    const timedOut = settled.filter((task) => task.status === "timeout");
+    if (timedOut.length > 0) {
+      throw new Error(
+        `${timedOut.length} media generation task(s) did not finish within ${Math.round(timeoutMs / 1000)} seconds`,
+      );
+    }
+  }
+
+  private applySettledGeneration(
+    task: SettledGenerationTask,
+    output: Record<string, any> | undefined,
+    ctx: ToolContext,
+  ): void {
+    const url = task.state?.imageUrl || task.state?.videoUrl;
+    const successful = task.status === "success";
+    const error = task.error || String(task.state?.error || "Generation failed");
+
+    if (output) {
+      output.status = successful ? "success" : "error";
+      if (url) output.url = url;
+      if (!successful) output.error = error;
+      output.note = successful
+        ? "Media generation completed. Continue the remaining canvas task."
+        : `Media generation failed: ${error}`;
+    }
+
+    upsertCanvasNode(ctx, task.refId, {
+      taskId: task.taskId,
+      status: successful ? "done" : "error",
+      generationStatus: successful ? "done" : "error",
+      ...(url
+        ? task.kind === "video"
+          ? { url, videoUrl: url }
+          : { url }
+        : {}),
+      ...(!successful ? { errorMessage: error } : {}),
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -701,7 +1014,7 @@ ${videoModelInfo || "- None"}
         } catch (err) {
           // Ignore parsing errors and fallback to original request
         }
-        return fetch(url, init);
+        return this.ai.fetchProvider(url, init);
       }) as any,
     });
     return {
@@ -776,10 +1089,21 @@ ${videoModelInfo || "- None"}
       return;
     }
 
-    // --- Design task: full mock workflow ---
-    const frameId = "agent_frame";
+    // --- Design task: mock workflow follows the same optional-frame policy ---
+    const mockToolNames = selectAgentToolNames({
+      userInput,
+      canvasNodeCount: 0,
+      hasAssets: false,
+    });
+    const usePrimaryFrame = mockToolNames.has("set_frame");
+    const useAdditionalFrame = !usePrimaryFrame && mockToolNames.has("add_frame");
+    const frameId = usePrimaryFrame
+      ? "agent_frame"
+      : useAdditionalFrame
+        ? `frame_${uid()}`
+        : undefined;
 
-    await tool(
+    if (mockToolNames.has("plan_design")) await tool(
       "plan_design",
       { request: userInput, deliverables: ["1080×1080 海报"] },
       () => ({
@@ -797,7 +1121,7 @@ ${videoModelInfo || "- None"}
       350,
     );
 
-    await tool(
+    if (usePrimaryFrame) await tool(
       "set_frame",
       { width: 1080, height: 1080, background: "#0a0e1a" },
       () => {
@@ -812,21 +1136,46 @@ ${videoModelInfo || "- None"}
       250,
     );
 
+    if (useAdditionalFrame && frameId) await tool(
+      "add_frame",
+      { refId: frameId, width: 1080, height: 1080, x: 0, y: 0 },
+      () => {
+        sink.canvas({
+          op: "add_node",
+          node: {
+            refId: frameId,
+            type: "frame",
+            width: 1080,
+            height: 1080,
+            x: 0,
+            y: 0,
+            fill: "#0a0e1a",
+          },
+        });
+        return { refId: frameId, note: "Added a bounded mock artboard." };
+      },
+      250,
+    );
+
     const imgId = `img_${uid()}`;
     await tool(
       "generate_image",
-      { prompt: userInput, aspectRatio: "1:1", parentId: frameId },
+      {
+        prompt: userInput,
+        aspectRatio: "1:1",
+        ...(frameId ? { parentId: frameId } : {}),
+      },
       () => {
         sink.canvas({
           op: "add_node",
           node: {
             refId: imgId,
             type: "rect",
-            parentId: frameId,
-            x: 0,
-            y: 0,
-            width: 1080,
-            height: 680,
+            ...(frameId ? { parentId: frameId } : {}),
+            x: frameId ? 0 : 80,
+            y: frameId ? 0 : 80,
+            width: frameId ? 1080 : 900,
+            height: frameId ? 680 : 600,
             fill: {
               type: "linear",
               stops: [
@@ -848,10 +1197,10 @@ ${videoModelInfo || "- None"}
         text: "MOCK DESIGN",
         fontSize: 72,
         fontWeight: "bold",
-        fill: "#ffffff",
+        fill: frameId ? "#ffffff" : "#111827",
         x: 80,
         y: 720,
-        parentId: frameId,
+        ...(frameId ? { parentId: frameId } : {}),
       },
       () => {
         sink.canvas({
@@ -859,11 +1208,11 @@ ${videoModelInfo || "- None"}
           node: {
             refId: titleId,
             type: "text",
-            parentId: frameId,
+            ...(frameId ? { parentId: frameId } : {}),
             text: "MOCK DESIGN",
             fontSize: 72,
             fontWeight: "bold",
-            fill: "#ffffff",
+            fill: frameId ? "#ffffff" : "#111827",
             x: 80,
             y: 720,
             width: 920,
@@ -876,7 +1225,7 @@ ${videoModelInfo || "- None"}
 
     await tool(
       "verify_design",
-      { refId: frameId, requirements: userInput },
+      { refId: frameId || imgId, requirements: userInput },
       () => ({
         success: true,
         score: 9,
@@ -889,12 +1238,35 @@ ${videoModelInfo || "- None"}
     sink.emit({ type: "final", text: summary });
   }
 
-  private safeParse(s: string): any {
-    if (!s) return {};
+  private normalizeToolInput(toolName: string, input: any): any {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      return input;
+    }
+
+    if (toolName === "plan_ecommerce_suite") {
+      input.sourceAssetId ??=
+        input.assetId ?? input.sourceAsset ?? input.referenceAssetId;
+      input.platforms ??= input.platform;
+
+      if (typeof input.platforms === "string") {
+        input.platforms = input.platforms
+          .split(/[,/|\s]+/)
+          .map((platform: string) => platform.trim())
+          .filter(Boolean);
+      }
+    }
+
+    return input;
+  }
+
+  private safeParse(value: unknown): any {
+    if (!value) return {};
+    if (typeof value === "object") return value;
+    if (typeof value !== "string") return {};
     try {
-      return JSON.parse(s);
+      return JSON.parse(value);
     } catch {
-      this.logger.warn(`tool args parse failed: ${s.slice(0, 120)}`);
+      this.logger.warn(`tool args parse failed: ${value.slice(0, 120)}`);
       return {};
     }
   }
@@ -902,6 +1274,9 @@ ${videoModelInfo || "- None"}
   private validateToolInput(toolName: string, input: any): string | null {
     const tool = TOOL_MAP.get(toolName);
     if (!tool) return null;
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      return "Tool input must be a JSON object";
+    }
     const required = tool.parameters.required ?? [];
     for (const key of required) {
       if (input[key] === undefined || input[key] === null) {
@@ -911,11 +1286,49 @@ ${videoModelInfo || "- None"}
     const props = tool.parameters.properties;
     for (const [key, schema] of Object.entries(props) as [string, any][]) {
       if (input[key] === undefined) continue;
-      if (schema.type === "number" && typeof input[key] !== "number") {
+      if (schema.type === "array") {
+        const items = Array.isArray(input[key]) ? input[key] : [input[key]];
+        if (schema.items?.type === "string") {
+          input[key] = items.map((item: unknown) => this.coerceString(item));
+        } else {
+          input[key] = items;
+        }
+        if (schema.items?.enum) {
+          input[key] = input[key].map((item: unknown) =>
+            this.normalizeEnumValue(key, item, schema.items.enum),
+          );
+          const invalid = input[key].find(
+            (item: unknown) => !schema.items.enum.includes(item),
+          );
+          if (invalid !== undefined) {
+            return `Parameter "${key}" items must be one of [${schema.items.enum.join(", ")}], got "${invalid}"`;
+          }
+        }
+        if (schema.uniqueItems) input[key] = [...new Set(input[key])];
+        if (schema.minItems && input[key].length < schema.minItems) {
+          return `Parameter "${key}" must contain at least ${schema.minItems} item(s)`;
+        }
+        continue;
+      }
+      if (
+        (schema.type === "number" || schema.type === "integer") &&
+        typeof input[key] !== "number"
+      ) {
         const num = this.coerceNumber(input[key]);
         if (num === null)
           return `Parameter "${key}" must be a number, got ${typeof input[key]}`;
         input[key] = num;
+      }
+      if (schema.type === "integer" && !Number.isInteger(input[key])) {
+        return `Parameter "${key}" must be an integer`;
+      }
+      if (typeof input[key] === "number") {
+        if (schema.minimum !== undefined && input[key] < schema.minimum) {
+          return `Parameter "${key}" must be at least ${schema.minimum}`;
+        }
+        if (schema.maximum !== undefined && input[key] > schema.maximum) {
+          return `Parameter "${key}" must be at most ${schema.maximum}`;
+        }
       }
       if (schema.type === "string" && typeof input[key] !== "string") {
         input[key] = this.coerceString(input[key]);
@@ -1020,6 +1433,17 @@ ${videoModelInfo || "- None"}
         return "center";
       if (["start"].includes(raw) && choices.includes("left")) return "left";
       if (["end"].includes(raw) && choices.includes("right")) return "right";
+    }
+    if (key === "platforms") {
+      if (["amazon", "亚马逊"].includes(raw) && choices.includes("amazon")) {
+        return "amazon";
+      }
+      if (["taobao", "淘宝", "tmall", "天猫"].includes(raw) && choices.includes("taobao")) {
+        return "taobao";
+      }
+      if (["jd", "jingdong", "京东"].includes(raw) && choices.includes("jd")) {
+        return "jd";
+      }
     }
     return String(value);
   }

@@ -3,6 +3,19 @@
  * This teaches the agent how LeaferJS actually works at the API level.
  */
 
+export const LEAFER_AGENT_BRIEF = `
+<leafer_execution_reference>
+- The canvas is a hierarchical scene tree. Frames and groups own their children.
+- Root nodes use absolute canvas coordinates; child x/y values are relative to parentId.
+- Use exact refIds from tool results or query_canvas. Never guess an existing refId.
+- Text remains editable through add_text. Rectangles provide panels, backgrounds, dividers, and badges.
+- Use frames only for bounded, clipped, exportable, or auto-layout compositions. Use Group for loose root-canvas compositions.
+- Use explicit dimensions, spacing, and z-order. Avoid overlap, clipping, and off-frame content.
+- Media bytes stay outside model context. Refer to uploaded assets or canvas nodes by stable ID.
+- When operations are independent, call multiple tools in one response to reduce round trips.
+</leafer_execution_reference>
+`.trim();
+
 export const LEAFER_API_KNOWLEDGE = `
 <leafer_api>
 ## LeaferJS Canvas API — Complete Reference

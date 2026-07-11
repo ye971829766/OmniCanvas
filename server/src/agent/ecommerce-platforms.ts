@@ -8,11 +8,12 @@ export interface EcommercePlanInput {
   brand?: string;
   language?: string;
   imagesPerPlatform?: number;
+  originX?: number;
+  originY?: number;
 }
 
 export interface EcommerceDeliverable {
   id: string;
-  frameId: string;
   platform: EcommercePlatform;
   role: string;
   title: string;
@@ -26,7 +27,7 @@ export interface EcommerceDeliverable {
 
 const PLATFORM_DELIVERABLES: Record<
   EcommercePlatform,
-  Omit<EcommerceDeliverable, 'id' | 'frameId' | 'platform' | 'x' | 'y'>[]
+  Omit<EcommerceDeliverable, 'id' | 'platform' | 'x' | 'y'>[]
 > = {
   amazon: [
     {
@@ -36,6 +37,46 @@ const PLATFORM_DELIVERABLES: Record<
       height: 2000,
       rules: ['纯白背景', '仅展示实际销售商品', '不要加入促销文字或装饰图形', '商品主体清晰且占据主要画面'],
       promptSeed: 'premium marketplace product photography on a pure white background, faithful product identity',
+    },
+    {
+      role: 'front',
+      title: 'Amazon Front View',
+      width: 2000,
+      height: 2000,
+      rules: ['single product only', 'straight-on front view', 'pure white background', 'preserve exact product identity'],
+      promptSeed: 'straight-on front view product photography on pure white, centered and evenly lit',
+    },
+    {
+      role: 'side',
+      title: 'Amazon Side View',
+      width: 2000,
+      height: 2000,
+      rules: ['single product only', 'clean side profile', 'pure white background', 'preserve exact product identity'],
+      promptSeed: 'clean side profile product photography on pure white, centered and evenly lit',
+    },
+    {
+      role: 'rear',
+      title: 'Amazon Rear View',
+      width: 2000,
+      height: 2000,
+      rules: ['single product only', 'straight-on rear view', 'pure white background', 'preserve exact product identity'],
+      promptSeed: 'straight-on rear view product photography on pure white, centered and evenly lit',
+    },
+    {
+      role: 'top',
+      title: 'Amazon Top View',
+      width: 2000,
+      height: 2000,
+      rules: ['single product only', 'top-down view', 'pure white background', 'preserve exact product identity'],
+      promptSeed: 'top-down product photography on pure white, centered and evenly lit',
+    },
+    {
+      role: 'detail',
+      title: 'Amazon Detail View',
+      width: 2000,
+      height: 2000,
+      rules: ['show a real visible product detail', 'no invented components or claims', 'preserve material and color'],
+      promptSeed: 'sharp commercial close-up of a distinctive real product detail, faithful materials and color',
     },
     {
       role: 'lifestyle',
@@ -133,17 +174,33 @@ const PLATFORM_DELIVERABLES: Record<
 };
 
 export function buildEcommerceDeliverables(input: EcommercePlanInput): EcommerceDeliverable[] {
-  const perPlatform = Math.max(1, Math.min(4, input.imagesPerPlatform || 3));
-  return input.platforms.flatMap((platform, platformIndex) =>
-    PLATFORM_DELIVERABLES[platform].slice(0, perPlatform).map((item, itemIndex) => ({
-      ...item,
-      platform,
-      id: `${platform}_${item.role}`,
-      frameId: `commerce_${platform}_${item.role}`,
-      x: itemIndex * 2200,
-      y: platformIndex * 2200,
-    })),
-  );
+  const deliverables: EcommerceDeliverable[] = [];
+  const originX = Number.isFinite(input.originX) ? input.originX! : 0;
+  const originY = Number.isFinite(input.originY) ? input.originY! : 0;
+  let platformOffsetY = originY;
+
+  for (const platform of input.platforms) {
+    const presets = PLATFORM_DELIVERABLES[platform];
+    const requestedCount = input.imagesPerPlatform ?? Math.min(6, presets.length);
+    const selected = presets.slice(0, Math.max(1, Math.min(8, requestedCount)));
+    const cellWidth = Math.max(...selected.map((item) => item.width)) + 120;
+    const cellHeight = Math.max(...selected.map((item) => item.height)) + 120;
+    const columns = Math.min(5, selected.length);
+
+    selected.forEach((item, itemIndex) => {
+      deliverables.push({
+        ...item,
+        platform,
+        id: `${platform}_${item.role}`,
+        x: originX + (itemIndex % columns) * cellWidth,
+        y: platformOffsetY + Math.floor(itemIndex / columns) * cellHeight,
+      });
+    });
+
+    platformOffsetY += Math.ceil(selected.length / columns) * cellHeight + 240;
+  }
+
+  return deliverables;
 }
 
 export function getEcommerceDeliverableRules(
@@ -151,4 +208,11 @@ export function getEcommerceDeliverableRules(
   role: string,
 ): string[] {
   return PLATFORM_DELIVERABLES[platform]?.find((item) => item.role === role)?.rules ?? [];
+}
+
+export function getEcommerceDeliverablePromptSeed(
+  platform: EcommercePlatform,
+  role: string,
+): string {
+  return PLATFORM_DELIVERABLES[platform]?.find((item) => item.role === role)?.promptSeed ?? '';
 }

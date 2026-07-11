@@ -20,7 +20,12 @@ export interface AgentAssetPayload {
   height?: number;
 }
 
-export type AgentPlanStepStatus = "pending" | "in_progress" | "completed";
+export type AgentPlanStepStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed"
+  | "error";
 
 export interface AgentPlanStep {
   id: string;
@@ -29,6 +34,11 @@ export interface AgentPlanStep {
   status: AgentPlanStepStatus;
   platform?: string;
   deliverable?: string;
+  frameId?: string;
+  width?: number;
+  height?: number;
+  x?: number;
+  y?: number;
   tools?: string[];
   completionTool?: string;
 }

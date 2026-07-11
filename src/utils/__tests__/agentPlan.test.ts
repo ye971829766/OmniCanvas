@@ -59,4 +59,17 @@ describe("agent plan progress", () => {
     );
     expect(plan.steps[0].status).toBe("completed");
   });
+
+  it("marks a matching step failed when its tool reaches an error terminal state", () => {
+    const plan = createPlan();
+    updateAgentPlanFromTool(
+      plan,
+      "generate_image",
+      { platform: "amazon", deliverable: "main" },
+      true,
+      true,
+    );
+    expect(plan.steps[0].status).toBe("failed");
+    expect(plan.steps[1].status).toBe("pending");
+  });
 });

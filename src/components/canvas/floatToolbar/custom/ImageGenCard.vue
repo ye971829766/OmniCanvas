@@ -132,8 +132,8 @@ const emit = defineEmits<{
 
 const promptText = ref("");
 const selectedModel = ref("gpt-image-2");
-const selectedSize = ref("1024x1024");
-const selectedQuality = ref("standard");
+const selectedSize = ref("auto");
+const selectedQuality = ref("high");
 const selectedAspectRatio = ref("1:1");
 const n = ref(1);
 const imageOptions = ref<ImageModelOptionsResponse | null>(null);
@@ -238,8 +238,8 @@ watch(
     const targetAny = newTarget as any;
     promptText.value = targetAny.prompt || "";
     selectedModel.value = targetAny.model || "gpt-image-2";
-    selectedSize.value = targetAny.size || "1024x1024";
-    selectedQuality.value = targetAny.quality || "standard";
+    selectedSize.value = targetAny.size || "auto";
+    selectedQuality.value = targetAny.quality || "high";
     selectedAspectRatio.value = targetAny.aspectRatio || "1:1";
     errorMessage.value = targetAny.errorMessage || "";
     n.value = targetAny.n || 1;

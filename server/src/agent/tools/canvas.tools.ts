@@ -4,17 +4,18 @@ import {
   getFrame,
   listCanvasNodes,
   removeCanvasNode,
+  resolveNewCanvasRefId,
   setFrame,
   upsertCanvasNode,
 } from '../canvas-state';
+import { buildCanvasQueryResult } from '../canvas-context';
 import { exportRegistry } from '../export-registry';
 
 export const setFrameTool: AgentTool = {
   name: 'set_frame',
   description:
-    'Set the artboard dimensions and background. Call first when starting a ' +
-    'new design so layout coordinates make sense. Common sizes: social 1080x1080, ' +
-    'story 1080x1920, poster 1240x1754, banner 1920x1080.',
+    'Create or resize the primary bounded artboard. Use only when the task needs explicit dimensions, clipping, export, print, or a screen/poster composition. ' +
+    'Do not call for freeform root-canvas work, isolated elements, diagrams, or ordinary edits.',
   parameters: {
     type: 'object',
     properties: {
@@ -42,6 +43,7 @@ export const addTextTool: AgentTool = {
   parameters: {
     type: 'object',
     properties: {
+      refId: { type: 'string', description: 'Optional stable ID for batching dependent tool calls in the same response.' },
       text: { type: 'string' },
       x: { type: 'number', description: 'X position in pixels. Omit if the parentId points to an auto-layout container.' },
       y: { type: 'number', description: 'Y position in pixels. Omit if the parentId points to an auto-layout container.' },
@@ -54,12 +56,12 @@ export const addTextTool: AgentTool = {
       lineHeight: { type: 'number', description: 'Plain number only, e.g. 1.2 or 44. Do not pass an object.' },
       letterSpacing: { type: 'number', description: 'Plain number only. Do not pass an object.' },
       opacity: { type: 'number', description: 'Plain number from 0 to 1.' },
-      parentId: { type: 'string', description: 'Parent node refId, e.g. "agent_frame" to place the text inside the artboard.' },
+      parentId: { type: 'string', description: 'Optional frame/group refId. Omit to place text directly on the root canvas.' },
     },
     required: ['text'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const refId = ctx.newRefId('txt');
+    const refId = resolveNewCanvasRefId(ctx, input.refId, 'txt');
     const brand = ctx.memory.getBrand(ctx.sessionId);
     const defaultFontFamily = brand?.fontFamily;
     const defaultFill = brand?.palette?.text ?? '#111111';
@@ -93,6 +95,7 @@ export const addRectTool: AgentTool = {
   parameters: {
     type: 'object',
     properties: {
+      refId: { type: 'string', description: 'Optional stable ID for batching dependent tool calls in the same response.' },
       x: { type: 'number', description: 'X position in pixels. Omit if the parentId points to an auto-layout container.' },
       y: { type: 'number', description: 'Y position in pixels. Omit if the parentId points to an auto-layout container.' },
       width: { type: 'number' },
@@ -102,7 +105,7 @@ export const addRectTool: AgentTool = {
       stroke: { type: 'string' },
       strokeWidth: { type: 'number' },
       opacity: { type: 'number', description: '0-1, default 1' },
-      parentId: { type: 'string', description: 'Parent node refId, e.g. "agent_frame" to place the rect inside the artboard.' },
+      parentId: { type: 'string', description: 'Optional frame/group refId. Omit to place the rectangle directly on the root canvas.' },
       gradient: {
         type: 'object',
         properties: {
@@ -116,7 +119,7 @@ export const addRectTool: AgentTool = {
     required: ['width', 'height'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const refId = ctx.newRefId('rect');
+    const refId = resolveNewCanvasRefId(ctx, input.refId, 'rect');
     const brand = ctx.memory.getBrand(ctx.sessionId);
     const defaultFill = brand?.palette?.primary;
 
@@ -253,24 +256,39 @@ export const removeNodeTool: AgentTool = {
 export const queryCanvasTool: AgentTool = {
   name: 'query_canvas',
   description:
-    'Get a summary of all nodes currently on the canvas, including those added by the user manually. ' +
+    'Inspect the current canvas through a bounded semantic index. Small canvases are returned directly; large canvases default to selected nodes, frames, counts, and top-level samples. ' +
     'Nodes with selected=true are the user\'s current explicit selection and should be preferred for references like "this" or "selected elements". ' +
-    'Use this to check what exists before modifying, repositioning, or removing nodes. ' +
-    'Returns a list of nodes with their tag, position, size, and key properties.',
+    'Use scope="frame", "ids", or "search" for precise follow-up queries. Paginate with cursor when nextCursor is returned.',
   parameters: {
     type: 'object',
-    properties: {},
+    properties: {
+      scope: {
+        type: 'string',
+        enum: ['auto', 'summary', 'selection', 'frame', 'ids', 'search', 'all'],
+        description: 'Query scope. Default auto returns selection, a small canvas, or a large-canvas summary.',
+      },
+      detail: {
+        type: 'string',
+        enum: ['compact', 'standard'],
+        description: 'compact is preferred; standard includes additional editable style and media metadata.',
+      },
+      frameId: { type: 'string', description: 'Frame refId for scope="frame".' },
+      refIds: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Exact node refIds for scope="ids".',
+      },
+      search: { type: 'string', description: 'Text, name, type, role, or refId substring for scope="search".' },
+      cursor: { type: 'number', description: 'Pagination cursor returned by a previous query.' },
+      limit: { type: 'number', description: 'Maximum nodes to return, default 40 and capped at 100.' },
+    },
   },
-  async execute(_input: any, ctx: ToolContext): Promise<ToolResult> {
+  async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const frame = getFrame(ctx);
     const allNodes = listCanvasNodes(ctx);
 
     return {
-      output: {
-        frame,
-        nodeCount: allNodes.length,
-        nodes: allNodes,
-      },
+      output: buildCanvasQueryResult(allNodes, frame, input),
     };
   },
 };
@@ -401,7 +419,7 @@ export const exportNodeImageTool: AgentTool = {
 
 export const addFrameTool: AgentTool = {
   name: 'add_frame',
-  description: 'Add a new artboard/frame container to the canvas to start a new composition or layout. Returns a refId to be used as parentId for child elements.',
+  description: 'Add an independent bounded artboard/frame. Use for multiple deliverables, explicit additional artboards, clipping, export, or frame-specific auto layout. Do not use as a default wrapper for ordinary canvas content.',
   parameters: {
     type: 'object',
     properties: {
@@ -420,8 +438,9 @@ export const addFrameTool: AgentTool = {
     required: ['width', 'height'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const refId = input.refId || ctx.newRefId('frame');
-    const existing = ctx.canvasState.find((node: any) => node.refId === refId);
+    const canvasNodes = getCanvasNodeMap(ctx);
+    const refId = resolveNewCanvasRefId(ctx, input.refId, 'frame');
+    const existing = canvasNodes.get(refId);
     if (existing) {
       const patch = {
         width: input.width,
@@ -437,7 +456,13 @@ export const addFrameTool: AgentTool = {
       };
       ctx.sink.canvas({ op: 'update_node', refId, patch: patch as any });
       upsertCanvasNode(ctx, refId, { ...existing, ...patch });
-      return { output: { refId, reused: true, note: 'Existing frame artboard updated.' } };
+      return {
+        output: {
+          refId,
+          reused: true,
+          note: 'Existing frame artboard updated. Use refId as parentId for its content.',
+        },
+      };
     }
     const node = {
       refId,
@@ -455,7 +480,16 @@ export const addFrameTool: AgentTool = {
     };
     ctx.sink.canvas({ op: 'add_node', node });
     upsertCanvasNode(ctx, refId, node);
-    return { output: { refId, note: 'New frame artboard created.' } };
+    return {
+      output: {
+        refId,
+        width: input.width,
+        height: input.height,
+        x: input.x,
+        y: input.y,
+        note: 'New frame artboard created. Use refId as parentId for its content.',
+      },
+    };
   },
 };
 
@@ -475,6 +509,7 @@ export const addGroupTool: AgentTool = {
   parameters: {
     type: 'object',
     properties: {
+      refId: { type: 'string', description: 'Optional stable ID so children can reference this group in the same response.' },
       x: { type: 'number', description: 'X position of the group on the canvas.' },
       y: { type: 'number', description: 'Y position of the group on the canvas.' },
       rotation: { type: 'number', description: 'Rotation in degrees (clockwise, 0-360).' },
@@ -486,7 +521,7 @@ export const addGroupTool: AgentTool = {
     },
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const refId = ctx.newRefId('grp');
+    const refId = resolveNewCanvasRefId(ctx, input.refId, 'grp');
     const node: any = {
       refId,
       type: 'group' as const,
@@ -519,6 +554,7 @@ export const addImageTool: AgentTool = {
   parameters: {
     type: 'object',
     properties: {
+      refId: { type: 'string', description: 'Optional stable ID for batching dependent tool calls in the same response.' },
       url: { type: 'string', description: 'Image URL (http/https) or data URI.' },
       x: { type: 'number' },
       y: { type: 'number' },
@@ -533,7 +569,7 @@ export const addImageTool: AgentTool = {
     required: ['url', 'width', 'height'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const refId = ctx.newRefId('img');
+    const refId = resolveNewCanvasRefId(ctx, input.refId, 'img');
     const node: any = {
       refId,
       type: 'image' as const,

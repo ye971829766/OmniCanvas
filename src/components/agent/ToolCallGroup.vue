@@ -19,7 +19,10 @@
             class="timeline-row"
           >
             <div class="row-header">
-              <span class="row-bullet" :class="{ 'done': tool.done }"></span>
+              <span
+                class="row-bullet"
+                :class="{ done: tool.done && !isToolFailed(tool), failed: isToolFailed(tool) }"
+              ></span>
               <span class="row-label">{{ getToolLabel(tool.name) }}</span>
               <span v-if="getToolSummary(tool)" class="row-summary">{{ getToolSummary(tool) }}</span>
             </div>
@@ -43,6 +46,9 @@ const props = defineProps<{
 }>();
 
 const isRunning = computed(() => props.tools.some((t) => !t.done));
+const failedCount = computed(
+  () => props.tools.filter((tool) => isToolFailed(tool)).length,
+);
 const isExpanded = ref(false); // Default collapsed like Bolt/Claude
 
 // Auto-expand brief moments while actively executing
@@ -63,6 +69,10 @@ const actionLabelText = computed(() => {
     return `执行中 (${props.tools.length} 个操作)…`;
   }
 
+  if (failedCount.value) {
+    return `执行了 ${props.tools.length} 项操作 · ${failedCount.value} 项失败`;
+  }
+
   const labelCounts: Record<string, number> = {};
   for (const t of props.tools) {
     const label = getToolLabel(t.name);
@@ -80,7 +90,25 @@ const actionLabelText = computed(() => {
   return `使用了 ${props.tools.length} 个工具`;
 });
 
+function isToolFailed(tool: ToolCallItem) {
+  return Boolean(
+    tool.output?.error ||
+      tool.output?.status === "error" ||
+      tool.output?.status === "failed",
+  );
+}
+
 function getToolSummary(tool: ToolCallItem) {
+  const rawOutput = tool.output as any;
+  const output =
+    rawOutput &&
+    typeof rawOutput === 'object' &&
+    (rawOutput.type === 'json' || rawOutput.type === 'text') &&
+    'value' in rawOutput
+      ? rawOutput.value
+      : rawOutput;
+  if (output?.error) return truncate(String(output.error), 54);
+
   const input = tool.input;
   if (!input) return '';
   if (tool.name === 'add_text' && input.text) return `"${truncate(input.text, 18)}"`;
@@ -111,13 +139,13 @@ function truncate(s: string, n: number) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: var(--p-surface-100, #f4f4f5);
-  border: 1px solid var(--p-surface-200, #e4e4e7);
+  background: var(--agent-surface-hover, var(--p-surface-100, #f4f4f5));
+  border: 1px solid var(--agent-border-subtle, var(--p-surface-200, #e4e4e7));
   padding: 3px 10px;
   border-radius: 99px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--p-text-muted-color, #71717a);
+  color: var(--agent-text-secondary, var(--p-text-muted-color, #71717a));
   cursor: pointer;
   user-select: none;
   transition: all 0.18s ease;
@@ -147,7 +175,7 @@ function truncate(s: string, n: number) {
 
 
 .inline-action-btn:hover {
-  color: var(--p-text-color, #27272a);
+  color: var(--agent-text-primary, var(--p-text-color, #27272a));
 }
 
 .inline-spin-sparkle {
@@ -166,7 +194,7 @@ function truncate(s: string, n: number) {
 }
 
 .inline-action-text {
-  letter-spacing: -0.1px;
+  letter-spacing: 0;
 }
 
 .inline-arrow {
@@ -179,7 +207,7 @@ function truncate(s: string, n: number) {
 }
 
 .inline-action-btn:hover .inline-arrow {
-  color: var(--p-text-color, #3f3f46);
+  color: var(--agent-text-primary, var(--p-text-color, #3f3f46));
   transform: translateX(1px);
 }
 
@@ -192,7 +220,7 @@ function truncate(s: string, n: number) {
   margin-top: 4px;
   margin-left: 2px;
   padding-left: 10px;
-  border-left: 1.5px solid var(--p-surface-200, #e4e4e7);
+  border-left: 1.5px solid var(--agent-border-subtle, var(--p-surface-200, #e4e4e7));
   width: 100%;
 }
 
@@ -212,7 +240,7 @@ function truncate(s: string, n: number) {
   align-items: center;
   gap: 6px;
   font-size: 11.5px;
-  color: var(--p-text-muted-color, #71717a);
+  color: var(--agent-text-secondary, var(--p-text-muted-color, #71717a));
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 4px;
@@ -220,8 +248,8 @@ function truncate(s: string, n: number) {
 }
 
 .row-header:hover {
-  background: var(--p-surface-100, #f4f4f5);
-  color: var(--p-text-color, #18181b);
+  background: var(--agent-surface-hover, var(--p-surface-100, #f4f4f5));
+  color: var(--agent-text-primary, var(--p-text-color, #18181b));
 }
 
 .row-bullet {
@@ -236,17 +264,23 @@ function truncate(s: string, n: number) {
   background: #10b981;
 }
 
+.row-bullet.failed {
+  background: var(--accent-error, #dc2626);
+}
+
 .row-label {
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .row-summary {
   font-size: 11px;
-  color: var(--p-text-muted-color, #a1a1aa);
+  color: var(--agent-text-muted, var(--p-text-muted-color, #a1a1aa));
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 180px;
+  flex: 1;
 }
 
 .row-chevron {

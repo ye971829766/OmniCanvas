@@ -12,7 +12,7 @@
     "typescript": "^5.9.3"
   },
   "scripts": {
-    "dev": "bun --watch run src/main.ts",
+    "dev": "bun --use-system-ca --watch run src/main.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

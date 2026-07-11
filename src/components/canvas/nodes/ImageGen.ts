@@ -25,6 +25,7 @@ export class ImageGen extends Box {
   private _errorMessage!: string;
   private _taskId!: string;
   private _images!: string[];
+  public preserveGeneratedLayout = false;
 
   public get images() { return this._images; }
   public set images(val: string[]) {
@@ -110,18 +111,20 @@ export class ImageGen extends Box {
       errorMessage?: string;
       taskId?: string;
       images?: string[];
+      preserveGeneratedLayout?: boolean;
     },
   ) {
     super(data);
     this._prompt = data.prompt || "";
     this._model = data.model || "gpt-image-2";
-    this._size = data.size || "1024x1024";
-    this._quality = data.quality || "standard";
+    this._size = data.size || "auto";
+    this._quality = data.quality || "high";
     this._aspectRatio = data.aspectRatio || "1:1";
     this._generationStatus = data.generationStatus || "idle";
     this._errorMessage = data.errorMessage || "";
     this._taskId = data.taskId || "";
     this._images = data.images || [];
+    this.preserveGeneratedLayout = data.preserveGeneratedLayout === true;
     
     this.editable = true;
     this.widthRange = {
@@ -327,6 +330,7 @@ export class ImageGen extends Box {
     cloned.errorMessage = this.errorMessage;
     cloned.taskId = this.taskId;
     cloned.images = this.images ? [...this.images] : [];
+    cloned.preserveGeneratedLayout = this.preserveGeneratedLayout;
     cloned.updateVisuals();
     return cloned as this;
   }

@@ -5,6 +5,10 @@ import * as fs from 'fs';
 import { join } from 'path';
 import type { AgentAsset } from './agent-assets';
 import type { AgentPlan, AgentPlanStep } from './agent.protocol';
+import {
+  compactMessagesForModel,
+  compactMessagesForPersistence,
+} from './message-context';
 
 /**
  * Conversation history per session, persisted in SQLite database.
@@ -41,7 +45,7 @@ export class AgentMemory {
   private readonly logger = new Logger(AgentMemory.name);
 
   /** Approximate max tokens to keep in history. */
-  private readonly MAX_TOKENS = 200_000;
+  private readonly MAX_TOKENS = 40_000;
 
   /** Session TTL in ms (default 30 days). */
   private readonly SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -160,12 +164,19 @@ export class AgentMemory {
       this.logger.error(`Failed to update lastAccess for session ${sessionId}: ${e.message}`);
     }
     
-    return session.messages;
+    const compacted = this.truncateByTokens(
+      compactMessagesForPersistence(session.messages),
+    );
+    if (JSON.stringify(compacted) !== JSON.stringify(session.messages)) {
+      session.messages = compacted;
+      this.saveSession(sessionId, session);
+    }
+    return compacted;
   }
 
   set(sessionId: string, messages: ModelMessage[]): void {
-    const stripped = this.stripOldImages(messages);
-    const truncated = this.truncateByTokens(stripped);
+    const compacted = compactMessagesForPersistence(messages);
+    const truncated = this.truncateByTokens(compacted);
     
     let session = this.getSession(sessionId);
     if (session) {
@@ -174,6 +185,10 @@ export class AgentMemory {
       session = { messages: truncated, lastAccess: Date.now() };
     }
     this.saveSession(sessionId, session);
+  }
+
+  compactForModel(messages: ModelMessage[]): ModelMessage[] {
+    return compactMessagesForModel(messages);
   }
 
   reset(sessionId: string): void {
@@ -238,6 +253,7 @@ export class AgentMemory {
     tool: string,
     input: any,
     completed: boolean,
+    failed = false,
   ): AgentPlan | null {
     const session = this.getSession(sessionId);
     const plan = session?.plan;
@@ -255,7 +271,8 @@ export class AgentMemory {
       candidates.find((item) => item.status === 'pending');
     if (!step) return plan;
 
-    if (completed && step.completionTool === tool) step.status = 'completed';
+    if (failed) step.status = 'failed';
+    else if (completed && step.completionTool === tool) step.status = 'completed';
     else if (step.status === 'pending') step.status = 'in_progress';
     this.saveSession(sessionId, session);
     return plan;
@@ -265,6 +282,19 @@ export class AgentMemory {
     const session = this.getSession(sessionId);
     if (!session || !session.screenshot) return null;
     return this.readFileSync(session.screenshot);
+  }
+
+  consumeScreenshot(sessionId: string): string | null {
+    const session = this.getSession(sessionId);
+    if (!session?.screenshot) return null;
+    const screenshotPath = session.screenshot;
+    const image = this.readFileSync(screenshotPath);
+    session.screenshot = undefined;
+    if (fs.existsSync(screenshotPath)) {
+      try { fs.unlinkSync(screenshotPath); } catch {}
+    }
+    this.saveSession(sessionId, session);
+    return image;
   }
 
   setScreenshot(sessionId: string, base64: string): void {
@@ -355,13 +385,6 @@ export class AgentMemory {
     const asciiCount = text.length - cjkCount;
     return Math.ceil(cjkCount * 0.5 + asciiCount * 0.25) + imageTokens + 4; // +4 for message overhead
   }
-
-  private stripOldImages(messages: ModelMessage[]): ModelMessage[] {
-    // Preserve all image URLs and parts in full history without expiration stripping
-    return messages;
-  }
-
-
 
   /**
    * Truncate from the front, preserving the most recent messages,

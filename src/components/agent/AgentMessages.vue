@@ -7,13 +7,11 @@ import {
   type UseIncremarkOptions,
 } from "@incremark/vue";
 import { vStreamingDot } from "@/directives/vStreamingDot";
-import ToolActivity from "./ToolActivity.vue";
 import ToolCallCard from "./ToolCallCard.vue";
 import ToolCallGroup from "./ToolCallGroup.vue";
-import OptionPreviewCard from "./OptionPreviewCard.vue";
+import GeneratedMediaGallery from "./GeneratedMediaGallery.vue";
 import AgentPlanCard from "./AgentPlanCard.vue";
 import { Image } from "primevue";
-import OmniCanvasAvatar from "@/assets/plot_twist_avatar.jpg";
 import logoImg from "@/assets/logo.jpg";
 import type { ChatMessage, ToolCallItem } from "@/composables/useAgent";
 import { stripInternalToolErrors } from "@/composables/useAgent";
@@ -88,9 +86,11 @@ watch(
     props.messages
       .map(
         (message) =>
-          `${message.id}:${message.text.length}:${message.tools.length}:` +
+          `${message.id}:${message.text.length}:${message.liveText?.length || 0}:` +
+          `${message.blocks?.length || 0}:${message.tools.length}:` +
           `${message.tools.filter((tool) => tool.done).length}:` +
-          `${message.progress?.message || ""}`,
+          `${message.progress?.message || ""}:` +
+          `${message.plan?.steps.filter((step) => step.status === "completed").length || 0}`,
       )
       .join("|"),
   () => {
@@ -161,22 +161,19 @@ function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
 
   const flushGroup = () => {
     if (currentGroup.length > 0) {
-      // Find active tool or primary tool
-      const activeTool = currentGroup.find((t) => !t.done) || currentGroup[0];
-      const isGroupDone = currentGroup.every((t) => t.done);
-
-      // Render as a single clean action badge (e.g. "排版设计") instead of "使用了 X 个工具"
-      blocks.push({
-        type: "single",
-        tool: {
-          id: activeTool.id,
-          name: activeTool.name,
-          done: isGroupDone,
-          input: activeTool.input,
-          output: activeTool.output,
-        },
-        id: `blk_layout_${activeTool.id}`,
-      });
+      if (currentGroup.length === 1) {
+        blocks.push({
+          type: "single",
+          tool: currentGroup[0],
+          id: currentGroup[0].id,
+        });
+      } else {
+        blocks.push({
+          type: "group",
+          tools: [...currentGroup],
+          id: `blk_group_${currentGroup[0].id}`,
+        });
+      }
       currentGroup = [];
     }
   };
@@ -193,6 +190,7 @@ function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
       currentGroup.push(tool);
     }
   }
+  flushGroup();
   return blocks;
 }
 
@@ -201,34 +199,43 @@ function filterBlocks(blocks: any[]): any[] {
   const result: any[] = [];
 
   for (const blk of blocks) {
-    if (blk.type === "text") {
+    if (blk.type === "text" || blk.type === "update") {
       if (blk.text && stripInternalToolErrors(blk.text).trim()) {
         result.push(blk);
       }
+    } else if (blk.type === "tools" && blk.tools?.length) {
+      result.push(blk);
+    } else if (blk.type === "plan" && blk.plan?.steps) {
+      result.push(blk);
     }
   }
 
   return result;
 }
 
-function isLastStreamingTextPart(
-  blk: any,
-  blocks: any[],
-  partIdx: number,
-  parts: ParsedMessagePart[],
-  isStreaming: boolean,
-): boolean {
-  if (!isStreaming || !blocks || !blocks.length) return false;
-  const textBlocks = blocks.filter((b) => b.type === "text" && b.text);
-  if (!textBlocks.length) return false;
-  if (textBlocks[textBlocks.length - 1].id !== blk.id) return false;
+function hasBlockType(message: ChatMessage, type: string): boolean {
+  return Boolean(message.blocks?.some((block) => block.type === type));
+}
 
-  for (let i = parts.length - 1; i >= 0; i--) {
-    if (parts[i].type === "text") {
-      return i === partIdx;
-    }
-  }
-  return false;
+function formatDuration(ms?: number): string {
+  if (!ms || ms < 0) return "";
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return remaining ? `${minutes}m ${remaining}s` : `${minutes}m`;
+}
+
+function getRunDuration(message: ChatMessage): string {
+  if (message.streaming) return formatDuration((props.elapsedTime || 0) * 1000);
+  return formatDuration(message.elapsedMs);
+}
+
+function getRunLabel(message: ChatMessage): string {
+  if (message.streaming || message.runStatus === "running") return "处理中";
+  if (message.runStatus === "stopped") return "已停止";
+  if (message.error || message.runStatus === "failed") return "未完成";
+  return "已处理";
 }
 
 interface ParsedMessagePart {
@@ -395,150 +402,82 @@ function parseUserText(text: string) {
           </div>
         </div>
 
-        <!-- assistant -->
-        <div v-else class="flex flex-col gap-2">
-          <div class="flex items-start gap-1">
-            <div
-              class="avatar-ring shrink-0 mt-0.5"
-              :class="{ 'is-streaming': m.streaming }"
-            >
-              <img
-                class="agent-avatar"
-                :src="OmniCanvasAvatar"
-                alt="OmniCanvas"
-                width="20"
-                height="20"
-                style="width: 20px; height: 20px; object-fit: cover"
+        <!-- assistant run, rendered as an execution record instead of a chat bubble -->
+        <div v-else class="assistant-run">
+          <div class="run-meta" :class="`is-${m.runStatus || 'completed'}`">
+            <span>{{ getRunLabel(m) }}</span>
+            <span v-if="getRunDuration(m)" class="run-duration">
+              {{ getRunDuration(m) }}
+            </span>
+          </div>
+          <div class="run-divider" />
+
+          <div
+            v-if="m.streaming && (m.progress?.message || m.tools.some((tool) => !tool.done))"
+            class="run-progress"
+            role="status"
+            aria-live="polite"
+          >
+            {{ getThinkingText(m) }}
+          </div>
+
+          <div v-if="m.blocks?.length" class="run-blocks">
+            <template v-for="blk in filterBlocks(m.blocks)" :key="blk.id">
+              <div v-if="blk.type === 'update'" class="run-update">
+                <span class="run-update-dot" aria-hidden="true" />
+                <IncremarkContent
+                  class="incremark update-markdown"
+                  :content="stripInternalToolErrors(blk.text)"
+                  :is-finished="true"
+                  :incremark-options="getIncremarkOptions(false)"
+                />
+              </div>
+
+              <AgentPlanCard
+                v-else-if="blk.type === 'plan'"
+                :plan="blk.plan"
               />
-            </div>
-            <div class="flex-1 min-w-0 items-center">
-              <!--    Inline thinking indicator right next to avatar when AI is actively thinking       -->
+
               <div
-                class="inline-thinking-header"
-                role="status"
-                aria-live="polite"
-                v-if="
-                  m.streaming &&
-                  (m.progress?.message ||
-                    !m.text ||
-                    !m.text.trim() ||
-                    m.tools?.some((t) => !t.done))
-                "
-                aria-label="AI 正在思考"
-              >
-                <span class="thinking-label">{{ getThinkingText(m) }}</span>
-              </div>
-
-
-              <!-- Interleaved Blocks Rendering (Text -> Tool -> Text -> Tool) -->
-              <AgentPlanCard v-if="m.plan" :plan="m.plan" />
-              <div
-                v-if="m.blocks && m.blocks.length"
-                class="flex flex-col gap-1.5"
-              >
-                <template v-for="blk in filterBlocks(m.blocks)" :key="blk.id">
-                  <!-- Text Block -->
-                  <div
-                    v-if="
-                      blk.type === 'text' &&
-                      blk.text &&
-                      stripInternalToolErrors(blk.text).trim()
-                    "
-                    class="agent-bubble-ai"
-                  >
-                    <template
-                      v-for="(part, idx) in parseMessageText(blk.text)"
-                      :key="idx"
-                    >
-                      <IncremarkContent
-                        v-if="
-                          part.type === 'text' &&
-                          typeof part.content === 'string'
-                        "
-                        v-streaming-dot="
-                          isLastStreamingTextPart(
-                            blk,
-                            m.blocks,
-                            idx,
-                            parseMessageText(blk.text),
-                            !!m.streaming,
-                          )
-                        "
-                        class="incremark markdown-body"
-                        :content="part.content"
-                        :is-finished="!m.streaming"
-                        :incremark-options="getIncremarkOptions(!!m.streaming)"
-                      />
-                      <div
-                        v-else-if="part.type === 'grid'"
-                        class="inspiration-grid"
-                      >
-                        <div
-                          v-for="(url, uidx) in part.content"
-                          :key="uidx"
-                          class="inspiration-item"
-                        >
-                          <img :src="url" class="inspiration-img" />
-                        </div>
-                      </div>
-                      <!-- Interactive Image Ref Tag -->
-                      <button
-                        v-else-if="part.type === 'image_ref' && part.refId"
-                        class="inline-image-tag-btn"
-                        @click="emit('zoomToNode', part.refId)"
-                      >
-                        {{ part.content }}
-                      </button>
-                    </template>
-                  </div>
-
-                  <!-- Tools Block -->
-                  <div
-                    v-else-if="
-                      blk.type === 'tools' && blk.tools && blk.tools.length
-                    "
-                    class="tool-cards"
-                  >
-                    <template
-                      v-for="block in groupTools(blk.tools)"
-                      :key="block.id"
-                    >
-                      <ToolCallGroup
-                        v-if="block.type === 'group' && block.tools"
-                        :tools="block.tools"
-                      />
-                      <ToolCallCard
-                        v-else-if="block.type === 'single' && block.tool"
-                        :tool="block.tool"
-                      />
-                    </template>
-                  </div>
-                </template>
-              </div>
-
-              <!-- Legacy Fallback -->
-              <div
-                v-else-if="m.text && stripInternalToolErrors(m.text).trim()"
-                class="agent-bubble-ai"
+                v-else-if="blk.type === 'tools' && blk.tools?.length"
+                class="tool-cards"
               >
                 <template
-                  v-for="(part, idx) in parseMessageText(m.text)"
+                  v-for="block in groupTools(blk.tools)"
+                  :key="block.id"
+                >
+                  <ToolCallGroup
+                    v-if="block.type === 'group' && block.tools"
+                    :tools="block.tools"
+                  />
+                  <ToolCallCard
+                    v-else-if="block.type === 'single' && block.tool"
+                    :tool="block.tool"
+                  />
+                </template>
+                <GeneratedMediaGallery
+                  :tools="blk.tools"
+                  :node-states="nodeStates"
+                  @zoom="emit('zoomToNode', $event)"
+                />
+              </div>
+
+              <div
+                v-else-if="blk.type === 'text'"
+                class="agent-bubble-ai run-final"
+              >
+                <template
+                  v-for="(part, idx) in parseMessageText(blk.text)"
                   :key="idx"
                 >
                   <IncremarkContent
-                    v-if="
-                      part.type === 'text' && typeof part.content === 'string'
-                    "
-                    v-streaming-dot="!!m.streaming"
+                    v-if="part.type === 'text' && typeof part.content === 'string'"
                     class="incremark markdown-body"
                     :content="part.content"
-                    :is-finished="!m.streaming"
-                    :incremark-options="getIncremarkOptions(!!m.streaming)"
+                    :is-finished="true"
+                    :incremark-options="getIncremarkOptions(false)"
                   />
-                  <div
-                    v-else-if="part.type === 'grid'"
-                    class="inspiration-grid"
-                  >
+                  <div v-else-if="part.type === 'grid'" class="inspiration-grid">
                     <div
                       v-for="(url, uidx) in part.content"
                       :key="uidx"
@@ -547,7 +486,6 @@ function parseUserText(text: string) {
                       <img :src="url" class="inspiration-img" />
                     </div>
                   </div>
-                  <!-- Interactive Image Ref Tag -->
                   <button
                     v-else-if="part.type === 'image_ref' && part.refId"
                     class="inline-image-tag-btn"
@@ -557,56 +495,59 @@ function parseUserText(text: string) {
                   </button>
                 </template>
               </div>
+            </template>
+          </div>
 
-              <!-- Structured Error Card (Reference Image 5 style) -->
-              <div v-if="m.error" class="structured-error-card mt-2">
-                <div class="error-card-header">
-                  <span class="error-card-title">糟糕！请求未能完成</span>
-                </div>
-                <p class="error-card-desc">{{ m.error }}</p>
-                <div class="error-card-actions">
-                  <button class="error-retry-btn" @click="emit('retry')">
-                    <RotateCcw :size="12" />
-                    <span>重试</span>
-                  </button>
-                </div>
-              </div>
+          <AgentPlanCard
+            v-if="m.plan && !hasBlockType(m, 'plan')"
+            :plan="m.plan"
+          />
 
-              <!-- Fallback active-tool status line -->
-              <ToolActivity
-                v-if="!m.tools.length"
-                :tools="m.tools"
-                :streaming="m.streaming"
-                :message-text="m.text"
-                :node-states="nodeStates"
-                @zoom="emit('zoomToNode', $event)"
-              />
+          <div v-if="m.streaming && m.liveText?.trim()" class="run-live-update">
+            <IncremarkContent
+              v-streaming-dot="true"
+              class="incremark update-markdown"
+              :content="stripInternalToolErrors(m.liveText)"
+              :is-finished="false"
+              :incremark-options="getIncremarkOptions(true)"
+            />
+          </div>
 
-              <!-- Generated media cards -->
-              <div
-                v-if="m.tools && m.tools.length"
-                class="flex flex-col gap-2 mt-2"
-              >
-                <template v-for="tool in m.tools" :key="tool.id">
-                  <OptionPreviewCard
-                    v-if="
-                      (tool.name === 'generate_image' ||
-                        tool.name === 'generate_video' ||
-                        tool.name === 'edit_image' ||
-                        tool.name === 'remove_background' ||
-                        tool.name === 'inpaint_image' ||
-                        tool.name === 'upscale_image') &&
-                      tool.output?.refId &&
-                      nodeStates[tool.output.refId]
-                    "
-                    :refId="tool.output.refId"
-                    :state="nodeStates[tool.output.refId]"
-                    @zoom="emit('zoomToNode', $event)"
-                  />
-                </template>
-              </div>
+          <div
+            v-if="
+              !m.blocks?.length &&
+              m.text &&
+              stripInternalToolErrors(m.text).trim()
+            "
+            class="agent-bubble-ai run-final"
+          >
+            <IncremarkContent
+              class="incremark markdown-body"
+              :content="stripInternalToolErrors(m.text)"
+              :is-finished="!m.streaming"
+              :incremark-options="getIncremarkOptions(!!m.streaming)"
+            />
+          </div>
+
+          <div v-if="m.error" class="structured-error-card mt-2">
+            <div class="error-card-header">
+              <span class="error-card-title">任务未能完成</span>
+            </div>
+            <p class="error-card-desc">{{ m.error }}</p>
+            <div class="error-card-actions">
+              <button class="error-retry-btn" @click="emit('retry')">
+                <RotateCcw :size="12" />
+                <span>重试</span>
+              </button>
             </div>
           </div>
+
+          <GeneratedMediaGallery
+            v-if="m.tools.length && !hasBlockType(m, 'tools')"
+            :tools="m.tools"
+            :node-states="nodeStates"
+            @zoom="emit('zoomToNode', $event)"
+          />
         </div>
       </template>
     </AutoScrollContainer>
@@ -888,6 +829,141 @@ function parseUserText(text: string) {
   animation: msg-enter-ai 0.3s cubic-bezier(0, 0, 0.2, 1) both;
 }
 
+.assistant-run {
+  --agent-text-primary: var(--p-text-color, #18181b);
+  --agent-text-secondary: #52525b;
+  --agent-text-muted: #71717a;
+  --agent-text-disabled: #a1a1aa;
+  --agent-border-subtle: var(--p-surface-200, #e4e4e7);
+  --agent-border-strong: var(--p-surface-300, #d4d4d8);
+  --agent-surface: var(--p-surface-50, #fafafa);
+  --agent-surface-raised: var(--p-surface-0, #ffffff);
+  --agent-surface-hover: var(--p-surface-100, #f4f4f5);
+
+  --text-primary: var(--agent-text-primary);
+  --text-secondary: var(--agent-text-secondary);
+  --text-muted: var(--agent-text-muted);
+  --text-disabled: var(--agent-text-disabled);
+  --surface-panel: var(--agent-surface-raised);
+  --surface-sunken: var(--agent-surface);
+  --surface-hover: var(--agent-surface-hover);
+  --surface-active: var(--agent-border-subtle);
+  --border-default: var(--agent-border-subtle);
+  --border-subtle: var(--agent-border-subtle);
+  --border-strong: var(--agent-border-strong);
+
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 4px;
+}
+
+.run-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--agent-text-muted);
+  font-size: 11.5px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-meta.is-failed,
+.run-meta.is-stopped {
+  color: var(--accent-error, #dc2626);
+}
+
+.run-duration {
+  color: var(--agent-text-disabled);
+}
+
+.run-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--agent-border-subtle);
+}
+
+.run-progress {
+  color: var(--agent-text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.run-blocks {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.run-update {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  color: var(--agent-text-secondary);
+}
+
+.run-update-dot {
+  width: 4px;
+  height: 4px;
+  margin: 8px 0 0 2px;
+  border-radius: 50%;
+  background: var(--agent-text-muted);
+}
+
+.update-markdown {
+  min-width: 0;
+  color: var(--agent-text-secondary);
+  font-size: 12.5px;
+  line-height: 1.58;
+  overflow-wrap: anywhere;
+}
+
+.update-markdown :deep(p),
+.update-markdown :deep(li),
+.update-markdown :deep(ul),
+.update-markdown :deep(ol) {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0;
+}
+
+.update-markdown :deep(strong) {
+  color: var(--agent-text-primary);
+  font-weight: 600;
+}
+
+.update-markdown :deep(em) {
+  color: inherit;
+}
+
+.update-markdown :deep(code) {
+  color: var(--agent-text-primary);
+  font-size: 0.92em;
+  background: var(--agent-surface-hover);
+  border: 1px solid var(--agent-border-subtle);
+  border-radius: 4px;
+  padding: 0.08em 0.3em;
+}
+
+.update-markdown :deep(ul),
+.update-markdown :deep(ol) {
+  padding-left: 1.15rem;
+}
+
+.run-live-update {
+  padding-left: 16px;
+}
+
+.run-final {
+  padding-top: 2px;
+}
+
 @keyframes msg-enter-ai {
   from {
     opacity: 0;
@@ -901,6 +977,24 @@ function parseUserText(text: string) {
 
 /* ── ChatGPT-style Pulsing Streaming Dot (Inline at text tail) ────── */
 .incremark {
+  --incremark-color-text-primary: var(--agent-text-primary, #18181b);
+  --incremark-color-text-secondary: var(--agent-text-secondary, #52525b);
+  --incremark-color-text-tertiary: var(--agent-text-muted, #71717a);
+  --incremark-color-background-base: var(--agent-surface-raised, #ffffff);
+  --incremark-color-background-elevated: var(--agent-surface, #fafafa);
+  --incremark-color-border-default: var(--agent-border-subtle, #e4e4e7);
+  --incremark-color-border-subtle: var(--agent-border-subtle, #e4e4e7);
+  --incremark-color-border-strong: var(--agent-border-strong, #d4d4d8);
+  --incremark-color-code-inline-background: var(--agent-surface-hover, #f4f4f5);
+  --incremark-color-code-inline-text: var(--agent-text-primary, #18181b);
+  --incremark-color-interactive-link: var(--agent-text-primary, #18181b);
+  --incremark-typography-font-size-base: 14px;
+  --incremark-typography-font-size-heading-h1: 15px;
+  --incremark-typography-font-size-heading-h2: 14.5px;
+  --incremark-typography-font-size-heading-h3: 14px;
+  --incremark-typography-font-size-heading-h4: 14px;
+  --incremark-typography-font-size-heading-h5: 14px;
+  --incremark-typography-font-size-heading-h6: 14px;
   position: relative;
 }
 
@@ -932,12 +1026,25 @@ function parseUserText(text: string) {
 }
 
 .markdown-body {
-  font-size: var(--text-base);
-  line-height: 1.65;
-  color: var(--p-text-color, #18181b);
+  --markdown-border: var(--agent-border-subtle);
+  --markdown-border-strong: var(--agent-border-strong);
+  --markdown-surface: var(--agent-surface);
+  --markdown-surface-raised: var(--agent-surface-raised);
+  --markdown-muted: var(--agent-text-muted);
+
+  min-width: 0;
+  max-width: 100%;
+  font-size: 14px;
+  line-height: 1.64;
+  color: var(--agent-text-primary);
+  overflow-wrap: anywhere;
+  text-rendering: optimizeLegibility;
 }
 
 .markdown-body :deep(p) {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
   margin: 0 0 8px;
 }
 
@@ -947,50 +1054,170 @@ function parseUserText(text: string) {
 
 .markdown-body :deep(ul),
 .markdown-body :deep(ol) {
-  margin: 6px 0 8px;
-  padding-left: 18px;
+  margin: 5px 0 9px;
+  padding-left: 1.25rem;
 }
 
 .markdown-body :deep(li) {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
   margin: 2px 0;
-  padding-left: 2px;
+  padding-left: 0.1rem;
+}
+
+.markdown-body :deep(li::marker) {
+  color: var(--markdown-muted);
+  font-size: 0.9em;
+}
+
+.markdown-body :deep(li > p) {
+  margin: 0;
+}
+
+.markdown-body :deep(li > ul),
+.markdown-body :deep(li > ol) {
+  margin: 3px 0;
+}
+
+.markdown-body :deep(.incremark-list.task-list) {
+  padding-left: 0;
+  list-style: none;
+}
+
+.markdown-body :deep(.incremark-list-item.task-item) {
+  padding-left: 0;
+}
+
+.markdown-body :deep(.task-label) {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.markdown-body :deep(.task-label .checkbox) {
+  width: 15px;
+  height: 15px;
+  margin: 4px 0 0;
+  accent-color: var(--p-primary-color, #18181b);
 }
 
 .markdown-body :deep(strong) {
-  color: var(--text-primary);
-  font-weight: 660;
+  color: var(--agent-text-primary);
+  font-weight: 600;
+}
+
+.markdown-body :deep(em) {
+  color: var(--agent-text-secondary);
+}
+
+.markdown-body :deep(a) {
+  color: var(--agent-text-primary);
+  font-weight: 540;
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(
+    in srgb,
+    var(--p-text-color, #18181b) 32%,
+    transparent
+  );
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  transition:
+    color var(--dur-fast, 150ms) ease,
+    text-decoration-color var(--dur-fast, 150ms) ease;
+}
+
+.markdown-body :deep(a:hover) {
+  text-decoration-color: currentColor;
+}
+
+.markdown-body :deep(a:focus-visible) {
+  outline: 2px solid var(--p-primary-color, #18181b);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ── Markdown Tables ────────────────────────────────────────────── */
+.markdown-body :deep(.incremark-table-wrapper) {
+  max-width: 100%;
+  margin: 12px 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--markdown-border);
+  border-radius: 7px;
+  background: var(--markdown-surface-raised);
+  scrollbar-width: thin;
+  scrollbar-color: var(--markdown-border-strong) transparent;
+}
+
+.markdown-body :deep(.incremark-table-wrapper::-webkit-scrollbar) {
+  height: 6px;
+}
+
+.markdown-body :deep(.incremark-table-wrapper::-webkit-scrollbar-thumb) {
+  background: var(--markdown-border-strong);
+  border-radius: 999px;
+}
+
 .markdown-body :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 10px 0;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
   display: table;
 }
 
 .markdown-body :deep(thead) {
-  background: var(--p-surface-100, #f4f4f5);
+  background: var(--markdown-surface);
 }
 
 .markdown-body :deep(th),
 .markdown-body :deep(td) {
-  padding: 7px 11px;
-  border: 1px solid var(--p-surface-200, #e4e4e7);
+  padding: 8px 10px;
+  border: 0;
+  border-right: 1px solid var(--markdown-border);
+  border-bottom: 1px solid var(--markdown-border);
   text-align: left;
-  word-break: break-word;
+  vertical-align: top;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .markdown-body :deep(th) {
-  font-weight: 650;
+  font-weight: 680;
   color: var(--p-text-color, #18181b);
-  background: var(--p-surface-100, #f4f4f5);
+  background: var(--markdown-surface);
+  white-space: nowrap;
 }
 
-.markdown-body :deep(tr:nth-child(even)) {
-  background: var(--p-surface-50, #fafafa);
+.markdown-body :deep(th:last-child),
+.markdown-body :deep(td:last-child) {
+  border-right: 0;
+}
+
+.markdown-body :deep(tbody tr:last-child td) {
+  border-bottom: 0;
+}
+
+.markdown-body :deep(tbody tr) {
+  background: var(--markdown-surface-raised);
+  transition: background-color var(--dur-fast, 150ms) ease;
+}
+
+.markdown-body :deep(tbody tr:nth-child(even)) {
+  background: color-mix(
+    in srgb,
+    var(--markdown-surface) 58%,
+    var(--markdown-surface-raised)
+  );
+}
+
+.markdown-body :deep(tbody tr:hover) {
+  background: var(--markdown-surface);
 }
 
 /* ── Headings ────────────────────────────────────────────────────── */
@@ -1000,61 +1227,80 @@ function parseUserText(text: string) {
 .markdown-body :deep(h4),
 .markdown-body :deep(h5),
 .markdown-body :deep(h6) {
-  font-weight: 700;
-  color: var(--p-text-color, #18181b);
-  margin: 12px 0 6px;
-  line-height: 1.35;
+  font-weight: 600;
+  color: var(--agent-text-primary);
+  margin: 14px 0 6px;
+  line-height: 1.42;
+  letter-spacing: 0;
+  text-wrap: pretty;
 }
 
 .markdown-body :deep(h1) {
-  font-size: 1.25em;
-  border-bottom: 1px solid var(--p-surface-200, #e4e4e7);
-  padding-bottom: 4px;
+  font-size: 15px;
 }
 .markdown-body :deep(h2) {
-  font-size: 1.15em;
+  font-size: 14.5px;
 }
 .markdown-body :deep(h3) {
-  font-size: 1.05em;
+  font-size: 14px;
 }
-.markdown-body :deep(h4) {
-  font-size: 1em;
+.markdown-body :deep(h4),
+.markdown-body :deep(h5),
+.markdown-body :deep(h6) {
+  font-size: 14px;
+}
+
+.markdown-body :deep(h1:first-child),
+.markdown-body :deep(h2:first-child),
+.markdown-body :deep(h3:first-child),
+.markdown-body :deep(h4:first-child),
+.markdown-body :deep(h5:first-child),
+.markdown-body :deep(h6:first-child) {
+  margin-top: 0;
 }
 
 /* ── Code & Pre ──────────────────────────────────────────────────── */
 .markdown-body :deep(code) {
-  font-family: var(--font-family-mono, monospace);
-  font-size: 0.88em;
-  background: var(--p-surface-100, #f4f4f5);
-  color: #7c3aed;
-  padding: 2px 5px;
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.86em;
+  background: var(--markdown-surface);
+  color: var(--p-text-color, #18181b);
+  padding: 0.16em 0.38em;
+  border: 1px solid var(--markdown-border);
   border-radius: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .markdown-body :deep(.incremark-code) {
-  margin: 8px 0;
-  border-radius: 8px;
+  margin: 12px 0;
+  border: 1px solid #3f3f46;
+  border-radius: 7px;
   overflow: hidden;
   background: #18181b;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .markdown-body :deep(.code-header) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 12px;
-  background: #27272a;
+  padding: 5px 8px 5px 12px;
+  background: #202024;
   color: #a1a1aa;
-  font-size: 12px;
-  font-family: var(--font-family-mono, monospace);
-  min-height: 32px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  min-height: 34px;
+  border-bottom: 1px solid #3f3f46;
 }
 
 .markdown-body :deep(.code-header .language) {
   color: #a1a1aa;
   text-transform: lowercase;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .markdown-body :deep(.code-btn),
@@ -1063,10 +1309,10 @@ function parseUserText(text: string) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
   padding: 0;
   border: none;
   background: transparent;
@@ -1075,8 +1321,11 @@ function parseUserText(text: string) {
   cursor: pointer;
   outline: none;
   box-shadow: none;
-  opacity: 0.7;
-  transition: all 0.15s ease;
+  opacity: 0.82;
+  transition:
+    background-color var(--dur-fast, 150ms) ease,
+    color var(--dur-fast, 150ms) ease,
+    opacity var(--dur-fast, 150ms) ease;
 }
 
 .markdown-body :deep(.code-btn:hover),
@@ -1084,6 +1333,14 @@ function parseUserText(text: string) {
 .markdown-body :deep(.incremark-code-copy-btn:hover) {
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
+  opacity: 1;
+}
+
+.markdown-body :deep(.code-btn:focus-visible),
+.markdown-body :deep(button.code-btn:focus-visible),
+.markdown-body :deep(.incremark-code-copy-btn:focus-visible) {
+  outline: 2px solid #a1a1aa;
+  outline-offset: 1px;
   opacity: 1;
 }
 
@@ -1101,33 +1358,124 @@ function parseUserText(text: string) {
 .markdown-body :deep(pre) {
   background: #18181b;
   color: #f4f4f5;
-  padding: 10px 12px;
+  max-width: 100%;
+  padding: 12px 14px;
   border-radius: 0 0 8px 8px;
   overflow-x: auto;
   margin: 0;
+  font-size: 12.5px;
+  line-height: 1.62;
+  tab-size: 2;
+  scrollbar-width: thin;
+  scrollbar-color: #52525b transparent;
 }
 
 .markdown-body :deep(pre code) {
   background: transparent;
   color: inherit;
   padding: 0;
+  border: 0;
   border-radius: 0;
+  font-size: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 /* ── Blockquote & HR ─────────────────────────────────────────────── */
 .markdown-body :deep(blockquote) {
-  margin: 8px 0;
-  padding: 4px 12px;
-  border-left: 3px solid #10b981;
-  color: var(--p-text-muted-color, #71717a);
-  background: var(--p-surface-50, #fafafa);
-  border-radius: 0 6px 6px 0;
+  margin: 11px 0;
+  padding: 3px 0 3px 12px;
+  border-left: 0;
+  color: var(--markdown-muted);
+  background: transparent;
+  border-radius: 0;
+}
+
+.markdown-body :deep(blockquote::before) {
+  width: 2px;
+  border-radius: 1px;
+  background: var(--markdown-border-strong);
+}
+
+.markdown-body :deep(blockquote p) {
+  margin-bottom: 6px;
+}
+
+.markdown-body :deep(blockquote p:last-child) {
+  margin-bottom: 0;
 }
 
 .markdown-body :deep(hr) {
   border: none;
-  border-top: 1px solid var(--p-surface-200, #e4e4e7);
-  margin: 12px 0;
+  border-top: 1px solid var(--markdown-border);
+  margin: 16px 0;
+}
+
+.markdown-body :deep(img) {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 280px;
+  height: auto;
+  margin: 12px auto;
+  object-fit: contain;
+  border: 1px solid var(--markdown-border);
+  border-radius: 7px;
+  background: var(--markdown-surface);
+}
+
+.markdown-body :deep(a > img) {
+  transition:
+    border-color var(--dur-fast, 150ms) ease,
+    box-shadow var(--dur-fast, 150ms) ease;
+}
+
+.markdown-body :deep(a:hover > img) {
+  border-color: var(--markdown-border-strong);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.04));
+}
+
+.markdown-body :deep(kbd) {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 5px;
+  border: 1px solid var(--markdown-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--markdown-surface-raised);
+  color: var(--p-text-color, #18181b);
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.78em;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.markdown-body :deep(del) {
+  color: var(--markdown-muted);
+}
+
+.markdown-body :deep(mark) {
+  padding: 0 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, #facc15 28%, transparent);
+  color: inherit;
+}
+
+@media (max-width: 520px) {
+  .markdown-body :deep(h1) {
+    font-size: 15px;
+  }
+
+  .markdown-body :deep(h2) {
+    font-size: 14px;
+  }
+
+  .markdown-body :deep(pre) {
+    padding: 11px 12px;
+    font-size: 12px;
+  }
 }
 
 .agent-avatar {
@@ -1543,9 +1891,29 @@ function parseUserText(text: string) {
    DARK MODE OVERRIDES  (.p-dark selector mirrors PrimeVue convention)
    ═══════════════════════════════════════════════════════════════════ */
 
+:global(.p-dark .assistant-run) {
+  --agent-text-primary: #f0f0f2;
+  --agent-text-secondary: #b7b7bf;
+  --agent-text-muted: #92929c;
+  --agent-text-disabled: #70707a;
+  --agent-border-subtle: #303036;
+  --agent-border-strong: #45454d;
+  --agent-surface: #202024;
+  --agent-surface-raised: #18181b;
+  --agent-surface-hover: #27272c;
+}
+
 :global(.p-dark .agent-bubble-user) {
   background: #27272a;
   color: #fafafa;
+}
+
+:global(.p-dark .markdown-body) {
+  --markdown-border: var(--agent-border-subtle);
+  --markdown-border-strong: var(--agent-border-strong);
+  --markdown-surface: var(--agent-surface);
+  --markdown-surface-raised: var(--agent-surface-raised);
+  --markdown-muted: var(--agent-text-muted);
 }
 
 :global(.p-dark .agent-bubble-ai),
@@ -1558,11 +1926,24 @@ function parseUserText(text: string) {
 :global(.p-dark .markdown-body h4),
 :global(.p-dark .markdown-body h5),
 :global(.p-dark .markdown-body h6) {
-  color: #f4f4f6;
+  color: var(--agent-text-primary);
 }
 
 :global(.p-dark .markdown-body strong) {
-  color: #fafafa;
+  color: var(--agent-text-primary);
+}
+
+:global(.p-dark .run-meta),
+:global(.p-dark .run-update),
+:global(.p-dark .update-markdown),
+:global(.p-dark .update-markdown p),
+:global(.p-dark .update-markdown li) {
+  color: var(--agent-text-secondary);
+}
+
+:global(.p-dark .update-markdown strong),
+:global(.p-dark .update-markdown code) {
+  color: var(--agent-text-primary);
 }
 
 :global(.p-dark .markdown-body span[style*="color"]),
@@ -1571,31 +1952,61 @@ function parseUserText(text: string) {
 }
 
 :global(.p-dark .markdown-body th) {
-  background: #27272a;
+  background: #202024;
   color: #fafafa;
 }
 
 :global(.p-dark .markdown-body th),
 :global(.p-dark .markdown-body td) {
-  border-color: #27272a;
+  border-color: #3f3f46;
 }
 
-:global(.p-dark .markdown-body tr:nth-child(even)) {
+:global(.p-dark .markdown-body tbody tr) {
   background: #18181b;
+}
+
+:global(.p-dark .markdown-body tbody tr:nth-child(even)) {
+  background: #1d1d21;
+}
+
+:global(.p-dark .markdown-body tbody tr:hover) {
+  background: #27272a;
 }
 
 :global(.p-dark .markdown-body code) {
   background: #27272a;
-  color: #c4b5fd;
+  color: #f4f4f5;
+  border-color: #3f3f46;
+}
+
+:global(.p-dark .markdown-body pre code) {
+  background: transparent;
+  color: inherit;
+  border: 0;
 }
 
 :global(.p-dark .markdown-body blockquote) {
-  background: #18181b;
+  background: transparent;
   color: #a1a1aa;
 }
 
+:global(.p-dark .markdown-body blockquote::before) {
+  background: #52525b;
+}
+
 :global(.p-dark .markdown-body hr) {
-  border-top-color: #27272a;
+  border-top-color: #3f3f46;
+}
+
+:global(.p-dark .markdown-body img) {
+  background: #18181b;
+  border-color: #3f3f46;
+}
+
+:global(.p-dark .markdown-body kbd) {
+  background: #27272a;
+  color: #f4f4f5;
+  border-color: #52525b;
 }
 
 :global(.p-dark .empty-title) {

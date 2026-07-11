@@ -18,6 +18,7 @@ import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { VideoGen } from "@/components/canvas/nodes/VideoGen";
 import { VideoNode } from "@/components/canvas/nodes/VideoNode";
 import { getWorkspaceCanvas, updateWorkspaceCanvas } from "@/utils/api";
+import { applyImagePaintMode } from "@/utils/leaferImage";
 
 const tagClassMap: Record<string, any> = {
   Rect,
@@ -190,6 +191,7 @@ export function useCanvasHistory(
       data.errorMessage = node.errorMessage;
       data.taskId = node.taskId;
       data.images = node.images;
+      data.preserveGeneratedLayout = node.preserveGeneratedLayout === true;
       delete data.children;
     } else if (data.tag === "VideoGen") {
       data.prompt = node.prompt;
@@ -239,6 +241,7 @@ export function useCanvasHistory(
       const Constructor = tagClassMap[data.tag];
       if (Constructor) {
         child = new Constructor(dataCopy);
+        if (data.tag === "Image") applyImagePaintMode(child);
       } else {
         child = new Group(dataCopy);
       }
@@ -260,6 +263,7 @@ export function useCanvasHistory(
       if (data.taskId) child.taskId = data.taskId;
       if (data.generationStatus) child.generationStatus = data.generationStatus;
       if (data.generationType) child.generationType = data.generationType;
+      if (data.preserveGeneratedLayout) child.preserveGeneratedLayout = true;
       if (data.refId) child.refId = data.refId;
     }
 
@@ -478,7 +482,12 @@ export function useCanvasHistory(
         continue;
       }
       const patch = buildPatch(targetData, existingData);
-      if (Object.keys(patch).length) existing.set(patch);
+      if (Object.keys(patch).length) {
+        existing.set(patch);
+        if (targetData.tag === "Image" && "url" in patch) {
+          applyImagePaintMode(existing);
+        }
+      }
     }
 
     restoreSelection(currentMap, targetState.selectedHistoryIds);

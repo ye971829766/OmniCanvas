@@ -1,4 +1,5 @@
 import type { ToolContext } from "./tool.interface";
+import { sanitizeCanvasNodeForAgent } from "./canvas-context";
 
 export type AgentCanvasNode = Record<string, any> & {
   refId: string;
@@ -63,13 +64,14 @@ function inferRole(node: AgentCanvasNode, frame: AgentFrameState): string {
 }
 
 function normalizeCanvasNode(node: any, frame: AgentFrameState): AgentCanvasNode | null {
-  const refId = typeof node?.refId === "string" ? node.refId : "";
-  if (!refId) return null;
+  const sanitized = sanitizeCanvasNodeForAgent(node);
+  if (!sanitized || typeof sanitized.refId !== "string") return null;
+  const refId = sanitized.refId;
   const normalized: AgentCanvasNode = {
-    ...node,
+    ...sanitized,
     refId,
-    type: normalizeNodeType(node),
-    source: node.source || "canvas",
+    type: normalizeNodeType(sanitized),
+    source: sanitized.source || "canvas",
   };
   normalized.role = inferRole(normalized, frame);
   return normalized;
@@ -105,6 +107,20 @@ export function getCanvasNodeMap(ctx: ToolContext): Map<string, AgentCanvasNode>
     (ctx as any)[NODE_MAP_KEY] = map;
   }
   return (ctx as any)[NODE_MAP_KEY];
+}
+
+export function resolveNewCanvasRefId(
+  ctx: ToolContext,
+  requestedRefId: unknown,
+  prefix: string,
+): string {
+  const candidate =
+    typeof requestedRefId === "string" &&
+    /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(requestedRefId)
+      ? requestedRefId
+      : "";
+  if (candidate && !getCanvasNodeMap(ctx).has(candidate)) return candidate;
+  return ctx.newRefId(prefix);
 }
 
 export function upsertCanvasNode(

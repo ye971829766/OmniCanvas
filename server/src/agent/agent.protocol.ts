@@ -24,6 +24,8 @@ export interface CanvasNodeSpec {
   y?: number;
   width?: number;
   height?: number;
+  /** Keep the authored canvas bounds when generated media replaces its placeholder. */
+  preserveLayout?: boolean;
 
   parentId?: string;
   flow?: 'x' | 'y';
@@ -88,7 +90,7 @@ export type AgentEvent =
   | { type: 'canvas_op'; op: CanvasOp }
   | { type: 'progress'; tool: string; message: string; percent?: number }
   | { type: 'plan'; plan: AgentPlan }
-  | { type: 'usage'; promptTokens: number; completionTokens: number; steps: number; toolCalls: number; elapsedMs: number }
+  | { type: 'usage'; promptTokens: number; completionTokens: number; steps: number; toolCalls: number; modelCalls: number; peakPromptTokens: number; lastPromptTokens: number; elapsedMs: number }
   | { type: 'final'; text: string }
   | { type: 'error'; message: string }
   | { type: 'keepalive' }
@@ -98,9 +100,14 @@ export interface AgentPlanStep {
   id: string;
   title: string;
   description?: string;
-  status: 'pending' | 'in_progress' | 'completed';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'error';
   platform?: string;
   deliverable?: string;
+  frameId?: string;
+  width?: number;
+  height?: number;
+  x?: number;
+  y?: number;
   tools?: string[];
   completionTool?: string;
 }

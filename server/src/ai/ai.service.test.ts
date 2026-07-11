@@ -98,3 +98,117 @@ describe("AiService.uploadImageToHost", () => {
     expect(result).toBe("data:image/png;base64,AQID");
   });
 });
+
+describe("AiService generation task lifecycle", () => {
+  test("marks a detached image task as failed when its background promise rejects", async () => {
+    const service = createService() as any;
+    const statusUpdates: Array<{ id: string; status: string; data: any }> = [];
+    const originalConsoleError = console.error;
+    console.error = mock(() => undefined) as any;
+    service.setTaskStatus = mock((id: string, status: string, data: any) => {
+      statusUpdates.push({ id, status, data });
+    });
+    service.runGenerationTaskInBackground = mock(async () => {
+      throw new Error("preflight failed");
+    });
+
+    let response: any;
+    try {
+      response = await service.generateImageFromJson(
+        { prompt: "test product image" },
+        "http://localhost:3000",
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    expect(response.status).toBe("generating");
+    expect(statusUpdates).toEqual([
+      { id: response.taskId, status: "generating", data: {} },
+      {
+        id: response.taskId,
+        status: "error",
+        data: { error: "preflight failed" },
+      },
+    ]);
+  });
+});
+
+describe("AiService GPT Image 2 request defaults", () => {
+  test("uses high quality and auto sizing unless explicitly overridden", () => {
+    const service = createService() as any;
+    const options = { defaults: { size: "1024x1024", quality: "standard" } };
+
+    expect(service.resolveImageRequestSize("gpt-image-2", undefined, options)).toBe("auto");
+    expect(service.resolveImageRequestQuality("gpt-image-2", undefined)).toBe("high");
+    expect(service.resolveImageRequestQuality("gpt-image-2", "standard")).toBe("medium");
+    expect(service.resolveImageRequestQuality("gpt-image-2", "hd")).toBe("high");
+    expect(service.resolveImageRequestQuality("gpt-image-2", "low")).toBe("low");
+    expect(service.resolveImageRequestSize("gpt-image-2", "2000x2000", options)).toBe("2000x2000");
+  });
+});
+
+describe("AiService.fetchProvider", () => {
+  const originalFetch = globalThis.fetch;
+  const originalRetries = process.env.PROVIDER_TLS_RETRIES;
+  const originalDelay = process.env.PROVIDER_TLS_RETRY_DELAY_MS;
+  const originalWarn = console.warn;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+    if (originalRetries === undefined) {
+      delete process.env.PROVIDER_TLS_RETRIES;
+    } else {
+      process.env.PROVIDER_TLS_RETRIES = originalRetries;
+    }
+    if (originalDelay === undefined) {
+      delete process.env.PROVIDER_TLS_RETRY_DELAY_MS;
+    } else {
+      process.env.PROVIDER_TLS_RETRY_DELAY_MS = originalDelay;
+    }
+  });
+
+  test("retries transient certificate failures with verification enabled", async () => {
+    const calls: Array<RequestInit | undefined> = [];
+    process.env.PROVIDER_TLS_RETRIES = "2";
+    process.env.PROVIDER_TLS_RETRY_DELAY_MS = "0";
+    console.warn = mock(() => undefined) as any;
+    globalThis.fetch = mock(async (_input, init) => {
+      calls.push(init);
+      if (calls.length < 3) {
+        const error: any = new Error("unknown certificate verification error");
+        error.code = "UNKNOWN_CERTIFICATE_VERIFICATION_ERROR";
+        throw error;
+      }
+      return Response.json({ ok: true });
+    }) as unknown as typeof fetch;
+
+    const response = await createService().fetchProvider(
+      "https://yunwu.ai/v1/chat/completions",
+      { method: "POST", body: "{}" },
+    );
+
+    expect(await response.json()).toEqual({ ok: true });
+    expect(calls).toHaveLength(3);
+    expect(calls.every((init) => !(init as any)?.tls)).toBe(true);
+  });
+
+  test("does not retry non-certificate failures", async () => {
+    const calls: Array<RequestInit | undefined> = [];
+    process.env.PROVIDER_TLS_RETRIES = "2";
+    process.env.PROVIDER_TLS_RETRY_DELAY_MS = "0";
+    console.warn = mock(() => undefined) as any;
+    globalThis.fetch = mock(async (_input, init) => {
+      calls.push(init);
+      throw new Error("provider returned malformed data");
+    }) as unknown as typeof fetch;
+
+    await expect(
+      createService().fetchProvider("https://example.com/v1/chat/completions"),
+    ).rejects.toThrow("provider returned malformed data");
+    expect(calls).toHaveLength(1);
+  });
+});

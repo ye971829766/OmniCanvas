@@ -25,4 +25,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV UPLOAD_DIR=/app/files
 
-CMD ["bun", "run", "src/main.ts"]
+CMD ["bun", "--use-system-ca", "run", "src/main.ts"]

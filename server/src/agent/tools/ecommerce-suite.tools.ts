@@ -12,40 +12,102 @@ const PLATFORM_LABELS: Record<EcommercePlatform, string> = {
   jd: '京东',
 };
 
+const ROOT_CANVAS_GAP = 240;
+
+function getOpenRootCanvasOrigin(canvasState: any[]): { x: number; y: number } {
+  const rootBounds = canvasState.flatMap((node) => {
+    if (
+      node?.parentId ||
+      !Number.isFinite(node?.x) ||
+      !Number.isFinite(node?.y) ||
+      !Number.isFinite(node?.width) ||
+      !Number.isFinite(node?.height)
+    ) {
+      return [];
+    }
+    return [{
+      x: Number(node.x),
+      bottom: Number(node.y) + Math.max(0, Number(node.height)),
+    }];
+  });
+  if (rootBounds.length === 0) return { x: 0, y: 0 };
+  return {
+    x: Math.min(0, ...rootBounds.map((bound) => bound.x)),
+    y: Math.max(0, ...rootBounds.map((bound) => bound.bottom)) + ROOT_CANVAS_GAP,
+  };
+}
+
 export const planEcommerceSuiteTool: AgentTool = {
   name: 'plan_ecommerce_suite',
   description:
     'Create a production-oriented multi-platform ecommerce image plan from one product asset. ' +
-    'Use this before creating Amazon, Taobao, or JD listing image suites. Returns exact frame IDs, sizes, roles, and platform rules.',
+    'Use this before creating Amazon, Taobao, or JD listing image suites. Returns exact image sizes, root-canvas positions, roles, and platform rules.',
   parameters: {
     type: 'object',
+    additionalProperties: false,
     properties: {
       platforms: {
         type: 'array',
         items: { type: 'string', enum: ['amazon', 'taobao', 'jd'] },
+        minItems: 1,
+        uniqueItems: true,
+        description: 'Target marketplaces. Example: ["amazon"].',
       },
       sourceAssetId: {
         type: 'string',
-        description: 'Stable assetId from the attached_assets list. Use it as a reference for every generated product visual.',
+        description:
+          'Stable assetId from the attached_assets list. Use it as a reference for every generated product visual.',
       },
-      productName: { type: 'string' },
-      sellingPoints: { type: 'array', items: { type: 'string' } },
-      brand: { type: 'string' },
-      language: { type: 'string' },
-      imagesPerPlatform: { type: 'number', minimum: 1, maximum: 4 },
+      productName: {
+        type: 'string',
+        description: 'Optional product display name.',
+      },
+      sellingPoints: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Only factual selling points supplied by the user.',
+      },
+      brand: { type: 'string', description: 'Optional brand name.' },
+      language: {
+        type: 'string',
+        description: 'Copy language, such as zh-CN or en-US.',
+      },
+      imagesPerPlatform: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 8,
+        description:
+          'Number of deliverables per platform. Defaults to the platform preset.',
+      },
     },
     required: ['platforms', 'sourceAssetId'],
   },
   async execute(input: EcommercePlanInput, ctx: ToolContext): Promise<ToolResult> {
-    const platforms = [...new Set(input.platforms || [])].filter(
-      (platform): platform is EcommercePlatform => ['amazon', 'taobao', 'jd'].includes(platform),
+    const rawPlatforms = (input as any).platforms;
+    const requestedPlatforms: unknown[] = Array.isArray(rawPlatforms)
+      ? rawPlatforms
+      : rawPlatforms
+        ? [rawPlatforms]
+        : [];
+    const platforms = [...new Set(requestedPlatforms)].filter(
+      (platform): platform is EcommercePlatform =>
+        typeof platform === 'string' &&
+        ['amazon', 'taobao', 'jd'].includes(platform),
     );
-    if (platforms.length === 0) throw new Error('At least one supported ecommerce platform is required.');
+    if (platforms.length === 0) {
+      throw new Error('At least one supported ecommerce platform is required.');
+    }
 
     const asset = ctx.assets?.find((item) => item.id === input.sourceAssetId);
     if (!asset) throw new Error(`Unknown sourceAssetId: ${input.sourceAssetId}`);
 
-    const deliverables = buildEcommerceDeliverables({ ...input, platforms });
+    const origin = getOpenRootCanvasOrigin(ctx.canvasState ?? []);
+    const deliverables = buildEcommerceDeliverables({
+      ...input,
+      platforms,
+      originX: origin.x,
+      originY: origin.y,
+    });
     const planId = `plan_${crypto.randomUUID()}`;
     const steps: AgentPlanStep[] = [
       {
@@ -63,7 +125,11 @@ export const planEcommerceSuiteTool: AgentTool = {
         status: 'pending' as const,
         platform: item.platform,
         deliverable: item.role,
-        tools: ['add_frame', 'generate_image', 'add_text', 'verify_design'],
+        width: item.width,
+        height: item.height,
+        x: item.x,
+        y: item.y,
+        tools: ['generate_image', 'verify_design'],
         completionTool: 'verify_design',
       })),
       {
@@ -96,8 +162,8 @@ export const planEcommerceSuiteTool: AgentTool = {
         sourceUrl: asset.url,
         deliverables,
         instruction:
-          'Create every frame using its exact frameId and x/y via add_frame(refId). Use sourceAssetId in refImages for every generated product image. ' +
-          'Keep product packaging, logo, proportions, and visible text faithful. Add claims as editable text nodes only, then verify each frame.',
+          'Generate every deliverable as one finished image at its exact root-canvas x/y and size. Do not create frames, groups, text nodes, or shape nodes. ' +
+          'Use sourceAssetId in refImages for every image, keep product packaging, logo, proportions, and visible text faithful, then verify each image.',
         note: 'Platform presets are production defaults and should be rechecked against the seller console before final publishing.',
       },
     };

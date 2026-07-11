@@ -1,4 +1,5 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
+import { compactCanvasNode, sanitizeCanvasState } from '../canvas-context';
 import {
   getEcommerceDeliverableRules,
   type EcommercePlatform,
@@ -111,15 +112,26 @@ export const analyzeDesignTool: AgentTool = {
 
     let canvasLayoutInfo = '';
     if (targetRefId) {
-      const allNodes = ctx.canvasState || [];
+      const allNodes = sanitizeCanvasState(ctx.canvasState || []);
       const targetNode = allNodes.find((n: any) => n.refId === targetRefId);
-      const siblingNodes = allNodes.filter((n: any) => n.refId !== targetRefId && n.refId !== 'agent_frame');
+      const siblingNodes = allNodes
+        .filter((n: any) => {
+          if (n.refId === targetRefId || n.refId === 'agent_frame') return false;
+          if (!targetNode?.parentId) return !n.parentId;
+          return n.parentId === targetNode.parentId;
+        })
+        .slice(0, 40);
+      const omittedSiblingCount = Math.max(
+        0,
+        allNodes.length - siblingNodes.length - (targetNode ? 1 : 0),
+      );
       
       canvasLayoutInfo = `
 ### Current Layout Data from Canvas:
-- Target element under review: ${targetNode ? JSON.stringify(targetNode) : `[refId: ${targetRefId}]`}
+- Target element under review: ${targetNode ? JSON.stringify(compactCanvasNode(targetNode, 'standard')) : `[refId: ${targetRefId}]`}
 - Sibling elements on canvas:
 ${siblingNodes.map((n: any) => `  * [${n.refId}] Tag: ${n.tag || n.type}, Pos: (${n.x},${n.y}), Size: ${n.width}x${n.height}${n.text ? `, Text: "${n.text}"` : ''}${n.fill ? `, Color: ${n.fill}` : ''}`).join('\n')}
+${omittedSiblingCount > 0 ? `- ${omittedSiblingCount} additional non-local nodes omitted from context.` : ''}
 `;
     }
 
