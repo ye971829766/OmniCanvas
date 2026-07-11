@@ -407,79 +407,24 @@ Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more informa
 
 ---
 
+## ☕ 捐赠支持 & 联系作者
+
+如果你觉得 OmniCanvas 对你有帮助，欢迎请作者喝杯咖啡 ☕，或者通过微信与我交流！
+
 <div align="center">
-  <sub>Built with ❤️ by the OmniCanvas Open Source Team & Community.</sub>
-</div>            # Vue Composition Hooks
-│   │   ├── useCanvas.ts        # Core element management & Leafer UI bindings
-│   │   ├── useAgent.ts         # Agent SSE streaming & execution dispatcher
-│   │   ├── useCanvasCrop.ts    # Interactive image cropping hook
-│   │   ├── useCanvasHistory.ts # State snapshots & Undo/Redo pipeline
-│   │   └── useCanvasFrame.ts   # Artboard containers & Frame management
-│   ├── types/                  # Shared TypeScript data models
-│   └── views/                  # Application views
-├── server/                     # Backend NestJS Engine
-│   └── src/
-│       ├── agent/              # Autonomous Agent Core
-│       │   ├── agent.service.ts    # ReAct agent execution loop & tool runner
-│       │   ├── canvas-state.ts     # Canvas JSON state parser & serializer
-│       │   ├── mcot-graph.ts       # MCOT reasoning graph generator
-│       │   ├── system-prompt.ts    # Domain-aware prompt templates
-│       │   └── tools/              # 10+ Tool Calling implementations
-│       ├── ai/                 # Multi-provider LLM, Image & Video adapters
-│       ├── workspaces/         # Workspace persistence & session management
-│       ├── channels/           # Gateway channel router & failover manager
-│       └── model-config/       # Dynamic model directory service
-├── admin/                      # Vue 3 + Element Plus Admin Dashboard
-├── run-all.js                  # Cross-platform concurrent task orchestrator
-└── agent-integration/          # Integration specs & developer guides
-```
-
----
-
-## 🗺️ Vision & Future Roadmap (2026 - 2027)
-
-OmniCanvas is advancing towards a comprehensive spatial AI ecosystem. Our strategic roadmap includes:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            AGENTBOARD ROADMAP                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-  Phase 1 (Q3 2026)      Phase 2 (Q4 2026)      Phase 3 (Q1 2027)      Phase 4 (Q2 2027)
-  Multi-Agent Network  ──► Code-to-Canvas UI ──► Spatial 3D & Vector ──► Open Plugin Ecosystem
-```
-
-- [x] **Phase 1: Real-time Multi-Agent Collaborative Network**
-  - Multi-agent orchestration (e.g. Design Agent + Critic Agent + Layout Specialist Agent working concurrently on one canvas).
-  - WebSockets / WebRTC real-time multi-user & multi-agent collaborative editing.
-- [ ] **Phase 2: Bidirectional Code-to-Canvas & UI Component Export**
-  - One-click transformation of canvas vector components into Vue 3 / React / Tailwind CSS production code.
-  - Live preview of running frontend components directly embedded in canvas artboards.
-- [ ] **Phase 3: Spatial 3D & Generative Vector Intelligence**
-  - Integration of 3D Gaussian Splatting & WebGL 3D canvas viewports alongside Leafer 2D vector elements.
-  - Fine-tuned local Diffusion Models for native SVG vector icon and illustration generation.
-- [ ] **Phase 4: Autonomous Design Workflow Plugin Ecosystem**
-  - Open-source SDK for third-party developers to register custom Agent tools, canvas nodes, and AI workflows.
-  - Marketplace for sharing Agent prompts, design knowledge bases, and custom UI components.
-
----
-
-## 🤝 Contributing
-
-We welcome contributions from developers, designers, and AI enthusiasts around the globe!
-
-1. Fork the Repository
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-Please refer to our [Contributing Guide](CONTRIBUTING.md) for detailed guidelines.
-
----
-
-## 📄 License
-
-Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+  <table>
+    <tr>
+      <td align="center"><b>微信赞赏</b></td>
+      <td align="center"><b>支付宝赞赏</b></td>
+      <td align="center"><b>联系作者微信</b></td>
+    </tr>
+    <tr>
+      <td align="center"><img src="public/微信收款码-捐款.png" alt="微信收款码" width="200" /></td>
+      <td align="center"><img src="public/支付宝收款码-捐款.jpg" alt="支付宝收款码" width="200" /></td>
+      <td align="center"><img src="public/作者微信.png" alt="作者微信" width="200" /></td>
+    </tr>
+  </table>
+</div>
 
 ---
 
