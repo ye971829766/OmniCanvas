@@ -20,6 +20,8 @@ describe("agent system prompt compaction", () => {
     expect(compactAgentSystemPrompt()).toBe(SYSTEM_PROMPT);
     expect(SYSTEM_PROMPT).toContain("Ecommerce image suites are independent root-canvas images");
     expect(SYSTEM_PROMPT).toContain("Do not call add_frame, set_frame, add_group, add_text, or add_rect");
+    expect(SYSTEM_PROMPT).toContain("Use edit_image whenever the user asks to add, remove, replace, or change visual content");
+    expect(SYSTEM_PROMPT).toContain("the single selected image, then the latest successful generated or edited image");
   });
 
   test("migrates persisted always-create-artboard guidance", () => {

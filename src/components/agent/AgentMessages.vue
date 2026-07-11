@@ -15,7 +15,7 @@ import { Image } from "primevue";
 import logoImg from "@/assets/logo.jpg";
 import type { ChatMessage, ToolCallItem } from "@/composables/useAgent";
 import { stripInternalToolErrors } from "@/composables/useAgent";
-import { getToolActiveLabel } from "./tool-labels";
+import { getToolActiveLabel, isInternalAgentTool } from "./tool-labels";
 
 function getToolActiveNameText(name: string): string {
   if (name === "generate_image") return "正在执行 GPT Image 2";
@@ -33,12 +33,21 @@ function getToolActiveNameText(name: string): string {
 }
 
 function getThinkingText(m: ChatMessage): string {
-  if (m.progress?.message) return m.progress.message;
   if (m.tools && m.tools.length > 0) {
-    const activeTool = m.tools.find((t) => !t.done);
+    const activeTool = m.tools.find(
+      (tool) => !tool.done && !isInternalAgentTool(tool.name),
+    );
     if (activeTool) {
       return getToolActiveNameText(activeTool.name);
     }
+    if (m.tools.some((tool) => !tool.done && isInternalAgentTool(tool.name))) {
+      return "正在完善设计细节";
+    }
+  }
+  if (m.progress?.message) {
+    return /(质量检测|验证质量|视觉验证|质检)/.test(m.progress.message)
+      ? "正在完善设计细节"
+      : m.progress.message;
   }
   return "思考中";
 }
@@ -142,8 +151,13 @@ interface ToolRenderBlock {
   id: string;
 }
 
+function getVisibleTools(tools: ToolCallItem[] = []): ToolCallItem[] {
+  return tools.filter((tool) => !isInternalAgentTool(tool.name));
+}
+
 function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
-  if (!tools || !tools.length) return [];
+  const visibleTools = getVisibleTools(tools);
+  if (!visibleTools.length) return [];
 
   const STANDALONE_TOOLS = new Set([
     "generate_image",
@@ -178,7 +192,7 @@ function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
     }
   };
 
-  for (const tool of tools) {
+  for (const tool of visibleTools) {
     if (STANDALONE_TOOLS.has(tool.name)) {
       flushGroup();
       blocks.push({
@@ -439,7 +453,7 @@ function parseUserText(text: string) {
               />
 
               <div
-                v-else-if="blk.type === 'tools' && blk.tools?.length"
+                v-else-if="blk.type === 'tools' && groupTools(blk.tools).length"
                 class="tool-cards"
               >
                 <template
@@ -456,7 +470,7 @@ function parseUserText(text: string) {
                   />
                 </template>
                 <GeneratedMediaGallery
-                  :tools="blk.tools"
+                  :tools="getVisibleTools(blk.tools)"
                   :node-states="nodeStates"
                   @zoom="emit('zoomToNode', $event)"
                 />
@@ -839,6 +853,10 @@ function parseUserText(text: string) {
   --agent-surface: var(--p-surface-50, #fafafa);
   --agent-surface-raised: var(--p-surface-0, #ffffff);
   --agent-surface-hover: var(--p-surface-100, #f4f4f5);
+  --accent-primary: #4f46e5;
+  --accent-success: #15803d;
+  --accent-error: #dc2626;
+  --accent-warning: #b45309;
 
   --text-primary: var(--agent-text-primary);
   --text-secondary: var(--agent-text-secondary);
@@ -987,7 +1005,17 @@ function parseUserText(text: string) {
   --incremark-color-border-strong: var(--agent-border-strong, #d4d4d8);
   --incremark-color-code-inline-background: var(--agent-surface-hover, #f4f4f5);
   --incremark-color-code-inline-text: var(--agent-text-primary, #18181b);
+  --incremark-color-code-block-background: #18181b;
+  --incremark-color-code-block-text: #f4f4f5;
   --incremark-color-interactive-link: var(--agent-text-primary, #18181b);
+  --incremark-color-interactive-link-hover: var(--agent-text-primary, #18181b);
+  --incremark-color-interactive-link-visited: var(--agent-text-secondary, #52525b);
+  --incremark-color-interactive-checked: var(--accent-success, #15803d);
+  --incremark-color-status-pending: var(--accent-primary, #4f46e5);
+  --incremark-color-status-completed: var(--accent-success, #15803d);
+  --incremark-color-neutral-2: var(--agent-surface, #fafafa);
+  --incremark-color-neutral-8: var(--agent-text-secondary, #52525b);
+  --incremark-color-neutral-9: var(--agent-text-primary, #18181b);
   --incremark-typography-font-size-base: 14px;
   --incremark-typography-font-size-heading-h1: 15px;
   --incremark-typography-font-size-heading-h2: 14.5px;
@@ -1114,6 +1142,7 @@ function parseUserText(text: string) {
   color: var(--agent-text-primary);
   font-weight: 540;
   text-decoration-line: underline;
+  text-decoration-color: rgba(24, 24, 27, 0.32);
   text-decoration-color: color-mix(
     in srgb,
     var(--p-text-color, #18181b) 32%,
@@ -1209,6 +1238,7 @@ function parseUserText(text: string) {
 }
 
 .markdown-body :deep(tbody tr:nth-child(even)) {
+  background: var(--markdown-surface);
   background: color-mix(
     in srgb,
     var(--markdown-surface) 58%,
@@ -1459,6 +1489,7 @@ function parseUserText(text: string) {
 .markdown-body :deep(mark) {
   padding: 0 2px;
   border-radius: 2px;
+  background: rgba(250, 204, 21, 0.28);
   background: color-mix(in srgb, #facc15 28%, transparent);
   color: inherit;
 }
@@ -1901,6 +1932,10 @@ function parseUserText(text: string) {
   --agent-surface: #202024;
   --agent-surface-raised: #18181b;
   --agent-surface-hover: #27272c;
+  --accent-primary: #a5b4fc;
+  --accent-success: #4ade80;
+  --accent-error: #f87171;
+  --accent-warning: #fbbf24;
 }
 
 :global(.p-dark .agent-bubble-user) {

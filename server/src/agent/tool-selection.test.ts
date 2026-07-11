@@ -2,6 +2,35 @@ import { describe, expect, test } from "bun:test";
 import { selectAgentToolNames } from "./tool-selection";
 
 describe("agent tool selection", () => {
+  test("exposes image editing whenever the canvas contains an image", () => {
+    const chinese = selectAgentToolNames({
+      userInput: "在这张图片上加一只邪恶的小猫",
+      canvasNodeCount: 1,
+      hasAssets: false,
+      hasCanvasImages: true,
+    });
+    const english = selectAgentToolNames({
+      userInput: "Add a black cat to this image",
+      canvasNodeCount: 1,
+      hasAssets: false,
+      hasCanvasImages: true,
+    });
+
+    expect(chinese.has("edit_image")).toBe(true);
+    expect(english.has("edit_image")).toBe(true);
+  });
+
+  test("keeps image editing out when there is no image target", () => {
+    const tools = selectAgentToolNames({
+      userInput: "生成一张有小猫和小狗的奇幻图片",
+      canvasNodeCount: 1,
+      hasAssets: false,
+      hasCanvasImages: false,
+    });
+
+    expect(tools.has("edit_image")).toBe(false);
+  });
+
   test("keeps a focused set for a normal canvas edit", () => {
     const tools = selectAgentToolNames({
       userInput: "Move the selected title and improve spacing",

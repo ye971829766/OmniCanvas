@@ -2,6 +2,7 @@ export interface AgentToolSelectionInput {
   userInput: string;
   canvasNodeCount: number;
   hasAssets: boolean;
+  hasCanvasImages?: boolean;
 }
 
 const CORE_CREATION_TOOLS = [
@@ -35,6 +36,7 @@ export function selectAgentToolNames({
   userInput,
   canvasNodeCount,
   hasAssets,
+  hasCanvasImages = false,
 }: AgentToolSelectionInput): Set<string> {
   const input = userInput.toLowerCase();
   const selected = new Set(CORE_CREATION_TOOLS);
@@ -85,6 +87,9 @@ export function selectAgentToolNames({
   );
   if (imageProcessing || (hasAssets && matches(input, /\bedit\b|\u4fee\u6539|\u5904\u7406/))) {
     IMAGE_PROCESSING_TOOLS.forEach((name) => selected.add(name));
+  }
+  if (hasCanvasImages) {
+    selected.add("edit_image");
   }
 
   if (matches(input, /\b(?:brand|branding|palette|typography|font|color scheme|style system)\b|\u54c1\u724c|\u914d\u8272|\u8272\u677f|\u5b57\u4f53|\u98ce\u683c/)) {

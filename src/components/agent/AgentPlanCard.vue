@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-vue-next";
 import type { AgentPlan, AgentPlanStep } from "@/types/agent";
+import { isInternalAgentTool } from "./tool-labels";
 
 type PlanVisualStatus = "pending" | "in_progress" | "completed" | "failed";
 
@@ -21,8 +22,18 @@ function getVisualStatus(step: AgentPlanStep): PlanVisualStatus {
   return "pending";
 }
 
-const stepStatuses = computed(() => props.plan.steps.map(getVisualStatus));
-const totalCount = computed(() => props.plan.steps.length);
+function isInternalStep(step: AgentPlanStep): boolean {
+  const tools = [...(step.tools || []), step.completionTool].filter(
+    (tool): tool is string => Boolean(tool),
+  );
+  return tools.length > 0 && tools.every(isInternalAgentTool);
+}
+
+const visibleSteps = computed(() =>
+  props.plan.steps.filter((step) => !isInternalStep(step)),
+);
+const stepStatuses = computed(() => visibleSteps.value.map(getVisualStatus));
+const totalCount = computed(() => visibleSteps.value.length);
 const completedCount = computed(
   () => stepStatuses.value.filter((status) => status === "completed").length,
 );
@@ -98,6 +109,7 @@ function getStepLabel(status: PlanVisualStatus) {
 
 <template>
   <section
+    v-if="totalCount"
     class="agent-plan"
     :class="`has-${overallStatus}`"
     aria-label="任务计划"
@@ -168,7 +180,7 @@ function getStepLabel(status: PlanVisualStatus) {
 
     <ol v-if="isExpanded && totalCount" :id="stepsId" class="plan-steps">
       <li
-        v-for="(step, index) in plan.steps"
+        v-for="(step, index) in visibleSteps"
         :key="step.id"
         :class="`is-${getVisualStatus(step)}`"
       >
@@ -257,7 +269,7 @@ function getStepLabel(status: PlanVisualStatus) {
 
 .plan-kicker {
   color: var(--text-secondary, var(--p-text-muted-color, #71717a));
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.2;
 }
 
@@ -266,7 +278,7 @@ function getStepLabel(status: PlanVisualStatus) {
   align-items: center;
   gap: 3px;
   color: var(--text-secondary, var(--p-text-muted-color, #71717a));
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -290,7 +302,7 @@ function getStepLabel(status: PlanVisualStatus) {
 .plan-title {
   color: var(--text-primary, var(--p-text-color, #18181b));
   font-size: 12.5px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -305,14 +317,14 @@ function getStepLabel(status: PlanVisualStatus) {
 
 .plan-count {
   min-width: 28px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .plan-count strong {
   color: var(--text-primary, var(--p-text-color, #18181b));
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .plan-chevron {
@@ -355,7 +367,7 @@ function getStepLabel(status: PlanVisualStatus) {
 
 .progress-copy {
   color: var(--text-secondary, var(--p-text-muted-color, #71717a));
-  font-size: 9.5px;
+  font-size: 10.5px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -388,6 +400,7 @@ function getStepLabel(status: PlanVisualStatus) {
 }
 
 .plan-steps li.is-failed {
+  background: rgba(220, 38, 38, 0.06);
   background: color-mix(in srgb, var(--accent-error, #ff3b30) 6%, transparent);
   box-shadow: inset 2px 0 0 var(--accent-error, #ff3b30);
 }
@@ -409,7 +422,7 @@ function getStepLabel(status: PlanVisualStatus) {
   justify-content: center;
   border: 1px solid var(--border-strong, var(--p-surface-300, #d4d4d8));
   border-radius: 50%;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -448,7 +461,7 @@ function getStepLabel(status: PlanVisualStatus) {
 .step-title {
   min-width: 0;
   color: var(--text-primary, var(--p-text-color, #27272a));
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 520;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -457,7 +470,7 @@ function getStepLabel(status: PlanVisualStatus) {
 .step-state-label {
   flex: 0 0 auto;
   color: var(--text-secondary, var(--p-text-muted-color, #71717a));
-  font-size: 9.5px;
+  font-size: 10.5px;
   line-height: 1.4;
   white-space: nowrap;
 }
@@ -468,7 +481,7 @@ function getStepLabel(status: PlanVisualStatus) {
 }
 
 .is-in_progress .step-title {
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .is-in_progress .step-state-label {
@@ -486,8 +499,8 @@ function getStepLabel(status: PlanVisualStatus) {
 
 .step-description {
   color: var(--text-secondary, var(--p-text-muted-color, #71717a));
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 

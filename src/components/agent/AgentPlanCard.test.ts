@@ -23,6 +23,37 @@ afterEach(() => {
 });
 
 describe("AgentPlanCard", () => {
+  it("excludes internal quality gates from visible steps and progress", async () => {
+    const element = await mountPlan({
+      id: "plan-with-internal-review",
+      title: "Product campaign",
+      steps: [
+        {
+          id: "deliverable",
+          title: "Create hero image",
+          status: "completed",
+          tools: ["generate_image"],
+          completionTool: "generate_image",
+        },
+        {
+          id: "internal-review",
+          title: "Internal quality review",
+          status: "failed",
+          tools: ["verify_design"],
+          completionTool: "verify_design",
+        },
+      ],
+    });
+
+    expect(element.querySelector(".plan-state.is-completed")).not.toBeNull();
+    expect(element.querySelector<HTMLElement>(".progress-failed")?.style.width).toBe("0%");
+    const toggle = element.querySelector<HTMLButtonElement>(".plan-toggle");
+    toggle?.click();
+    await nextTick();
+    expect(element.querySelectorAll(".plan-steps li")).toHaveLength(1);
+    expect(element.textContent).not.toContain("Internal quality review");
+  });
+
   it("shows total progress and makes the active step easy to scan", async () => {
     const element = await mountPlan({
       id: "plan-1",

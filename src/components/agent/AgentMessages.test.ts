@@ -192,6 +192,53 @@ describe("AgentMessages markdown style contract", () => {
 });
 
 describe("AgentMessages execution timeline", () => {
+  it("keeps internal quality checks out of the customer-facing timeline", async () => {
+    const visibleTool = {
+      id: "generate-visible",
+      name: "generate_image",
+      done: true,
+      input: { prompt: "premium product image" },
+      output: {
+        refId: "visible-image",
+        status: "success",
+        url: "https://example.com/visible.png",
+      },
+    };
+    const internalTool = {
+      id: "quality-internal",
+      name: "verify_design",
+      done: true,
+      input: { refId: "visible-image" },
+      output: { status: "error", error: "internal review timeout" },
+    };
+    const element = await mountMessages([
+      {
+        id: "run-quality-hidden",
+        role: "assistant",
+        text: "Design ready",
+        tools: [visibleTool, internalTool],
+        streaming: false,
+        runStatus: "completed",
+        blocks: [
+          { id: "tools", type: "tools", tools: [visibleTool, internalTool] },
+          { id: "final", type: "text", text: "Design ready" },
+        ],
+      },
+    ], {
+      "visible-image": {
+        refId: "visible-image",
+        type: "image",
+        status: "done",
+        url: "https://example.com/visible.png",
+      },
+    });
+
+    expect(element.querySelectorAll(".tool-event")).toHaveLength(1);
+    expect(element.querySelectorAll(".tool-event.is-failed")).toHaveLength(0);
+    expect(element.querySelectorAll(".generated-media-item")).toHaveLength(1);
+    expect(element.querySelector(".run-final")?.textContent).toContain("Design ready");
+  });
+
   it("keeps update, plan, tool, artifact, and final output in order", async () => {
     const tool = {
       id: "generate-1",

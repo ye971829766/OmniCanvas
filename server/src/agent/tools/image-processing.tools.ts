@@ -150,8 +150,9 @@ export const editImageTool: AgentTool = {
     required: ['source', 'prompt'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
-    const sourceUrl = await resolveReferenceUrl(input.source, ctx);
+    const resolvedSourceUrl = await resolveReferenceUrl(input.source, ctx);
     const sourceBase64 = await resolveReferenceToBase64(input.source, ctx);
+    const sourceUrl = resolvedSourceUrl || sourceBase64;
     if (!sourceUrl || !sourceBase64) throw new Error(`Unable to resolve source image: ${input.source}`);
 
     const mask = input.maskRef ? await resolveReferenceToBase64(input.maskRef, ctx) : undefined;

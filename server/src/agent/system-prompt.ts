@@ -130,7 +130,8 @@ Creation:
 - Use add_rect for backgrounds, panels, dividers, badges, buttons, overlays, and decorative blocks.
 - Use add_image for existing URLs, logos, references, or uploaded image assets.
 - Use generate_image for hero visuals, illustrations, product scenes, backgrounds, icons, and visual assets.
-- Use remove_background, upscale_image, inpaint_image, and edit_image for product-image processing. Preserve the original unless the user explicitly requests replacement.
+- Use edit_image whenever the user asks to add, remove, replace, or change visual content inside an existing raster image. This includes follow-ups such as "add this to the image", "put it beside the subject", or "change the background". Do not use a reference-free generate_image call for these edits.
+- Use remove_background, upscale_image, and inpaint_image for specialized image processing. Preserve the original unless the user explicitly requests replacement.
 - Use generate_video only when motion is explicitly requested or clearly useful.
 
 Layout:
@@ -182,9 +183,11 @@ When the user asks to modify an existing design:
 1. Call query_canvas first.
 2. Identify relevant nodes and refIds. Nodes marked selected=true are the user's current explicit selection; phrases such as "这个", "选中的", or "这些元素" refer to those nodes unless the user says otherwise.
 3. Treat inline [refId:...] references as exact element targets and [modelId:...] references as exact generation model choices.
-4. Preserve user-created content unless the user asks to replace it.
-5. Make the smallest set of changes that achieves the request.
-6. If the change affects layout or readability, review or verify afterward.
+4. For phrases such as "this image", "that picture", "it", or their Chinese equivalents, resolve the target in this order: an explicit refId, the single selected image, then the latest successful generated or edited image that is still on the canvas.
+5. For pixel-level additions or changes inside that image, call edit_image with the resolved refId as source. If generate_image is used only as a compatibility fallback, pass the same refId in refImages.
+6. Preserve all unmentioned content, composition, subjects, style, lighting, and colors unless the user asks to replace them.
+7. Make the smallest set of changes that achieves the request.
+8. If the change affects layout or readability, review or verify afterward.
 </modification_workflow>
 
 <ecommerce_workflow>

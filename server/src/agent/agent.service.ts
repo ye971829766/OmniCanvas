@@ -82,6 +82,11 @@ import {
 } from "./agent-assets";
 import { sanitizeCanvasState } from "./canvas-context";
 import { selectAgentToolNames } from "./tool-selection";
+import {
+  hasCanvasImages,
+  injectImplicitImageReference,
+  resolveImplicitImageReference,
+} from "./implicit-image-reference";
 import { buildAgentSdkTools } from "./sdk-tools";
 import { InvalidToolCallGuard } from "./invalid-tool-call-guard";
 import { upsertCanvasNode } from "./canvas-state";
@@ -371,12 +376,29 @@ ${videoModelInfo || "- None"}
     }
     const sessionAssets = this.memory.registerAssets(sessionId, currentAssets);
     const safeCanvasState = sanitizeCanvasState(canvasState ?? []);
+    const canvasHasImages = hasCanvasImages(safeCanvasState);
+    const implicitImageReference = resolveImplicitImageReference(
+      safeCanvasState,
+      history as any[],
+    );
+    if (implicitImageReference?.url) {
+      const referencedNode = safeCanvasState.find(
+        (node: any) => node.refId === implicitImageReference.refId,
+      );
+      if (referencedNode && !referencedNode.url) {
+        referencedNode.url = implicitImageReference.url;
+      }
+    }
     const selectedToolNames = selectAgentToolNames({
       userInput,
       canvasNodeCount: safeCanvasState.length,
       hasAssets: sessionAssets.length > 0 || !!images?.length,
+      hasCanvasImages: canvasHasImages,
     });
     systemPrompt += `\n\n<active_tools>\n${[...selectedToolNames].join(", ")}\n</active_tools>\n<frame_policy>Frames are optional. Use the root canvas or a Group by default. Create a frame only for a bounded, clipped, exportable, auto-layout, or multi-deliverable composition. If set_frame/add_frame is not listed above, do not create or assume agent_frame.</frame_policy>\nOnly call tools listed above. Issue independent tool calls together in the same response. For nested batches, assign explicit refId values to new frames/groups/nodes and reuse them as parentId. Wait for a result only when a later call depends on generated output.`;
+    if (implicitImageReference) {
+      systemPrompt += `\n\n<available_canvas_image_target>\nIf the current request refers to an existing image, the best implicit target is canvas refId "${implicitImageReference.refId}". Use edit_image with that source for changes inside the image. This is context, not a command: ignore it for a fresh image request and never attach it as a reference unless the user's request actually depends on the existing image.\n</available_canvas_image_target>`;
+    }
     if (sessionAssets.length > 0) {
       systemPrompt += `\n\n<session_assets>\n${sessionAssets
         .slice(-16)
@@ -540,6 +562,11 @@ ${videoModelInfo || "- None"}
         call.input = this.normalizeToolInput(
           call.name,
           this.safeParse(call.args),
+        );
+        call.input = injectImplicitImageReference(
+          call.name,
+          call.input,
+          implicitImageReference,
         );
       }
 

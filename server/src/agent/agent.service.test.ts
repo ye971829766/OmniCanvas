@@ -128,4 +128,122 @@ describe("AgentService event lifecycle", () => {
       tool.execute = originalExecute;
     }
   });
+
+  test("injects the previous generated image when an edit call omits its source", async () => {
+    const previousHistory = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "previous-call",
+            toolName: "generate_image",
+            input: { prompt: "a heroic puppy" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "previous-call",
+            toolName: "generate_image",
+            output: {
+              type: "json",
+              value: {
+                refId: "img_existing",
+                url: "https://example.com/original.png",
+                status: "success",
+              },
+            },
+          },
+        ],
+      },
+    ] as any[];
+    const session = { messages: previousHistory, lastAccess: Date.now() };
+    const memory = Object.create(AgentMemory.prototype) as any;
+    memory.getSession = () => session;
+    memory.get = () => previousHistory;
+    memory.consumeScreenshot = () => null;
+    memory.registerAssets = () => [];
+    memory.compactForModel = (messages: any[]) => messages;
+    memory.set = () => undefined;
+    memory.saveSession = () => undefined;
+
+    let requestCount = 0;
+    const ai = {
+      resolveChannelAndModel: async () => ({
+        channel: { apiKey: "test-key", baseUrl: "http://example.invalid/v1" },
+        upstreamModel: "test-model",
+      }),
+      fetchProvider: async () => {
+        requestCount++;
+        const chunks =
+          requestCount === 1
+            ? [
+                'data: {"id":"chatcmpl-edit","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call-edit","type":"function","function":{"name":"edit_image","arguments":"{\\"prompt\\":\\"add an evil cat beside the puppy\\"}"}}]},"finish_reason":null}]}',
+                'data: {"id":"chatcmpl-edit","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
+                "data: [DONE]",
+                "",
+              ]
+            : [
+                'data: {"id":"chatcmpl-final","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"The cat was added."},"finish_reason":null}]}',
+                'data: {"id":"chatcmpl-final","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+                "data: [DONE]",
+                "",
+              ];
+        return new Response(chunks.join("\n\n"), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      },
+    };
+    const service = new AgentService(
+      ai as any,
+      memory,
+      { getConfig: async () => ({ agentConfig: { chatModel: "test-model" } }) } as any,
+      { recordTokenUsage: () => undefined } as any,
+      {} as any,
+    ) as any;
+    service.logger.warn = () => undefined;
+    service.logger.error = () => undefined;
+    service.logger.debug = () => undefined;
+    service.logger.log = () => undefined;
+
+    const tool = TOOL_MAP.get("edit_image")!;
+    const originalExecute = tool.execute;
+    tool.execute = async (input: any) => ({
+      output: { refId: "img_new", status: "success", received: input },
+    });
+
+    try {
+      const events: any[] = [];
+      for await (const event of service
+        .run(
+          "session-implicit-edit",
+          "在这只小狗的旁边加一只小猫",
+          "http://localhost",
+          undefined,
+          [
+            {
+              refId: "img_existing",
+              tag: "Image",
+              selected: true,
+              url: "https://example.com/original.png",
+            },
+          ],
+        )
+        .stream()) {
+        events.push(event);
+      }
+
+      const editCall = events.find(
+        (event) => event.type === "tool_call" && event.id === "call-edit",
+      );
+      expect(editCall?.input.source).toBe("img_existing");
+    } finally {
+      tool.execute = originalExecute;
+    }
+  });
 });

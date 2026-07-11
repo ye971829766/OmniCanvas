@@ -158,11 +158,11 @@ function truncate(s: string, n: number) {
   border-color: rgba(16, 185, 129, 0.35);
   background: linear-gradient(
     90deg,
-    var(--p-surface-100, #f4f4f5) 0%,
-    var(--p-surface-100, #f4f4f5) 30%,
+    var(--agent-surface-hover, var(--p-surface-100, #f4f4f5)) 0%,
+    var(--agent-surface-hover, var(--p-surface-100, #f4f4f5)) 30%,
     rgba(16, 185, 129, 0.18) 50%,
-    var(--p-surface-100, #f4f4f5) 70%,
-    var(--p-surface-100, #f4f4f5) 100%
+    var(--agent-surface-hover, var(--p-surface-100, #f4f4f5)) 70%,
+    var(--agent-surface-hover, var(--p-surface-100, #f4f4f5)) 100%
   );
   background-size: 220% 100%;
   animation: group-shimmer-sweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -179,7 +179,7 @@ function truncate(s: string, n: number) {
 }
 
 .inline-spin-sparkle {
-  color: #10b981;
+  color: var(--accent-success, #15803d);
   display: flex;
   align-items: center;
 }
@@ -200,7 +200,7 @@ function truncate(s: string, n: number) {
 .inline-arrow {
   font-size: 13px;
   font-family: system-ui, -apple-system, sans-serif;
-  color: var(--p-text-muted-color, #a1a1aa);
+  color: var(--agent-text-muted, var(--p-text-muted-color, #a1a1aa));
   transition: transform 0.2s ease, color 0.15s ease;
   display: inline-block;
   transform-origin: center;
@@ -261,7 +261,7 @@ function truncate(s: string, n: number) {
 }
 
 .row-bullet.done {
-  background: #10b981;
+  background: var(--accent-success, #15803d);
 }
 
 .row-bullet.failed {
@@ -298,7 +298,7 @@ function truncate(s: string, n: number) {
 .row-code-panel {
   margin: 4px 0 6px 10px;
   padding: 6px 8px;
-  background: var(--p-surface-900, #18181b);
+  background: #18181b;
   border-radius: 6px;
   font-family: var(--font-family-mono, monospace);
   font-size: 10.5px;

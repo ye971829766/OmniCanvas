@@ -29,6 +29,18 @@ export const TOOL_LABELS: Record<string, string> = {
   review_and_adjust: '检查并调整',
 };
 
+const INTERNAL_AGENT_TOOLS = new Set([
+  'verify_design',
+  'export_node_image',
+  'analyze_design',
+  'query_canvas',
+  'focus_node',
+]);
+
+export function isInternalAgentTool(name: string): boolean {
+  return INTERNAL_AGENT_TOOLS.has(name);
+}
+
 export function getToolLabel(name: string): string {
   return TOOL_LABELS[name] ?? name;
 }

@@ -71,7 +71,14 @@ function downloadMedia(e: MouseEvent) {
       class="preview-done"
     >
       <img :src="state.url" class="preview-img" />
-   
+      <button
+        class="action-download-btn"
+        type="button"
+        aria-label="下载图片"
+        @click.stop="downloadMedia"
+      >
+        <Download :size="15" />
+      </button>
     </div>
 
     <!-- ── DONE: video ────────────────────────────────────────── -->
@@ -84,13 +91,22 @@ function downloadMedia(e: MouseEvent) {
       <!-- Play button with breathing pulse -->
       <button
         class="play-btn"
+        type="button"
         @click.stop="emit('zoom', refId)"
         aria-label="定位画布"
       >
         <Play :size="16" fill="currentColor" />
       </button>
 
-  
+      <button
+        class="action-download-btn"
+        type="button"
+        aria-label="下载视频"
+        @click.stop="downloadMedia"
+      >
+        <Download :size="15" />
+      </button>
+
       <span class="video-badge">VIDEO</span>
       <div class="preview-overlay">
         <span class="preview-tip">点击定位画布</span>
@@ -109,7 +125,7 @@ function downloadMedia(e: MouseEvent) {
 
 .card-title-text {
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-primary);
   letter-spacing: 0.2px;
 }
@@ -126,7 +142,7 @@ function downloadMedia(e: MouseEvent) {
   transition:
     transform 0.18s cubic-bezier(0, 0, 0.2, 1),
     box-shadow 0.18s cubic-bezier(0, 0, 0.2, 1);
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--agent-border-subtle, rgba(0, 0, 0, 0.08));
 }
 
 .preview-card:focus-visible {
@@ -301,6 +317,46 @@ function downloadMedia(e: MouseEvent) {
   max-height: none;
 }
 
+.action-download-btn {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  z-index: 5;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(24, 24, 27, 0.84);
+  color: #ffffff;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+.action-download-btn:hover {
+  background: rgba(24, 24, 27, 0.96);
+  transform: translateY(-1px);
+}
+
+.action-download-btn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.compact .action-download-btn {
+  right: 7px;
+  bottom: 7px;
+  width: 27px;
+  height: 27px;
+}
+
 
 
 /* Overlay */
@@ -334,13 +390,13 @@ function downloadMedia(e: MouseEvent) {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  border: none;
+  background: rgba(24, 24, 27, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.26);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-primary);
+  color: #ffffff;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
   z-index: 3;
   animation: play-breathe 2s ease-in-out infinite;

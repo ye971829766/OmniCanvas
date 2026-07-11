@@ -90,7 +90,7 @@ const statusLabel = computed(() => {
 }
 
 .tool-event.is-running .tool-event-icon {
-  color: var(--p-primary-color, #18181b);
+  color: var(--accent-primary, var(--p-primary-color, #4f46e5));
 }
 
 .tool-event.is-failed,
