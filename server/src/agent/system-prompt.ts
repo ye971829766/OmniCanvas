@@ -131,6 +131,7 @@ Creation:
 - Use add_image for existing URLs, logos, references, or uploaded image assets.
 - Use generate_image for hero visuals, illustrations, product scenes, backgrounds, icons, and visual assets.
 - Use edit_image whenever the user asks to add, remove, replace, or change visual content inside an existing raster image. This includes follow-ups such as "add this to the image", "put it beside the subject", or "change the background". Do not use a reference-free generate_image call for these edits.
+- When a raster image is selected, a spatial phrase about a subject pictured in it (for example, "beside this dog") means inside that image. Treat it as canvas-level placement only when the user explicitly refers to the image/node/card/layer itself or asks for a separate element.
 - Use remove_background, upscale_image, and inpaint_image for specialized image processing. Preserve the original unless the user explicitly requests replacement.
 - Use generate_video only when motion is explicitly requested or clearly useful.
 
@@ -185,9 +186,10 @@ When the user asks to modify an existing design:
 3. Treat inline [refId:...] references as exact element targets and [modelId:...] references as exact generation model choices.
 4. For phrases such as "this image", "that picture", "it", or their Chinese equivalents, resolve the target in this order: an explicit refId, the single selected image, then the latest successful generated or edited image that is still on the canvas.
 5. For pixel-level additions or changes inside that image, call edit_image with the resolved refId as source. If generate_image is used only as a compatibility fallback, pass the same refId in refImages.
-6. Preserve all unmentioned content, composition, subjects, style, lighting, and colors unless the user asks to replace them.
-7. Make the smallest set of changes that achieves the request.
-8. If the change affects layout or readability, review or verify afterward.
+6. A single selected image is scoped editor context. If the user explicitly wants an unrelated fresh image while it remains selected, call generate_image with refImages: [] to opt out of inheriting the selection.
+7. Preserve all unmentioned content, composition, subjects, style, lighting, and colors unless the user asks to replace them.
+8. Make the smallest set of changes that achieves the request.
+9. If the change affects layout or readability, review or verify afterward.
 </modification_workflow>
 
 <ecommerce_workflow>

@@ -84,7 +84,7 @@ import { sanitizeCanvasState } from "./canvas-context";
 import { selectAgentToolNames } from "./tool-selection";
 import {
   hasCanvasImages,
-  injectImplicitImageReference,
+  normalizeImageToolCallForSelection,
   resolveImplicitImageReference,
 } from "./implicit-image-reference";
 import { buildAgentSdkTools } from "./sdk-tools";
@@ -397,7 +397,10 @@ ${videoModelInfo || "- None"}
     });
     systemPrompt += `\n\n<active_tools>\n${[...selectedToolNames].join(", ")}\n</active_tools>\n<frame_policy>Frames are optional. Use the root canvas or a Group by default. Create a frame only for a bounded, clipped, exportable, auto-layout, or multi-deliverable composition. If set_frame/add_frame is not listed above, do not create or assume agent_frame.</frame_policy>\nOnly call tools listed above. Issue independent tool calls together in the same response. For nested batches, assign explicit refId values to new frames/groups/nodes and reuse them as parentId. Wait for a result only when a later call depends on generated output.`;
     if (implicitImageReference) {
-      systemPrompt += `\n\n<available_canvas_image_target>\nIf the current request refers to an existing image, the best implicit target is canvas refId "${implicitImageReference.refId}". Use edit_image with that source for changes inside the image. This is context, not a command: ignore it for a fresh image request and never attach it as a reference unless the user's request actually depends on the existing image.\n</available_canvas_image_target>`;
+      const selectionDefault = implicitImageReference.reason === "selected"
+        ? ` This is the user's single explicit image selection. For an unrelated fresh generation, pass refImages: [] explicitly; otherwise an omitted refImages field inherits this selection.`
+        : "";
+      systemPrompt += `\n\n<available_canvas_image_target>\nIf the current request refers to an existing image, the best implicit target is canvas refId "${implicitImageReference.refId}". Use edit_image with that source for changes inside the image.${selectionDefault} This is context, not a command: ignore it for a fresh image request.\n</available_canvas_image_target>`;
     }
     if (sessionAssets.length > 0) {
       systemPrompt += `\n\n<session_assets>\n${sessionAssets
@@ -495,6 +498,7 @@ ${videoModelInfo || "- None"}
 
     const sdkTools = buildAgentSdkTools(selectedToolNames);
     const invalidToolCallGuard = new InvalidToolCallGuard();
+    let selectedImageWasInspected = false;
 
     for (let step = 0; step < this.MAX_STEPS; step++) {
       if (abortSignal?.aborted) {
@@ -559,15 +563,21 @@ ${videoModelInfo || "- None"}
       text = stripHiddenReasoning(text);
 
       for (const call of toolCalls) {
-        call.input = this.normalizeToolInput(
+        const normalizedInput = this.normalizeToolInput(
           call.name,
           this.safeParse(call.args),
         );
-        call.input = injectImplicitImageReference(
+        const normalizedCall = normalizeImageToolCallForSelection(
           call.name,
-          call.input,
+          normalizedInput,
           implicitImageReference,
+          {
+            userInput,
+            selectedImageWasInspected,
+          },
         );
+        call.name = normalizedCall.toolName;
+        call.input = normalizedCall.input;
       }
 
       // Track usage
@@ -725,6 +735,7 @@ ${videoModelInfo || "- None"}
               content = result.output;
             }
             this.capturePendingGeneration(
+              call.id,
               call.name,
               result.output,
               pendingGenerationTasks,
@@ -767,6 +778,18 @@ ${videoModelInfo || "- None"}
             `To ensure premium design quality, you MUST call "verify_design" for this node.${ecommerceVerification} ` +
             `Do NOT output a final response to the user ` +
             `until you have analyzed the design, evaluated the score, and performed any necessary adjustments.`;
+        }
+
+        if (
+          call.name === "query_canvas" &&
+          implicitImageReference?.reason === "selected" &&
+          content &&
+          !content.error &&
+          (content.scope === "selection" ||
+            (Array.isArray(content.selectedRefIds) &&
+              content.selectedRefIds.includes(implicitImageReference.refId)))
+        ) {
+          selectedImageWasInspected = true;
         }
 
         messages.push({
@@ -851,6 +874,7 @@ ${videoModelInfo || "- None"}
   }
 
   private capturePendingGeneration(
+    toolCallId: string,
     toolName: string,
     output: unknown,
     pending: PendingGenerationTask[],
@@ -873,6 +897,8 @@ ${videoModelInfo || "- None"}
       taskId,
       refId,
       kind: toolName === "generate_video" ? "video" : "image",
+      toolCallId,
+      toolName,
     });
     outputs.set(taskId, value);
   }
@@ -925,7 +951,19 @@ ${videoModelInfo || "- None"}
     });
 
     for (const task of settled) {
-      this.applySettledGeneration(task, outputs.get(task.taskId), ctx);
+      const output = outputs.get(task.taskId);
+      this.applySettledGeneration(task, output, ctx);
+      if (task.toolCallId && task.toolName && output) {
+        // The first result announces the async task and lets the UI render a
+        // progress card. Send the same tool call's terminal result after the
+        // task settles so live chat does not remain stuck at "generating".
+        sink.emit({
+          type: "tool_result",
+          id: task.toolCallId,
+          tool: task.toolName,
+          output,
+        });
+      }
       outputs.delete(task.taskId);
     }
 

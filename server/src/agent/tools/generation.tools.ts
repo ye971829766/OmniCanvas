@@ -32,7 +32,9 @@ export const generateImageTool: AgentTool = {
       refImages: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Optional array of stable assetIds, canvas refIds, or absolute URLs to use as visual references.',
+        description:
+          'Optional array of stable assetIds, canvas refIds, or absolute URLs to use as visual references. ' +
+          'When exactly one canvas image is selected, omitting this field inherits that selection; pass [] explicitly only for a fresh generation unrelated to the selection.',
       },
       platform: { type: 'string', enum: ['amazon', 'taobao', 'jd'], description: 'Optional ecommerce platform tag for plan tracking.' },
       deliverable: { type: 'string', description: 'Optional deliverable role such as main, lifestyle, selling_point, or detail.' },

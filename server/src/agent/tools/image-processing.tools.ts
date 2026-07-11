@@ -135,7 +135,8 @@ export const editImageTool: AgentTool = {
   name: 'edit_image',
   description:
     'Edit an existing image with a text instruction, optionally constrained by a PNG mask asset/ref. ' +
-    'Use for changing a product detail, background, lighting, material, or color while preserving the source identity.',
+    'Use for adding, removing, or replacing pictured subjects (for example, adding a cat beside a dog inside the image), ' +
+    'or for changing a product detail, background, lighting, material, or color while preserving the source identity.',
   parameters: {
     type: 'object',
     properties: {

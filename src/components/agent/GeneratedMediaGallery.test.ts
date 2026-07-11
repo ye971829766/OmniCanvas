@@ -139,6 +139,36 @@ describe("GeneratedMediaGallery", () => {
     expect(host.querySelectorAll(".action-download-btn")).toHaveLength(1);
   });
 
+  it("prefers a terminal tool result over a stale generating canvas state", async () => {
+    const { host } = mountGallery(
+      [
+        {
+          id: "tool-terminal",
+          name: "edit_image",
+          done: true,
+          output: {
+            refId: "edited-image",
+            status: "success",
+            url: "https://example.com/edited-image.png",
+          },
+        },
+      ],
+      {
+        "edited-image": {
+          refId: "edited-image",
+          type: "image",
+          status: "generating",
+        },
+      },
+    );
+    await nextTick();
+
+    expect(host.querySelector(".preview-mesh")).toBeNull();
+    expect(host.querySelector<HTMLImageElement>(".preview-img")?.src).toBe(
+      "https://example.com/edited-image.png",
+    );
+  });
+
   it("keeps failed generation attempts in the tool timeline instead of the media gallery", async () => {
     const { host } = mountGallery(
       [

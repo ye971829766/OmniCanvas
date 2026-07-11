@@ -46,7 +46,7 @@ const mediaItems = computed(() => {
     }
 
     const persistedUrl = output?.url || output?.imageUrl || output?.videoUrl;
-    const persistedState = persistedUrl
+    const persistedState: (NodeState & { prompt?: string }) | undefined = persistedUrl
       ? {
           refId,
           type: tool.name === "generate_video" ? "video" : "image",
@@ -71,7 +71,14 @@ const mediaItems = computed(() => {
               prompt: tool.input?.prompt,
             }
           : undefined;
-    const state = props.nodeStates[refId] || persistedState;
+    const terminalPersistedState =
+      persistedState && persistedState.status !== "generating"
+        ? persistedState
+        : undefined;
+    // A terminal tool result is authoritative. It must win over a stale live
+    // canvas state left at "generating" by an earlier start event.
+    const state =
+      terminalPersistedState || props.nodeStates[refId] || persistedState;
     // Failed generation attempts belong in the tool timeline, not the media
     // gallery. Keeping them here turns repeated retries into a wall of error
     // thumbnails and separates the error from the tool that produced it.

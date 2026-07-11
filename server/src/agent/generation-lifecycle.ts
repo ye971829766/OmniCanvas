@@ -2,6 +2,8 @@ export interface PendingGenerationTask {
   taskId: string;
   refId: string;
   kind: "image" | "video";
+  toolCallId?: string;
+  toolName?: string;
 }
 
 export interface GenerationTaskState {

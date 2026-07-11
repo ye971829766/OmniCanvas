@@ -25,6 +25,9 @@ import {
 } from "@/utils/agentText";
 import { serializeCanvasForAgent } from "@/utils/agentCanvasContext";
 import { createFitImage } from "@/utils/leaferImage";
+import {
+  deriveTerminalMediaNodeState,
+} from "@/utils/agentMediaState";
 
 /**
  * useAgent — drives the Lovart-style chat panel.
@@ -437,6 +440,7 @@ export function useAgent(
   // refId -> leafer node, so update_node / generation_started can find nodes
   const nodeMap = new Map<string, any>();
   const nodeStates = ref<Record<string, NodeState>>({});
+  const settledGenerationTaskIds = new Set<string>();
   let abort: AbortController | null = null;
   let localRefSeq = 1;
   let applyingCanvasOp = false;
@@ -530,6 +534,7 @@ export function useAgent(
       if (app?.tree?.children) {
         nodeMap.clear();
         nodeStates.value = {};
+        settledGenerationTaskIds.clear();
         app.tree.children.forEach(scanTreeAndPopulateNodeMap);
       }
     },
@@ -887,6 +892,7 @@ export function useAgent(
         // The agent backend already kicked off generation and owns the taskId.
         // Attach it to the placeholder node and fire `task-start` so useCanvas
         // picks up its EXISTING polling pipeline (poll -> swap to Image/VideoNode).
+        if (settledGenerationTaskIds.has(op.taskId)) break;
         const node = nodeMap.get(op.refId);
         if (node) {
           node.set({ taskId: op.taskId, generationStatus: "generating" });
@@ -1114,6 +1120,19 @@ export function useAgent(
               item.output = ev.output;
             }
           }
+        }
+        const rawOutput = unwrapToolOutput(ev.output);
+        const refId = typeof rawOutput?.refId === "string" ? rawOutput.refId : "";
+        const terminalState = deriveTerminalMediaNodeState(
+          ev.tool,
+          ev.output,
+          refId ? nodeStates.value[refId] : undefined,
+        );
+        if (terminalState) {
+          if (typeof rawOutput?.taskId === "string") {
+            settledGenerationTaskIds.add(rawOutput.taskId);
+          }
+          nodeStates.value[terminalState.refId] = terminalState;
         }
         break;
       }
@@ -1349,6 +1368,7 @@ export function useAgent(
     messages.value = [];
     nodeMap.clear();
     nodeStates.value = {};
+    settledGenerationTaskIds.clear();
     const app = canvasApp.value;
     if (app?.tree?.children) {
       app.tree.children.forEach(scanTreeAndPopulateNodeMap);
