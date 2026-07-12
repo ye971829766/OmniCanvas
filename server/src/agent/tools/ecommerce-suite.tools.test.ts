@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { planEcommerceSuiteTool } from './ecommerce-suite.tools';
 
-function createContext(canvasState: any[] = []) {
+function createContext(canvasState: any[] = [], assetOverrides: Record<string, any> = {}) {
   const events: any[] = [];
   let savedPlan: any = null;
   return {
@@ -14,6 +14,7 @@ function createContext(canvasState: any[] = []) {
           url: 'http://localhost:3000/files/product.png',
           name: 'product.png',
           createdAt: Date.now(),
+          ...assetOverrides,
         },
       ],
       sink: { emit: (event: any) => events.push(event) },
@@ -103,5 +104,72 @@ describe('planEcommerceSuiteTool', () => {
       { x: 2020, y: 2290 },
       { x: 4140, y: 2290 },
     ]);
+  });
+
+  test('requires low-resolution assets to be prepared and persists factual suite context', async () => {
+    const { ctx, getSavedPlan } = createContext([], { width: 224, height: 224 });
+    ctx.assets.push({
+      id: 'asset_product_alias',
+      url: ctx.assets[0].url,
+      name: 'reference-1',
+      createdAt: Date.now(),
+    });
+    const result = await planEcommerceSuiteTool.execute(
+      {
+        platforms: ['taobao'],
+        sourceAssetId: 'asset_product_alias',
+        productName: '城市跑鞋',
+        brand: 'Example',
+        sellingPoints: ['用户提供的透气鞋面'],
+        language: 'zh-CN',
+        creativeDirection: '都市夜跑，高端运动科技感',
+      },
+      ctx,
+    );
+
+    const output = result.output as any;
+    const plan = getSavedPlan();
+    expect(output.needsUpscale).toBe(true);
+    expect(output.sourceDimensions).toEqual({ width: 224, height: 224 });
+    expect(plan).toMatchObject({
+      sourceWidth: 224,
+      sourceHeight: 224,
+      productName: '城市跑鞋',
+      brand: 'Example',
+      sellingPoints: ['用户提供的透气鞋面'],
+      language: 'zh-CN',
+      creativeDirection: '都市夜跑，高端运动科技感',
+    });
+    expect(plan.steps[0]).toMatchObject({
+      status: 'pending',
+      completionTool: 'upscale_image',
+    });
+    expect(output.instruction).toContain('Upscale the source first');
+    expect(output.deliverables).toHaveLength(6);
+  });
+
+  test('drops product facts invented by the control model', async () => {
+    const { ctx, getSavedPlan } = createContext();
+    ctx.userInput = '基于这双鞋生成淘宝主图，不要编造品牌、材质或功效。';
+
+    await planEcommerceSuiteTool.execute(
+      {
+        platforms: ['taobao'],
+        sourceAssetId: 'asset_product',
+        productName: 'Nike Air Zoom 跑鞋',
+        brand: 'Nike',
+        sellingPoints: ['高弹 EVA 中底', '耐磨防滑'],
+        creativeDirection: '高端城市运动风格',
+        imagesPerPlatform: 1,
+      },
+      ctx,
+    );
+
+    expect(getSavedPlan()).toMatchObject({
+      sellingPoints: [],
+      creativeDirection: '高端城市运动风格',
+    });
+    expect(getSavedPlan().productName).toBeUndefined();
+    expect(getSavedPlan().brand).toBeUndefined();
   });
 });

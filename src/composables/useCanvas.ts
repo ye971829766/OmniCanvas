@@ -176,6 +176,7 @@ import "@leafer-in/view";
 import "@leafer-in/animate";
 import { CustomSnap as Snap } from "@/utils/CustomSnap";
 import { getNonOverlappingCoordinates } from "@/utils/utils";
+import { getImageTaskLoadingText } from "@/utils/imageTask";
 
 /**
  * Core composable that manages the Leafer Canvas instance,
@@ -1020,12 +1021,7 @@ export function useCanvas(
         },
       });
 
-      const text =
-        rawNode.generationType === "removeBg"
-          ? "正在去除背景..."
-          : rawNode.generationType === "inpaint"
-            ? "正在进行图像擦除..."
-            : "正在进行 HD 放大...";
+      const text = getImageTaskLoadingText(rawNode.generationType);
       const loadingText = new Text({
         x: w / 2,
         y: h / 2,

@@ -192,6 +192,32 @@ describe("AgentMessages markdown style contract", () => {
 });
 
 describe("AgentMessages execution timeline", () => {
+  it("renders the thinking status with the animated text label", async () => {
+    const element = await mountMessages([
+      {
+        id: "run-thinking",
+        role: "assistant",
+        text: "",
+        tools: [],
+        streaming: true,
+        runStatus: "running",
+        progress: { message: "正在思考" },
+      },
+    ]);
+
+    const status = element.querySelector<HTMLElement>(".run-progress");
+    expect(status?.getAttribute("role")).toBe("status");
+    expect(status?.querySelector(".thinking-label")?.textContent).toBe("正在思考");
+    expect(agentMessagesSource).toContain(
+      "--thinking-ink: var(--agent-text-primary, #18181b)",
+    );
+    expect(agentMessagesSource).toContain("@supports ((-webkit-background-clip: text)");
+    expect(agentMessagesSource).toContain("animation: thinking-text-sheen 2.2s linear infinite");
+    expect(agentMessagesSource).toContain(":global(.p-dark .run-progress)");
+    expect(agentMessagesSource).toContain("--thinking-muted: #92929c");
+    expect(agentMessagesSource).not.toContain(":global(.p-dark .thinking-label)");
+  });
+
   it("keeps internal quality checks out of the customer-facing timeline", async () => {
     const visibleTool = {
       id: "generate-visible",

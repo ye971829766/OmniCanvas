@@ -268,12 +268,15 @@ export class AgentMemory {
     const candidates = plan.steps.filter(matches);
     const step =
       candidates.find((item) => item.status === 'in_progress') ??
-      candidates.find((item) => item.status === 'pending');
+      candidates.find((item) => item.status === 'pending') ??
+      candidates.find((item) => item.status === 'failed' || item.status === 'error');
     if (!step) return plan;
 
     if (failed) step.status = 'failed';
     else if (completed && step.completionTool === tool) step.status = 'completed';
-    else if (step.status === 'pending') step.status = 'in_progress';
+    else if (step.status === 'pending' || step.status === 'failed' || step.status === 'error') {
+      step.status = 'in_progress';
+    }
     this.saveSession(sessionId, session);
     return plan;
   }

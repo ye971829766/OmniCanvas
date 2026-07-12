@@ -1,5 +1,7 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
-import { upsertCanvasNode } from '../canvas-state';
+import type { CanvasImageGenerationType } from '../agent.protocol';
+import { resolveCanvasContainerParentId, upsertCanvasNode } from '../canvas-state';
+import { promotePlannedEcommerceSource } from '../ecommerce-plan';
 import { resolveReferenceToBase64, resolveReferenceUrl } from './image-reference';
 
 function getSourceNode(source: string, ctx: ToolContext): any | undefined {
@@ -17,10 +19,14 @@ function createProcessingTarget(
   const refId = replaceOriginal ? sourceNode.refId : ctx.newRefId(operation);
 
   if (!replaceOriginal) {
+    const parentId = resolveCanvasContainerParentId(
+      ctx,
+      input.parentId ?? sourceNode?.parentId,
+    );
     const node = {
       refId,
       type: 'image' as const,
-      parentId: input.parentId ?? sourceNode?.parentId,
+      parentId,
       url: sourceUrl,
       x: input.x ?? (typeof sourceNode?.x === 'number' ? sourceNode.x + (sourceNode.width || 400) + 24 : undefined),
       y: input.y ?? sourceNode?.y,
@@ -34,10 +40,26 @@ function createProcessingTarget(
   return refId;
 }
 
-function startCanvasImageTask(refId: string, taskId: string, ctx: ToolContext): void {
-  ctx.sink.canvas({ op: 'generation_started', refId, kind: 'image', taskId });
+function startCanvasImageTask(
+  refId: string,
+  taskId: string,
+  generationType: CanvasImageGenerationType,
+  ctx: ToolContext,
+): void {
+  ctx.sink.canvas({
+    op: 'generation_started',
+    refId,
+    kind: 'image',
+    taskId,
+    generationType,
+  });
+  upsertCanvasNode(ctx, refId, {
+    taskId,
+    status: 'generating',
+    generationType,
+  });
   const node = ctx.canvasState.find((item: any) => item.refId === refId);
-  if (node) Object.assign(node, { taskId, status: 'generating' });
+  if (node) Object.assign(node, { taskId, status: 'generating', generationType });
 }
 
 const placementProperties = {
@@ -68,8 +90,9 @@ export const removeBackgroundTool: AgentTool = {
     if (!sourceUrl) throw new Error(`Unable to resolve source image: ${input.source}`);
     const refId = createProcessingTarget(input, ctx, sourceUrl, 'cutout');
     const result = await ctx.files.removeBackground(sourceUrl, ctx.origin);
-    startCanvasImageTask(refId, result.taskId, ctx);
-    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'remove_background' } };
+    startCanvasImageTask(refId, result.taskId, 'removeBg', ctx);
+    const canonicalSource = promotePlannedEcommerceSource(input.source, refId, ctx);
+    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'remove_background', canonicalSource } };
   },
 };
 
@@ -90,8 +113,9 @@ export const upscaleImageTool: AgentTool = {
     if (!sourceUrl) throw new Error(`Unable to resolve source image: ${input.source}`);
     const refId = createProcessingTarget(input, ctx, sourceUrl, 'upscale');
     const result = await ctx.files.upscaleImage(sourceUrl, input.scale || 4, ctx.origin);
-    startCanvasImageTask(refId, result.taskId, ctx);
-    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'upscale_image' } };
+    startCanvasImageTask(refId, result.taskId, 'upscale', ctx);
+    const canonicalSource = promotePlannedEcommerceSource(input.source, refId, ctx);
+    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'upscale_image', canonicalSource } };
   },
 };
 
@@ -126,7 +150,7 @@ export const inpaintImageTool: AgentTool = {
     if (!sourceUrl) throw new Error(`Unable to resolve source image: ${input.source}`);
     const refId = createProcessingTarget(input, ctx, sourceUrl, 'inpaint');
     const result = await ctx.files.inpaintImage(sourceUrl, input.rectangles, ctx.origin);
-    startCanvasImageTask(refId, result.taskId, ctx);
+    startCanvasImageTask(refId, result.taskId, 'inpaint', ctx);
     return { output: { refId, taskId: result.taskId, status: result.status, operation: 'inpaint_image' } };
   },
 };
@@ -170,7 +194,7 @@ export const editImageTool: AgentTool = {
       ctx.origin,
     );
     if (!result.taskId) throw new Error('Image edit did not return a taskId.');
-    startCanvasImageTask(refId, result.taskId, ctx);
+    startCanvasImageTask(refId, result.taskId, 'edit', ctx);
     return {
       output: {
         refId,

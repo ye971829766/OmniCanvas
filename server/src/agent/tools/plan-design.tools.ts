@@ -112,20 +112,9 @@ export const planDesignTool: AgentTool = {
           `1. add_frame(refId: "${artboardId}", ${dims.replace('x', ', ')}, x: ${(stepNum - 1) * 1400}) ` +
           `2. generate_image("${request}", parentId: "${artboardId}") ` +
           `3. add_text(标题, parentId: "${artboardId}") ` +
-          `4. auto_layout("hero") ` +
-          `5. verify_design("${artboardId}", "${request}")`,
-        tools: ['add_frame', 'generate_image', 'add_text', 'auto_layout', 'verify_design'],
+          `4. auto_layout("hero")`,
+        tools: ['add_frame', 'generate_image', 'add_text', 'auto_layout'],
         artboard: artboardId,
-      });
-    }
-
-    // Final step: review all
-    if (deliverables.length >= 2) {
-      steps.push({
-        step: ++stepNum,
-        title: '整体品牌一致性检查',
-        action: '检查所有画板风格是否统一，字体/颜色/间距是否一致',
-        tools: ['query_canvas'],
       });
     }
 
@@ -146,7 +135,7 @@ export const planDesignTool: AgentTool = {
       output: {
         plan,
         note: `已生成 ${steps.length} 步执行计划，涵盖 ${deliverables.length} 个设计稿件。请按顺序执行每一步。`,
-        instruction: '现在开始按计划逐步执行。每完成一个 deliverable 后调用 verify_design 验证质量，再继续下一步。',
+        instruction: '现在开始按计划逐步执行，不添加自动质检或评分步骤。',
       },
     };
   },

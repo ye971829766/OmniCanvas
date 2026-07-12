@@ -49,7 +49,7 @@ function getThinkingText(m: ChatMessage): string {
       ? "正在完善设计细节"
       : m.progress.message;
   }
-  return "思考中";
+  return "正在思考";
 }
 
 
@@ -432,7 +432,7 @@ function parseUserText(text: string) {
             role="status"
             aria-live="polite"
           >
-            {{ getThinkingText(m) }}
+            <span class="thinking-label">{{ getThinkingText(m) }}</span>
           </div>
 
           <div v-if="m.blocks?.length" class="run-blocks">
@@ -904,7 +904,13 @@ function parseUserText(text: string) {
 }
 
 .run-progress {
-  color: var(--agent-text-secondary);
+  --thinking-ink: var(--agent-text-primary, #18181b);
+  --thinking-muted: var(--agent-text-secondary, #52525b);
+
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--thinking-muted);
   font-size: 12.5px;
   line-height: 1.45;
 }
@@ -1699,27 +1705,34 @@ function parseUserText(text: string) {
   line-height: 1.3;
   letter-spacing: 0;
   white-space: nowrap;
-  color: transparent;
-  background: linear-gradient(
-    90deg,
-    var(--thinking-muted) 0%,
-    var(--thinking-muted) 28%,
-    var(--thinking-ink) 46%,
-    var(--thinking-muted) 64%,
-    var(--thinking-muted) 100%
-  );
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: thinking-text-sheen 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  color: var(--thinking-muted, var(--agent-text-secondary, #52525b));
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .thinking-label {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(
+      90deg,
+      var(--thinking-muted, var(--agent-text-secondary, #52525b)) 0%,
+      var(--thinking-muted, var(--agent-text-secondary, #52525b)) 30%,
+      var(--thinking-ink, var(--agent-text-primary, #18181b)) 48%,
+      var(--thinking-muted, var(--agent-text-secondary, #52525b)) 66%,
+      var(--thinking-muted, var(--agent-text-secondary, #52525b)) 100%
+    );
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: thinking-text-sheen 2.2s linear infinite;
+    will-change: background-position;
+  }
 }
 
 @keyframes thinking-text-sheen {
-  0%,
-  100% {
+  0% {
     background-position: 120% 0;
   }
-  50% {
+  100% {
     background-position: -20% 0;
   }
 }
@@ -1745,6 +1758,8 @@ function parseUserText(text: string) {
   .thinking-label {
     color: var(--thinking-muted);
     background: none;
+    -webkit-text-fill-color: currentColor;
+    will-change: auto;
   }
 }
 
@@ -2079,10 +2094,6 @@ function parseUserText(text: string) {
   --thinking-muted: #a1a1aa;
   --thinking-faint: rgba(250, 250, 250, 0.18);
   color: var(--thinking-muted);
-}
-
-:global(.p-dark .thinking-label) {
-  color: transparent;
 }
 
 :global(.p-dark .user-image-wrapper) {

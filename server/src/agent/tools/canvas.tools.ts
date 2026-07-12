@@ -4,6 +4,7 @@ import {
   getFrame,
   listCanvasNodes,
   removeCanvasNode,
+  resolveCanvasContainerParentId,
   resolveNewCanvasRefId,
   setFrame,
   upsertCanvasNode,
@@ -62,6 +63,7 @@ export const addTextTool: AgentTool = {
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const refId = resolveNewCanvasRefId(ctx, input.refId, 'txt');
+    const parentId = resolveCanvasContainerParentId(ctx, input.parentId);
     const brand = ctx.memory.getBrand(ctx.sessionId);
     const defaultFontFamily = brand?.fontFamily;
     const defaultFill = brand?.palette?.text ?? '#111111';
@@ -69,7 +71,7 @@ export const addTextTool: AgentTool = {
     const node = {
       refId,
       type: 'text' as const,
-      parentId: input.parentId,
+      parentId,
       text: input.text,
       x: input.x ?? 0,
       y: input.y ?? 0,
@@ -120,6 +122,7 @@ export const addRectTool: AgentTool = {
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const refId = resolveNewCanvasRefId(ctx, input.refId, 'rect');
+    const parentId = resolveCanvasContainerParentId(ctx, input.parentId);
     const brand = ctx.memory.getBrand(ctx.sessionId);
     const defaultFill = brand?.palette?.primary;
 
@@ -130,6 +133,7 @@ export const addRectTool: AgentTool = {
       fill: input.fill ?? defaultFill,
       x: input.x ?? 0,
       y: input.y ?? 0,
+      parentId,
     };
     ctx.sink.canvas({ op: 'add_node', node });
     upsertCanvasNode(ctx, refId, node);
@@ -522,6 +526,7 @@ export const addGroupTool: AgentTool = {
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const refId = resolveNewCanvasRefId(ctx, input.refId, 'grp');
+    const parentId = resolveCanvasContainerParentId(ctx, input.parentId);
     const node: any = {
       refId,
       type: 'group' as const,
@@ -531,7 +536,7 @@ export const addGroupTool: AgentTool = {
       scaleX: input.scaleX,
       scaleY: input.scaleY,
       opacity: input.opacity,
-      parentId: input.parentId,
+      parentId,
       zIndex: input.zIndex,
     };
     ctx.sink.canvas({ op: 'add_node', node });
@@ -570,6 +575,7 @@ export const addImageTool: AgentTool = {
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const refId = resolveNewCanvasRefId(ctx, input.refId, 'img');
+    const parentId = resolveCanvasContainerParentId(ctx, input.parentId);
     const node: any = {
       refId,
       type: 'image' as const,
@@ -581,7 +587,7 @@ export const addImageTool: AgentTool = {
       cornerRadius: input.cornerRadius,
       opacity: input.opacity,
       rotation: input.rotation,
-      parentId: input.parentId,
+      parentId,
       zIndex: input.zIndex,
     };
     ctx.sink.canvas({ op: 'add_node', node });

@@ -58,6 +58,7 @@ export const verifyDesignTool: AgentTool = {
         success: result.success,
         attempts: result.attempts,
         score: result.analysis?.score,
+        failureType: result.analysis?.failureType,
         critique: result.analysis?.critique,
         suggestions: result.analysis?.suggestions,
         platform: input.platform,

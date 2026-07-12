@@ -39,6 +39,27 @@ describe('buildEcommerceDeliverables', () => {
     expect(deliverables).toHaveLength(8);
   });
 
+  test('defaults Chinese marketplace suites to a six-image purchase narrative', () => {
+    const deliverables = buildEcommerceDeliverables({
+      platforms: ['taobao'],
+      sourceAssetId: 'asset_product',
+    });
+
+    expect(deliverables.map((item) => item.role)).toEqual([
+      'main',
+      'selling_point',
+      'scenario',
+      'detail',
+      'specification',
+      'trust',
+    ]);
+    expect(deliverables.find((item) => item.role === 'detail')).toMatchObject({
+      width: 750,
+      height: 1000,
+      copyMode: 'verified_labels',
+    });
+  });
+
   test('offsets the full grid from a supplied root-canvas origin', () => {
     const deliverables = buildEcommerceDeliverables({
       platforms: ['amazon'],

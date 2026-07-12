@@ -1,7 +1,9 @@
 import { getCanvasNodeMap } from './canvas-state';
 import {
+  getEcommerceDeliverableBrief,
   getEcommerceDeliverablePromptSeed,
   getEcommerceDeliverableRules,
+  type EcommerceCopyMode,
   type EcommercePlatform,
 } from './ecommerce-platforms';
 import type { ToolContext } from './tool.interface';
@@ -14,6 +16,17 @@ export interface PlannedEcommercePlacement {
   x: number;
   y: number;
   sourceAssetId?: string;
+  preferredSourceRefId?: string;
+  sourceWidth?: number;
+  sourceHeight?: number;
+  productName?: string;
+  sellingPoints: string[];
+  brand?: string;
+  language?: string;
+  creativeDirection?: string;
+  objective: string;
+  composition: string[];
+  copyMode: EcommerceCopyMode;
   promptSeed: string;
   rules: string[];
 }
@@ -45,6 +58,10 @@ export function getPlannedEcommercePlacements(
     ) {
       return [];
     }
+    const brief = getEcommerceDeliverableBrief(
+      step.platform as EcommercePlatform,
+      step.deliverable,
+    );
     return [{
       platform: step.platform,
       deliverable: step.deliverable,
@@ -53,6 +70,15 @@ export function getPlannedEcommercePlacements(
       x: step.x,
       y: step.y,
       sourceAssetId: plan.sourceAssetId,
+      preferredSourceRefId: plan.preferredSourceRefId,
+      sourceWidth: plan.sourceWidth,
+      sourceHeight: plan.sourceHeight,
+      productName: plan.productName,
+      sellingPoints: plan.sellingPoints ?? [],
+      brand: plan.brand,
+      language: plan.language,
+      creativeDirection: plan.creativeDirection,
+      ...brief,
       promptSeed: getEcommerceDeliverablePromptSeed(
         step.platform as EcommercePlatform,
         step.deliverable,
@@ -63,6 +89,38 @@ export function getPlannedEcommercePlacements(
       ),
     }];
   });
+}
+
+export function promotePlannedEcommerceSource(
+  source: unknown,
+  refId: string,
+  ctx: ToolContext,
+): boolean {
+  if (typeof source !== 'string' || !refId) return false;
+  const plan = ctx.memory.getPlan(ctx.sessionId);
+  if (!plan?.sourceAssetId) return false;
+  if (source !== plan.sourceAssetId && source !== plan.preferredSourceRefId) return false;
+
+  plan.preferredSourceRefId = refId;
+  ctx.memory.setPlan(ctx.sessionId, plan);
+  return true;
+}
+
+export function assertPlannedEcommerceSourceReady(ctx: ToolContext): void {
+  const plan = ctx.memory.getPlan(ctx.sessionId);
+  if (!plan) return;
+  const hasActiveDeliverable = plan.steps.some(
+    (step) => step.platform && step.deliverable && step.status !== 'completed',
+  );
+  if (!hasActiveDeliverable) return;
+  const prepareStep = plan.steps.find((step) =>
+    step.completionTool === 'upscale_image' && !step.platform && !step.deliverable,
+  );
+  if (prepareStep && prepareStep.status !== 'completed') {
+    throw new Error(
+      'The ecommerce source is low resolution. Complete upscale_image and use its canonical refId before starting paid image generation.',
+    );
+  }
 }
 
 function getReservationCounts(ctx: ToolContext): Map<string, number> {
@@ -147,17 +205,7 @@ export function getGptImageGenerationSize(width: number, height: number): string
 
 export function buildEcommerceImagePrompt(
   basePrompt: string,
-  placement: PlannedEcommercePlacement,
+  _placement: PlannedEcommercePlacement,
 ): string {
-  const requirements = placement.rules.length > 0
-    ? `Requirements: ${placement.rules.join('; ')}.`
-    : '';
-  return [
-    basePrompt.trim(),
-    placement.promptSeed,
-    `Create one finished ${placement.platform} ecommerce image for the ${placement.deliverable} deliverable.`,
-    'Treat the reference product as immutable source material: preserve its exact shape, proportions, materials, color, branding, logos, labels, and visible text.',
-    'Return a single clean image only. Do not create a collage, contact sheet, mockup frame, border, artboard, UI, caption, or separate layout elements.',
-    requirements,
-  ].filter(Boolean).join('\n');
+  return basePrompt.trim();
 }

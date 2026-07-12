@@ -1,6 +1,7 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
 import { compactCanvasNode, sanitizeCanvasState } from '../canvas-context';
 import {
+  getEcommerceDeliverableBrief,
   getEcommerceDeliverableRules,
   type EcommercePlatform,
 } from '../ecommerce-platforms';
@@ -139,32 +140,59 @@ ${omittedSiblingCount > 0 ? `- ${omittedSiblingCount} additional non-local nodes
       input.platform && input.deliverable
         ? getEcommerceDeliverableRules(input.platform, input.deliverable)
         : [];
+    const ecommerceBrief =
+      input.platform && input.deliverable
+        ? getEcommerceDeliverableBrief(input.platform, input.deliverable)
+        : undefined;
     const referenceAsset = input.referenceAssetId
       ? ctx.assets?.find((asset) => asset.id === input.referenceAssetId)
       : undefined;
+    const referenceDimensionSource = referenceAsset?.width && referenceAsset?.height
+      ? referenceAsset
+      : ctx.assets?.find((asset) =>
+          asset.id !== referenceAsset?.id &&
+          Boolean(asset.width && asset.height) &&
+          (asset.url === referenceAsset?.url ||
+            (asset.publicUrl && asset.publicUrl === referenceAsset?.publicUrl)),
+        );
+    const lowResolutionIdentitySource = Boolean(
+      referenceDimensionSource?.width &&
+      referenceDimensionSource?.height &&
+      Math.min(referenceDimensionSource.width, referenceDimensionSource.height) < 512,
+    );
     const ecommerceContext = referenceAsset
       ? `
-6. **Product Identity Fidelity**: Compare the target design against the source product image. Packaging geometry, logo, label text, color, proportions, and included parts must remain faithful.
-7. **Claim Accuracy**: Do not approve invented measurements, certifications, ingredients, performance numbers, or benefits.
-${platformRules.length ? `8. **Platform Rules (${input.platform}/${input.deliverable})**: ${platformRules.join('; ')}` : ''}
-Return identityFidelityScore (1-10) and list any identity mismatches in critique.`
+5. **Product Identity Fidelity (hard gate)**: Compare the target against the source. Silhouette, construction, material pattern, stitching, hardware, color placement, logo, label text, proportions, and included parts must remain faithful. Approval requires identityFidelityScore >= 9.
+6. **Claim Accuracy (hard gate)**: Reject invented measurements, materials, certifications, ingredients, service promises, performance numbers, benefits, badges, prices, or placeholder text.
+${platformRules.length ? `7. **Platform Rules (${input.platform}/${input.deliverable})**: ${platformRules.join('; ')}` : ''}
+${lowResolutionIdentitySource ? `8. **Low-resolution source restriction**: The original is only ${referenceDimensionSource?.width}x${referenceDimensionSource?.height}. A plausible product of the same category or color is not an identity match. Reject extreme macros, hidden angles, new perforation/stitching patterns, altered logo shape or color, and invented sole geometry unless those exact features are visible in the source. Do not award identityFidelityScore >= 9 when such details cannot be mapped to the source.` : ''}
+Return identityFidelityScore (1-10), failureType, and list every identity mismatch in critique.`
       : '';
+
+    const evaluationCriteria = ecommerceBrief
+      ? `Evaluate this as a finished ${input.platform}/${input.deliverable} ecommerce bitmap:
+1. **Role Fitness**: ${ecommerceBrief.objective}
+2. **Composition**: ${ecommerceBrief.composition.join('; ')}.
+3. **Mobile Readability**: The focal point and any permitted copy must read immediately at phone size. Reject micro-text, dense paragraphs, blank copy boxes, accidental crops, or weak empty layouts.
+4. **Commercial Finish**: Assess hierarchy, safe margins, material realism, lighting, edge quality, restrained color system, and whether it reaches premium marketplace campaign quality.
+${ecommerceContext}`
+      : `Evaluate these design aspects:
+1. **Layout & Spacing**: Are margins adequate (min 40px)? Is spacing between elements balanced?
+2. **Visual Hierarchy**: Does the design have clear focal points?
+3. **Color Harmony**: Are colors harmonious? Is there sufficient contrast?
+4. **Typography**: When text is present, is it readable and appropriately sized?
+5. **Image Sizing**: Is imagery sized appropriately for the requested composition?`;
 
     const reflectionPrompt = `Analyze the TARGET design image against the requirements: "${requirements}"
 ${canvasLayoutInfo}
-Evaluate these design aspects:
-1. **Layout & Spacing**: Are margins adequate (min 40px)? Is spacing between elements balanced?
-2. **Visual Hierarchy**: Does the design have clear focal points? Is the title prominent?
-3. **Color Harmony**: Are colors harmonious? Is there sufficient contrast?
-4. **Typography**: Is text readable? Are font sizes appropriate (Title ≥48px)?
-5. **Image Sizing**: Do images occupy 50-70% of frame (not 100%)?
-${ecommerceContext}
+${evaluationCriteria}
 
 Respond in JSON format:
 {
   "meetsRequirements": boolean,
   "score": 1-10,
   "identityFidelityScore": 1-10, // Include when a source product image is provided
+  "failureType": "none | identity | copy | composition | technical",
   "critique": "Specific issues found (be concise)",
   "suggestions": "Concrete adjustments needed (e.g., 'Increase title fontSize to 56px', 'Add 50px top margin')",
   "fixes": [] // Optional list of suggested direct updates to node properties, e.g. [{"refId": "txt_abc", "fontSize": 48}]

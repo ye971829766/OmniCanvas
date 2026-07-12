@@ -5,6 +5,13 @@ export interface AgentToolSelectionInput {
   hasCanvasImages?: boolean;
 }
 
+export interface EcommerceRequestIntent {
+  isEcommerce: boolean;
+  isEditable: boolean;
+  isImageEdit: boolean;
+  isDirectFinalImage: boolean;
+}
+
 const CORE_CREATION_TOOLS = [
   "add_group",
   "add_text",
@@ -15,8 +22,6 @@ const CORE_CREATION_TOOLS = [
   "auto_layout",
   "align_nodes",
   "distribute_nodes",
-  "review_and_adjust",
-  "verify_design",
   "query_canvas",
 ];
 
@@ -27,9 +32,53 @@ const IMAGE_PROCESSING_TOOLS = [
   "inpaint_image",
   "upscale_image",
 ];
+const ECOMMERCE_EDITABLE_COMPOSITION_TOOLS = [
+  "add_group",
+  "add_text",
+  "add_rect",
+  "add_image",
+  "auto_layout",
+  "align_nodes",
+  "distribute_nodes",
+  "review_and_adjust",
+];
 
 function matches(input: string, pattern: RegExp): boolean {
   return pattern.test(input);
+}
+
+export function classifyEcommerceRequest(userInput: string): EcommerceRequestIntent {
+  const input = userInput.toLowerCase();
+  const isEcommerce = matches(
+    input,
+    /\b(?:amazon|taobao|tmall|jd|listing|ecommerce|a\+)\b|\u7535\u5546|\u6dd8\u5b9d|\u5929\u732b|\u4eac\u4e1c|\u4e3b\u56fe|\u8be6\u60c5\u9875|\u5957\u56fe/,
+  );
+  const isEditable = matches(
+    input,
+    /\b(?:editable|layered|separate text layers?|source layout|source file)\b|\u53ef\u7f16\u8f91|\u5206\u5c42|\u6587\u5b57\u56fe\u5c42|\u6e90\u6587\u4ef6/,
+  );
+  const isImageEdit = matches(
+    input,
+    /\b(?:edit|modify|retouch|replace|remove|change)\b|\u4fee\u6539|\u7f16\u8f91|\u4fee\u56fe|\u66ff\u6362|\u5220\u9664|\u53bb\u6389|\u6539\u6210/,
+  );
+  return {
+    isEcommerce,
+    isEditable,
+    isImageEdit,
+    isDirectFinalImage:
+      isEcommerce && !isEditable && !isImageEdit,
+  };
+}
+
+export function isDirectImageRequest(userInput: string): boolean {
+  const input = userInput.toLowerCase();
+  const ecommerceIntent = classifyEcommerceRequest(userInput);
+  if (ecommerceIntent.isDirectFinalImage) return true;
+  if (ecommerceIntent.isEditable || ecommerceIntent.isImageEdit) return false;
+  return matches(
+    input,
+    /\b(?:generate|render)\b[^\r\n.!?]{0,100}\b(?:image|picture|photo|illustration|poster|banner|cover|artwork|wallpaper|logo)\b|(?:\u751f\u6210|\u751f\u56fe|\u7ed8\u5236|\u753b\u4e00\u5f20|\u5236\u4f5c\u4e00\u5f20)[^\r\n\u3002\uff01\uff1f]{0,100}(?:\u56fe\u7247|\u56fe\u50cf|\u7167\u7247|\u63d2\u753b|\u6d77\u62a5|\u5c01\u9762|\u5e7f\u544a\u56fe|\u5546\u54c1\u56fe|\u6548\u679c\u56fe|\u58c1\u7eb8|logo)/i,
+  );
 }
 
 export function selectAgentToolNames({
@@ -40,6 +89,8 @@ export function selectAgentToolNames({
 }: AgentToolSelectionInput): Set<string> {
   const input = userInput.toLowerCase();
   const selected = new Set(CORE_CREATION_TOOLS);
+  const ecommerceIntent = classifyEcommerceRequest(userInput);
+  const directImageRequest = isDirectImageRequest(userInput);
 
   const explicitSize = matches(
     input,
@@ -66,18 +117,16 @@ export function selectAgentToolNames({
     selected.add("generate_video");
   }
 
-  const ecommerce = matches(
-    input,
-    /\b(?:amazon|taobao|tmall|jd|listing|ecommerce|a\+)\b|\u7535\u5546|\u6dd8\u5b9d|\u5929\u732b|\u4eac\u4e1c|\u4e3b\u56fe|\u8be6\u60c5\u9875|\u5957\u56fe/,
-  );
-  if (ecommerce) {
-    selected.add("plan_ecommerce_suite");
-    IMAGE_PROCESSING_TOOLS.forEach((name) => selected.add(name));
+  const ecommerce = ecommerceIntent.isEcommerce;
+  if (directImageRequest) {
+    ECOMMERCE_EDITABLE_COMPOSITION_TOOLS.forEach((name) => selected.delete(name));
+    selected.delete("update_node");
+    selected.delete("verify_design");
   }
 
-  if ((multiDeliverable && !ecommerce) || explicitAdditionalArtboard) {
+  if (!directImageRequest && ((multiDeliverable && !ecommerce) || explicitAdditionalArtboard)) {
     selected.add("add_frame");
-  } else if (explicitSize || boundedDeliverable) {
+  } else if ((explicitSize || boundedDeliverable) && !directImageRequest) {
     selected.add("set_frame");
   }
 
@@ -88,7 +137,7 @@ export function selectAgentToolNames({
   if (imageProcessing || (hasAssets && matches(input, /\bedit\b|\u4fee\u6539|\u5904\u7406/))) {
     IMAGE_PROCESSING_TOOLS.forEach((name) => selected.add(name));
   }
-  if (hasCanvasImages) {
+  if (hasCanvasImages && !directImageRequest) {
     selected.add("edit_image");
   }
 
@@ -107,11 +156,32 @@ export function selectAgentToolNames({
   }
 
   const complex = ecommerce || multiDeliverable;
-  if (complex && !ecommerce) selected.add("plan_design");
+  if (complex && !ecommerce && !directImageRequest) selected.add("plan_design");
 
   if (matches(input, /\b(?:manual vision|analyze screenshot|visual analysis|score this design)\b|\u622a\u56fe\u5206\u6790|\u89c6\u89c9\u5206\u6790|\u8bbe\u8ba1\u8bc4\u5206/)) {
     selected.add("export_node_image");
     selected.add("analyze_design");
+  }
+
+  if (matches(
+    input,
+    /\b(?:verify|review|quality check|inspect the design|score the design)\b|\u8d28\u68c0|\u68c0\u67e5\u8bbe\u8ba1|\u8bc4\u5ba1|\u8bbe\u8ba1\u8bc4\u5206/,
+  )) {
+    selected.add("review_and_adjust");
+    selected.add("verify_design");
+  }
+
+  if (directImageRequest) {
+    const directTools = new Set(["generate_image"]);
+    for (const reviewTool of [
+      "review_and_adjust",
+      "verify_design",
+      "export_node_image",
+      "analyze_design",
+    ]) {
+      if (selected.has(reviewTool)) directTools.add(reviewTool);
+    }
+    return directTools;
   }
 
   return selected;

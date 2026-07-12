@@ -12,6 +12,7 @@
 export const AGENT_PROTOCOL_VERSION = 2;
 
 export type CanvasNodeType = 'image_gen' | 'video_gen' | 'text' | 'rect' | 'frame' | 'group' | 'image';
+export type CanvasImageGenerationType = 'edit' | 'removeBg' | 'inpaint' | 'upscale';
 
 /** A node the agent asks the canvas to create. */
 export interface CanvasNodeSpec {
@@ -78,6 +79,7 @@ export type CanvasOp =
       refId: string;
       kind: 'image' | 'video';
       taskId: string;
+      generationType?: CanvasImageGenerationType;
     }
   | { op: 'focus_node'; refId: string }
   | { op: 'export_node'; refId: string; requestId: string };
@@ -116,5 +118,13 @@ export interface AgentPlan {
   id: string;
   title: string;
   sourceAssetId?: string;
+  preferredSourceRefId?: string;
+  sourceWidth?: number;
+  sourceHeight?: number;
+  productName?: string;
+  sellingPoints?: string[];
+  brand?: string;
+  language?: string;
+  creativeDirection?: string;
   steps: AgentPlanStep[];
 }

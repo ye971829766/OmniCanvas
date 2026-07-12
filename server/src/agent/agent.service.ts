@@ -81,7 +81,10 @@ import {
   type AgentAssetInput,
 } from "./agent-assets";
 import { sanitizeCanvasState } from "./canvas-context";
-import { selectAgentToolNames } from "./tool-selection";
+import {
+  isDirectImageRequest,
+  selectAgentToolNames,
+} from "./tool-selection";
 import {
   hasCanvasImages,
   normalizeImageToolCallForSelection,
@@ -381,6 +384,13 @@ ${videoModelInfo || "- None"}
       safeCanvasState,
       history as any[],
     );
+    const directImageRequest = isDirectImageRequest(userInput);
+    const currentTurnAsset = currentAssets.length === 1 ? currentAssets[0] : undefined;
+    const defaultImageReferenceIds = currentTurnAsset
+      ? [currentTurnAsset.id]
+      : currentAssets.length === 0 && implicitImageReference
+        ? [implicitImageReference.refId]
+        : [];
     if (implicitImageReference?.url) {
       const referencedNode = safeCanvasState.find(
         (node: any) => node.refId === implicitImageReference.refId,
@@ -396,6 +406,9 @@ ${videoModelInfo || "- None"}
       hasCanvasImages: canvasHasImages,
     });
     systemPrompt += `\n\n<active_tools>\n${[...selectedToolNames].join(", ")}\n</active_tools>\n<frame_policy>Frames are optional. Use the root canvas or a Group by default. Create a frame only for a bounded, clipped, exportable, auto-layout, or multi-deliverable composition. If set_frame/add_frame is not listed above, do not create or assume agent_frame.</frame_policy>\nOnly call tools listed above. Issue independent tool calls together in the same response. For nested batches, assign explicit refId values to new frames/groups/nodes and reuse them as parentId. Wait for a result only when a later call depends on generated output.`;
+    if (directImageRequest) {
+      systemPrompt += `\n\n<current_final_image_request>\nSend this final image request directly to generate_image without planning, decomposition, or verification. Use your judgment to write a concise generation prompt that faithfully conveys the user's intent. Preserve the user's wording when it is already sufficient; otherwise make only the changes needed for the image model to understand the request. Do not invent product facts, creative directions, layouts, copy, or constraints that the user did not imply. If the user explicitly requests multiple separate outputs, make direct generation calls without inventing an intermediate plan.\n</current_final_image_request>`;
+    }
     if (implicitImageReference) {
       const selectionDefault = implicitImageReference.reason === "selected"
         ? ` This is the user's single explicit image selection. For an unrelated fresh generation, pass refImages: [] explicitly; otherwise an omitted refImages field inherits this selection.`
@@ -493,6 +506,9 @@ ${videoModelInfo || "- None"}
       canvasState: safeCanvasState,
       assets: sessionAssets,
       abortSignal,
+      userInput,
+      directImageRequest,
+      defaultImageReferenceIds,
       agentService: this,
     } as any;
 
@@ -677,7 +693,9 @@ ${videoModelInfo || "- None"}
         }
 
         sink.emit({ type: "tool_call", id: call.id, tool: call.name, input });
-        this.memory.updatePlanForTool(sessionId, call.name, input, false);
+        if (!directImageRequest) {
+          this.memory.updatePlanForTool(sessionId, call.name, input, false);
+        }
         const tool = TOOL_MAP.get(call.name);
         let content: any;
         if (!tool) {
@@ -688,13 +706,15 @@ ${videoModelInfo || "- None"}
             tool: call.name,
             output: content,
           });
-          this.memory.updatePlanForTool(
-            sessionId,
-            call.name,
-            input,
-            true,
-            true,
-          );
+          if (!directImageRequest) {
+            this.memory.updatePlanForTool(
+              sessionId,
+              call.name,
+              input,
+              true,
+              true,
+            );
+          }
         } else {
           try {
             const result = await this.withTimeout(
@@ -702,21 +722,26 @@ ${videoModelInfo || "- None"}
               this.TOOL_TIMEOUT_MS,
               `Tool ${call.name} timed out`,
             );
+            const output = result.output as any;
+            const toolReportedFailure =
+              call.name === "verify_design" && output?.success !== true;
             sink.emit({
               type: "tool_result",
               id: call.id,
               tool: call.name,
               output: result.output,
             });
-            this.memory.updatePlanForTool(
-              sessionId,
-              call.name,
-              input,
-              true,
-            );
+            if (!directImageRequest) {
+              this.memory.updatePlanForTool(
+                sessionId,
+                call.name,
+                input,
+                true,
+                toolReportedFailure,
+              );
+            }
 
             // MCoT visual check image cache handling
-            const output = result.output as any;
             if (
               output &&
               typeof output.image === "string" &&
@@ -751,33 +776,16 @@ ${videoModelInfo || "- None"}
               tool: call.name,
               output: content,
             });
-            this.memory.updatePlanForTool(
-              sessionId,
-              call.name,
-              input,
-              true,
-              true,
-            );
+            if (!directImageRequest) {
+              this.memory.updatePlanForTool(
+                sessionId,
+                call.name,
+                input,
+                true,
+                true,
+              );
+            }
           }
-        }
-
-        // 🆕 MCoT Checkpoint checklist
-        if (
-          (call.name === "generate_image" ||
-            call.name === "generate_video" ||
-            call.name === "edit_image") &&
-          content &&
-          content.refId
-        ) {
-          const ecommerceVerification = content.platform
-            ? ` Include platform: "${content.platform}", deliverable: "${content.deliverable || "design"}"` +
-              `${content.referenceAssetId ? `, and referenceAssetId: "${content.referenceAssetId}"` : ""}.`
-            : "";
-          content.mcotCheckpoint =
-            `[MCoT Checkpoint] You have just generated media node "${content.refId}". ` +
-            `To ensure premium design quality, you MUST call "verify_design" for this node.${ecommerceVerification} ` +
-            `Do NOT output a final response to the user ` +
-            `until you have analyzed the design, evaluated the score, and performed any necessary adjustments.`;
         }
 
         if (
@@ -909,6 +917,14 @@ ${videoModelInfo || "- None"}
     pending: PendingGenerationTask[],
   ): boolean {
     if (GENERATED_MEDIA_DEPENDENT_TOOLS.has(toolName)) return true;
+    if (
+      toolName === "generate_image" &&
+      pending.some((task) =>
+        task.toolName === "upscale_image" || task.toolName === "remove_background"
+      )
+    ) {
+      return true;
+    }
     const refs = Array.isArray(input?.refImages) ? input.refImages : [];
     return refs.some((ref: unknown) =>
       pending.some((task) => task.refId === ref),
@@ -1288,17 +1304,6 @@ ${videoModelInfo || "- None"}
       250,
     );
 
-    await tool(
-      "verify_design",
-      { refId: frameId || imgId, requirements: userInput },
-      () => ({
-        success: true,
-        score: 9,
-        note: "✅ 设计通过质检（评分 9/10）。",
-      }),
-      450,
-    );
-
     const summary = `设计完成！\n\n> ⓘ **Mock 模式**：图片以色块占位，关闭 \`MOCK_AGENT\` 可切换真实生成。`;
     sink.emit({ type: "final", text: summary });
   }
@@ -1318,6 +1323,15 @@ ${videoModelInfo || "- None"}
           .split(/[,/|\s]+/)
           .map((platform: string) => platform.trim())
           .filter(Boolean);
+      }
+      if (typeof input.sellingPoints === "string") {
+        input.sellingPoints = input.sellingPoints
+          .split(/[\r\n;；]+/)
+          .map((point: string) => point.trim())
+          .filter(Boolean);
+      }
+      if (typeof input.imagesPerPlatform === "string" && /^\d+$/.test(input.imagesPerPlatform.trim())) {
+        input.imagesPerPlatform = Number(input.imagesPerPlatform);
       }
     }
 

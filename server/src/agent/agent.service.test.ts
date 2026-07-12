@@ -14,6 +14,23 @@ function createService(): AgentService {
 }
 
 describe("AgentService event lifecycle", () => {
+  test("normalizes weaker ecommerce tool-call shapes before validation", () => {
+    const service = createService() as any;
+    const input = service.normalizeToolInput("plan_ecommerce_suite", {
+      platform: "taobao",
+      assetId: "asset-product",
+      sellingPoints: "透气鞋面；轻量鞋身",
+      imagesPerPlatform: "6",
+    });
+
+    expect(input).toMatchObject({
+      sourceAssetId: "asset-product",
+      platforms: ["taobao"],
+      sellingPoints: ["透气鞋面", "轻量鞋身"],
+      imagesPerPlatform: 6,
+    });
+  });
+
   test("emits the provider error before closing the stream", async () => {
     const service = createService() as any;
     service.logger.error = () => undefined;

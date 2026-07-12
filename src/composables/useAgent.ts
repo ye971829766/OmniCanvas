@@ -28,6 +28,8 @@ import { createFitImage } from "@/utils/leaferImage";
 import {
   deriveTerminalMediaNodeState,
 } from "@/utils/agentMediaState";
+import { resolveAgentCanvasParent } from "@/utils/agentCanvasParent";
+import type { CanvasImageGenerationType } from "@/utils/imageTask";
 
 /**
  * useAgent — drives the Lovart-style chat panel.
@@ -140,6 +142,7 @@ type CanvasOp =
       refId: string;
       kind: "image" | "video";
       taskId: string;
+      generationType?: CanvasImageGenerationType;
     }
   | { op: "focus_node"; refId: string }
   | { op: "export_node"; refId: string; requestId: string };
@@ -691,7 +694,14 @@ export function useAgent(
       case "add_node": {
         runCanvasChanged = true;
         const n = op.node;
-        const { x, y } = resolveXY(n, Boolean(n.parentId));
+        const requestedParent = n.parentId ? nodeMap.get(n.parentId) : null;
+        const fallbackParent = n.parentId && !requestedParent ? findAgentFrame() : null;
+        const parent = resolveAgentCanvasParent(
+          n.parentId,
+          requestedParent,
+          fallbackParent,
+        );
+        const { x, y } = resolveXY(n, Boolean(parent));
         let leaferNode: any = null;
 
         if (n.type === "image_gen") {
@@ -861,16 +871,6 @@ export function useAgent(
           (leaferNode as any).refId = n.refId;
           trackNode(leaferNode);
 
-          let parent: any = null;
-          if (n.parentId) {
-            parent = nodeMap.get(n.parentId);
-            // 如果 agent 明确指定了 parentId 但没找到，回退到 agent_frame
-            if (!parent) {
-              parent = findAgentFrame();
-            }
-          }
-          // 如果 agent 没有传 parentId，表示想放在根画布，不要自动查找 frame
-
           if (parent) {
             parent.add(leaferNode);
           } else {
@@ -895,7 +895,11 @@ export function useAgent(
         if (settledGenerationTaskIds.has(op.taskId)) break;
         const node = nodeMap.get(op.refId);
         if (node) {
-          node.set({ taskId: op.taskId, generationStatus: "generating" });
+          node.set({
+            taskId: op.taskId,
+            generationStatus: "generating",
+            ...(op.generationType ? { generationType: op.generationType } : {}),
+          });
           node.emit("task-start", { bubbles: true });
         }
         if (nodeStates.value[op.refId]) {
@@ -1261,7 +1265,7 @@ export function useAgent(
       }
       const assets = await materializeAgentAssets(attachments || []);
       if (assets.length > 0) userMessage.images = assets.map((asset) => asset.url);
-      assistant.progress = { message: "正在理解任务与画布" };
+      assistant.progress = { message: "正在思考" };
       const { currentUser } = useUser();
       const token = localStorage.getItem("omnicanvas_token");
       const headers: Record<string, string> = { "Content-Type": "application/json" };

@@ -43,23 +43,68 @@ describe("agent tool selection", () => {
     expect(tools.has("generate_video")).toBe(false);
     expect(tools.has("web_search")).toBe(false);
     expect(tools.has("plan_ecommerce_suite")).toBe(false);
+    expect(tools.has("verify_design")).toBe(false);
+    expect(tools.has("review_and_adjust")).toBe(false);
     expect(tools.has("set_frame")).toBe(false);
     expect(tools.has("add_frame")).toBe(false);
     expect(tools.size).toBeLessThan(20);
   });
 
-  test("adds ecommerce and image processing capabilities when relevant", () => {
+  test("sends single and multi-image ecommerce requests directly to image generation", () => {
+    for (const userInput of [
+      "帮我生成这双鞋的淘宝详情页",
+      "Create six Amazon listing images from this product asset",
+    ]) {
+      const tools = selectAgentToolNames({
+        userInput,
+        canvasNodeCount: 0,
+        hasAssets: true,
+      });
+
+      expect(tools.has("generate_image")).toBe(true);
+      expect(tools.has("plan_ecommerce_suite")).toBe(false);
+      expect(tools.has("plan_design")).toBe(false);
+      expect(tools.has("add_frame")).toBe(false);
+      expect(tools.has("set_frame")).toBe(false);
+      expect(tools.has("remove_background")).toBe(false);
+      expect(tools.has("upscale_image")).toBe(false);
+      expect(tools.has("add_text")).toBe(false);
+      expect(tools.has("add_rect")).toBe(false);
+      expect(tools.has("add_group")).toBe(false);
+      expect(tools.has("verify_design")).toBe(false);
+      expect(tools.has("review_and_adjust")).toBe(false);
+      expect([...tools]).toEqual(["generate_image"]);
+    }
+  });
+
+  test("does not plan or verify an explicit multi-image generation request", () => {
     const tools = selectAgentToolNames({
-      userInput: "Create an Amazon listing image suite from this product asset",
+      userInput: "生成6张不同风格的猫咪图片",
+      canvasNodeCount: 0,
+      hasAssets: false,
+    });
+
+    expect(tools.has("generate_image")).toBe(true);
+    expect(tools.has("plan_design")).toBe(false);
+    expect(tools.has("plan_ecommerce_suite")).toBe(false);
+    expect(tools.has("add_frame")).toBe(false);
+    expect(tools.has("verify_design")).toBe(false);
+    expect(tools.has("review_and_adjust")).toBe(false);
+    expect([...tools]).toEqual(["generate_image"]);
+  });
+
+  test("keeps editable layout tools only when an ecommerce source layout is requested", () => {
+    const tools = selectAgentToolNames({
+      userInput: "制作一套可编辑分层的淘宝详情页源文件",
       canvasNodeCount: 0,
       hasAssets: true,
     });
 
-    expect(tools.has("plan_ecommerce_suite")).toBe(true);
-    expect(tools.has("add_frame")).toBe(false);
-    expect(tools.has("set_frame")).toBe(false);
-    expect(tools.has("remove_background")).toBe(true);
-    expect(tools.has("upscale_image")).toBe(true);
+    expect(tools.has("plan_ecommerce_suite")).toBe(false);
+    expect(tools.has("add_text")).toBe(true);
+    expect(tools.has("add_rect")).toBe(true);
+    expect(tools.has("add_group")).toBe(true);
+    expect(tools.has("verify_design")).toBe(false);
   });
 
   test("adds video and web tools only for matching requests", () => {
@@ -108,5 +153,16 @@ describe("agent tool selection", () => {
 
     expect(tools.has("add_frame")).toBe(true);
     expect(tools.has("plan_design")).toBe(true);
+  });
+
+  test("exposes review tools only when the user explicitly asks for review", () => {
+    const tools = selectAgentToolNames({
+      userInput: "Review this design and run a quality check",
+      canvasNodeCount: 4,
+      hasAssets: false,
+    });
+
+    expect(tools.has("verify_design")).toBe(true);
+    expect(tools.has("review_and_adjust")).toBe(true);
   });
 });

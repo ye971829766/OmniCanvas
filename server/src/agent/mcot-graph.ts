@@ -57,7 +57,12 @@ export async function runMCotLoop(
     lastAnalysis = analyzeResult.output;
 
     // Step 3: Check if design meets requirements
-    if (lastAnalysis?.meetsRequirements || (lastAnalysis?.score ?? 0) >= 8) {
+    const qualityPass =
+      lastAnalysis?.meetsRequirements === true || (lastAnalysis?.score ?? 0) >= 8;
+    const identityPass = analysisContext?.referenceAssetId
+      ? (lastAnalysis?.identityFidelityScore ?? 0) >= 9
+      : true;
+    if (qualityPass && identityPass) {
       state.fixed = true;
       ctx.sink.emit({ type: 'progress', tool: 'analyze_design', message: `质检通过（评分 ${lastAnalysis?.score}/10）` });
     } else if (state.attempt < state.maxAttempts) {
@@ -75,9 +80,13 @@ export async function runMCotLoop(
             await updateTool.execute({ refId: targetId, patch }, ctx);
           }
         }
-      } else if (updateTool && lastAnalysis?.suggestions) {
-        // Fallback: no structured fixes, but we can at least log and try heuristics
+      } else if (lastAnalysis?.suggestions) {
         ctx.sink.emit({ type: 'progress', tool: 'analyze_design', message: lastAnalysis.suggestions });
+        // Bitmap identity, copy, and composition failures require regeneration;
+        // re-analyzing the unchanged image only wastes another vision call.
+        break;
+      } else {
+        break;
       }
     }
   }

@@ -15,6 +15,71 @@ export interface AgentFrameState {
 
 const NODE_MAP_KEY = "__agentCanvasNodes";
 const FRAME_KEY = "__agentFrame";
+const ROOT_GRID_LAYOUT_KEY = "__agentRootGridLayout";
+const CONTAINER_NODE_TYPES = new Set(["frame", "group"]);
+
+interface RootGridLayoutState {
+  originX: number;
+  nextX: number;
+  nextY: number;
+  rowHeight: number;
+  column: number;
+  columns: number;
+  gap: number;
+  reserved: RootGridRect[];
+}
+
+interface RootGridRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function alignToCanvasGrid(value: number): number {
+  return Math.round(value / 8) * 8;
+}
+
+function getRootNodeBounds(ctx: ToolContext): RootGridRect[] {
+  return [...getCanvasNodeMap(ctx).values()].flatMap((node) => {
+    if (node.parentId) return [];
+    const x = Number(node.x);
+    const y = Number(node.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return [];
+    return [{
+      x,
+      y,
+      width: Math.max(0, Number(node.width) || 0),
+      height: Math.max(0, Number(node.height) || 0),
+    }];
+  });
+}
+
+function overlapsWithGap(a: RootGridRect, b: RootGridRect, gap: number): boolean {
+  return (
+    a.x < b.x + b.width + gap &&
+    a.x + a.width + gap > b.x &&
+    a.y < b.y + b.height + gap &&
+    a.y + a.height + gap > b.y
+  );
+}
+
+function advanceRootGridCursor(
+  state: RootGridLayoutState,
+  itemWidth: number,
+  itemHeight: number,
+): void {
+  state.rowHeight = Math.max(state.rowHeight, itemHeight);
+  state.column += 1;
+  if (state.column >= state.columns) {
+    state.column = 0;
+    state.nextX = state.originX;
+    state.nextY = alignToCanvasGrid(state.nextY + state.rowHeight + state.gap);
+    state.rowHeight = 0;
+  } else {
+    state.nextX = alignToCanvasGrid(state.nextX + itemWidth + state.gap);
+  }
+}
 
 function normalizeNodeType(node: any): string {
   const raw = String(node?.type || node?.tag || node?.__tag || "").toLowerCase();
@@ -109,6 +174,53 @@ export function getCanvasNodeMap(ctx: ToolContext): Map<string, AgentCanvasNode>
   return (ctx as any)[NODE_MAP_KEY];
 }
 
+export function reserveRootGridPlacement(
+  ctx: ToolContext,
+  width: number,
+  height: number,
+  options: { columns?: number; gap?: number; sectionGap?: number } = {},
+): { x: number; y: number } {
+  const record = ctx as any;
+  if (!record[ROOT_GRID_LAYOUT_KEY]) {
+    const rootBounds = getRootNodeBounds(ctx);
+    const originX = rootBounds.length > 0
+      ? Math.min(...rootBounds.map((bounds) => bounds.x))
+      : 0;
+    const maxY = rootBounds.length > 0
+      ? Math.max(...rootBounds.map((bounds) => bounds.y + bounds.height))
+      : 0;
+    const sectionGap = options.sectionGap ?? 120;
+    record[ROOT_GRID_LAYOUT_KEY] = {
+      originX: alignToCanvasGrid(originX),
+      nextX: alignToCanvasGrid(originX),
+      nextY: rootBounds.length > 0
+        ? alignToCanvasGrid(maxY + sectionGap)
+        : 0,
+      rowHeight: 0,
+      column: 0,
+      columns: Math.max(1, Math.floor(options.columns ?? 3)),
+      gap: Math.max(0, options.gap ?? 48),
+      reserved: [],
+    } satisfies RootGridLayoutState;
+  }
+
+  const state = record[ROOT_GRID_LAYOUT_KEY] as RootGridLayoutState;
+  const itemWidth = Math.max(1, Number(width) || 1);
+  const itemHeight = Math.max(1, Number(height) || 1);
+  const occupied = [...getRootNodeBounds(ctx), ...state.reserved];
+
+  for (;;) {
+    const placement = { x: state.nextX, y: state.nextY };
+    const candidate = { ...placement, width: itemWidth, height: itemHeight };
+    advanceRootGridCursor(state, itemWidth, itemHeight);
+    if (occupied.some((bounds) => overlapsWithGap(candidate, bounds, state.gap))) {
+      continue;
+    }
+    state.reserved.push(candidate);
+    return placement;
+  }
+}
+
 export function resolveNewCanvasRefId(
   ctx: ToolContext,
   requestedRefId: unknown,
@@ -121,6 +233,29 @@ export function resolveNewCanvasRefId(
       : "";
   if (candidate && !getCanvasNodeMap(ctx).has(candidate)) return candidate;
   return ctx.newRefId(prefix);
+}
+
+export function resolveCanvasContainerParentId(
+  ctx: ToolContext,
+  requestedParentId: unknown,
+): string | undefined {
+  if (requestedParentId === undefined || requestedParentId === null || requestedParentId === "") {
+    return undefined;
+  }
+  if (typeof requestedParentId !== "string") {
+    throw new Error("parentId must be a frame or group refId.");
+  }
+
+  const parent = getCanvasNodeMap(ctx).get(requestedParentId);
+  if (!parent) {
+    throw new Error(`Unknown parentId: ${requestedParentId}. Use an existing frame or group refId.`);
+  }
+  if (!CONTAINER_NODE_TYPES.has(parent.type)) {
+    throw new Error(
+      `Invalid parentId: ${requestedParentId} points to ${parent.type}, not a frame or group.`,
+    );
+  }
+  return parent.refId;
 }
 
 export function upsertCanvasNode(
