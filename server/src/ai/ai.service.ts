@@ -1,5 +1,6 @@
-import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
-import { FilesService } from "../files/files.service";
+import { Inject, Injectable, forwardRef, HttpException, HttpStatus } from "@nestjs/common";
+import type { FilesService } from "../files/files.service";
+import { FilesService as FilesServiceValue } from "../files/files.service";
 import { ChannelsService, type Channel } from "../channels/channels.service";
 import { DatabaseService } from "../database/database.service";
 import {
@@ -39,6 +40,7 @@ export class AiService {
   private readonly imageHostUrlCache = new Map<string, string>();
 
   constructor(
+    @Inject(forwardRef(() => FilesServiceValue))
     private readonly filesService: FilesService,
     private readonly channelsService: ChannelsService,
     private readonly modelConfigService: ModelConfigService,

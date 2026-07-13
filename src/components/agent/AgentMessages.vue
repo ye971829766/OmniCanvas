@@ -52,11 +52,9 @@ function getThinkingText(m: ChatMessage): string {
   return "正在思考";
 }
 
-
 const props = defineProps<{
   messages: ChatMessage[];
   nodeStates: Record<string, any>;
-  suggestions: string[];
   loading?: boolean;
   running?: boolean;
   elapsedTime?: number;
@@ -364,17 +362,6 @@ function parseUserText(text: string) {
         </div>
         <p class="empty-title">告诉我你想设计什么</p>
         <p class="empty-sub">描述想法，我来生成图像、视频和排版</p>
-        <div class="agent-suggestions">
-          <button
-            v-for="s in suggestions"
-            :key="s"
-            class="agent-chip"
-            @click="emit('useSuggestion', s)"
-          >
-            <span class="chip-text">{{ s }}</span>
-            <span class="chip-arrow" aria-hidden="true">→</span>
-          </button>
-        </div>
       </div>
 
       <!-- Conversation -->
@@ -427,7 +414,10 @@ function parseUserText(text: string) {
           <div class="run-divider" />
 
           <div
-            v-if="m.streaming && (m.progress?.message || m.tools.some((tool) => !tool.done))"
+            v-if="
+              m.streaming &&
+              (m.progress?.message || m.tools.some((tool) => !tool.done))
+            "
             class="run-progress"
             role="status"
             aria-live="polite"
@@ -447,10 +437,7 @@ function parseUserText(text: string) {
                 />
               </div>
 
-              <AgentPlanCard
-                v-else-if="blk.type === 'plan'"
-                :plan="blk.plan"
-              />
+              <AgentPlanCard v-else-if="blk.type === 'plan'" :plan="blk.plan" />
 
               <div
                 v-else-if="blk.type === 'tools' && groupTools(blk.tools).length"
@@ -485,13 +472,18 @@ function parseUserText(text: string) {
                   :key="idx"
                 >
                   <IncremarkContent
-                    v-if="part.type === 'text' && typeof part.content === 'string'"
+                    v-if="
+                      part.type === 'text' && typeof part.content === 'string'
+                    "
                     class="incremark markdown-body"
                     :content="part.content"
                     :is-finished="true"
                     :incremark-options="getIncremarkOptions(false)"
                   />
-                  <div v-else-if="part.type === 'grid'" class="inspiration-grid">
+                  <div
+                    v-else-if="part.type === 'grid'"
+                    class="inspiration-grid"
+                  >
                     <div
                       v-for="(url, uidx) in part.content"
                       :key="uidx"
@@ -754,14 +746,6 @@ function parseUserText(text: string) {
   margin: 0 0 18px;
 }
 
-.agent-suggestions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  text-align: left;
-  padding: 0 8px;
-}
-
 .agent-chip {
   padding: 10px 12px;
   border-radius: 10px;
@@ -1015,7 +999,10 @@ function parseUserText(text: string) {
   --incremark-color-code-block-text: #f4f4f5;
   --incremark-color-interactive-link: var(--agent-text-primary, #18181b);
   --incremark-color-interactive-link-hover: var(--agent-text-primary, #18181b);
-  --incremark-color-interactive-link-visited: var(--agent-text-secondary, #52525b);
+  --incremark-color-interactive-link-visited: var(
+    --agent-text-secondary,
+    #52525b
+  );
   --incremark-color-interactive-checked: var(--accent-success, #15803d);
   --incremark-color-status-pending: var(--accent-primary, #4f46e5);
   --incremark-color-status-completed: var(--accent-success, #15803d);
@@ -1297,8 +1284,7 @@ function parseUserText(text: string) {
 
 /* ── Code & Pre ──────────────────────────────────────────────────── */
 .markdown-body :deep(code) {
-  font-family:
-    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.86em;
   background: var(--markdown-surface);
   color: var(--p-text-color, #18181b);
@@ -1326,8 +1312,7 @@ function parseUserText(text: string) {
   background: #202024;
   color: #a1a1aa;
   font-size: 11px;
-  font-family:
-    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   min-height: 34px;
   border-bottom: 1px solid #3f3f46;
 }
@@ -1481,8 +1466,7 @@ function parseUserText(text: string) {
   border-radius: 4px;
   background: var(--markdown-surface-raised);
   color: var(--p-text-color, #18181b);
-  font-family:
-    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.78em;
   line-height: 1.5;
   text-align: center;

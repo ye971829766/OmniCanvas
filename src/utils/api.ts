@@ -514,8 +514,10 @@ export async function upscaleImage(imageUrl: string, scale?: number): Promise<Ta
 export async function inpaintImage(
   imageUrl: string,
   rectangles: { left: number; top: number; width: number; height: number }[],
+  mask?: string,
+  prompt?: string,
 ): Promise<TaskResponse> {
-  const res = await request.post<TaskResponse>("/inpaint", { imageUrl, rectangles });
+  const res = await request.post<TaskResponse>("/inpaint", { imageUrl, rectangles, mask, prompt });
   return res.data;
 }
 

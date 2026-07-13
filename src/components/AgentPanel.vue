@@ -186,15 +186,10 @@ onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
 });
 
-const suggestions = [
-  "上传产品图，生成淘宝、京东和 Amazon 电商套图",
-  "生成一张可爱的橘猫照片",
-  "做一张咖啡店开业海报，暖色调",
-  "画一个科技感的产品 banner",
-  "生成一段海浪的短视频",
-];
-
-async function submit(payload?: { text: string; attachments: AgentAttachmentInput[] }) {
+async function submit(payload?: {
+  text: string;
+  attachments: AgentAttachmentInput[];
+}) {
   const text = payload?.text ?? input.value;
   const files = payload?.attachments ?? [];
   if (!text.trim() && files.length === 0) return;
@@ -234,7 +229,6 @@ function handleZoomToNode(refId: string) {
           ref="scrollRef"
           :messages="messages"
           :node-states="nodeStates"
-          :suggestions="suggestions"
           :loading="loadingHistory"
           :running="running"
           :elapsed-time="elapsedTime"

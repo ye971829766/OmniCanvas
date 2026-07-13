@@ -10,6 +10,17 @@
 
       <div class="control-divider"></div>
 
+      <!-- Prompt Input -->
+      <div class="prompt-control">
+        <InputText
+          v-model="promptText"
+          placeholder="输入重绘提示词 (如: 消除物体, 换成苹果)..."
+          class="prompt-input"
+        />
+      </div>
+
+      <div class="control-divider"></div>
+
       <!-- Cancel Action -->
       <Button
         type="button"
@@ -43,12 +54,16 @@
       class="eraser-trigger"
       severity="secondary"
       variant="text"
-      title="橡皮擦局部重绘"
+      title="局部重绘"
       :disabled="disabled || isProcessing"
       @click="startEraser"
     >
       <Loader2 v-if="isProcessing" class="animate-spin" :size="18" />
-      <Eraser v-else :size="18" />
+      <i
+        v-else
+        class="iconfont icon-jubuzhonghui text-primary-500"
+        style="font-size: 18px !important"
+      ></i>
     </Button>
   </div>
 </template>
@@ -90,13 +105,17 @@ const emit = defineEmits<{
 
 const isActive = ref(false);
 const brushSize = ref(24);
+const promptText = ref("");
 
 const undoStack = ref<Pen[]>([]);
 const redoStack = ref<Pen[]>([]);
 const hasStrokes = computed(() => undoStack.value.length > 0);
 
 const localUndo = () => {
-  console.log("EraserTool: localUndo called. Current undoStack size:", undoStack.value.length);
+  console.log(
+    "EraserTool: localUndo called. Current undoStack size:",
+    undoStack.value.length,
+  );
   if (undoStack.value.length === 0) return;
   const stroke = undoStack.value.pop();
   if (stroke) {
@@ -111,7 +130,10 @@ const localUndo = () => {
 };
 
 const localRedo = () => {
-  console.log("EraserTool: localRedo called. Current redoStack size:", redoStack.value.length);
+  console.log(
+    "EraserTool: localRedo called. Current redoStack size:",
+    redoStack.value.length,
+  );
   if (redoStack.value.length === 0) return;
   const stroke = redoStack.value.pop();
   if (stroke && strokeGroup) {
@@ -128,7 +150,14 @@ const localRedo = () => {
 const onKeyDown = (e: KeyboardEvent) => {
   const key = e.key.toLowerCase();
   const isCtrl = e.ctrlKey || e.metaKey;
-  console.log("EraserTool: onKeyDown captured key:", e.key, "isCtrl:", isCtrl, "isActive:", isActive.value);
+  console.log(
+    "EraserTool: onKeyDown captured key:",
+    e.key,
+    "isCtrl:",
+    isCtrl,
+    "isActive:",
+    isActive.value,
+  );
 
   if (!isActive.value) return;
 
@@ -212,8 +241,6 @@ const updateCursorRect = () => {
     view.style.cursor = `url('${cursorObj.url}') ${cursorObj.x} ${cursorObj.y}, crosshair`;
   }
 };
-
-
 
 watch(brushSize, () => {
   if (isActive.value) updateCursorRect();
@@ -338,6 +365,7 @@ const restoreEditor = () => {
   isActive.value = false;
   undoStack.value = [];
   redoStack.value = [];
+  promptText.value = "";
 };
 
 const getStrokeGroupScale = () => {
@@ -373,6 +401,8 @@ const onPointerDown = (e: PointerEvent) => {
     rotation: tempGroup.rotation,
   });
   currentPen = new Pen({ x: local.x, y: local.y });
+  (currentPen as any).strokePoints = [{ x: local.x, y: local.y }];
+  (currentPen as any).strokeWidth = brushSize.value / getStrokeGroupScale();
   strokeGroup.add(currentPen);
   currentPen.setStyle({
     stroke: "rgba(0, 122, 255, 0.6)",
@@ -400,6 +430,9 @@ const onPointerMove = (e: PointerEvent) => {
     scaleY: tempGroup.scaleY,
     rotation: tempGroup.rotation,
   });
+  if (currentPen && (currentPen as any).strokePoints) {
+    (currentPen as any).strokePoints.push({ x: local.x, y: local.y });
+  }
   currentPen.lineTo(
     local.x - (currentPen.x || 0),
     local.y - (currentPen.y || 0),
@@ -407,11 +440,19 @@ const onPointerMove = (e: PointerEvent) => {
 };
 
 const onPointerUp = (e: PointerEvent) => {
-  console.log("EraserTool: onPointerUp. isDrawing:", isDrawing, "currentPen:", !!currentPen);
+  console.log(
+    "EraserTool: onPointerUp. isDrawing:",
+    isDrawing,
+    "currentPen:",
+    !!currentPen,
+  );
   if (isDrawing) {
     if (currentPen) {
       undoStack.value.push(currentPen);
-      console.log("EraserTool: pushed pen to undoStack. New size:", undoStack.value.length);
+      console.log(
+        "EraserTool: pushed pen to undoStack. New size:",
+        undoStack.value.length,
+      );
       redoStack.value = []; // Clear redo stack on new action
     }
     e.stopPropagation();
@@ -574,17 +615,76 @@ const applyEraser = async () => {
       final: { finalLeft, finalTop, finalWidth, finalHeight },
     });
 
+    // Create PNG mask base64 using canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = naturalWidth;
+    canvas.height = naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      // Fill canvas with opaque white
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, naturalWidth, naturalHeight);
+
+      // Scale coordinates from rawTarget (layout width/height) to native dimensions
+      const scaleX = naturalWidth / rawTarget.width;
+      const scaleY = naturalHeight / rawTarget.height;
+
+      // Draw the exact strokes as transparent using globalCompositeOperation
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+
+      for (const pen of undoStack.value) {
+        const points = (pen as any).strokePoints;
+        const strokeWidth = (pen as any).strokeWidth || 24;
+        if (!points || points.length === 0) continue;
+
+        ctx.lineWidth = strokeWidth * scaleX;
+
+        if (points.length === 1) {
+          ctx.beginPath();
+          const firstPoint = points[0];
+          ctx.arc(
+            firstPoint.x * scaleX,
+            firstPoint.y * scaleY,
+            (strokeWidth * scaleX) / 2,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(points[0].x * scaleX, points[0].y * scaleY);
+          for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x * scaleX, points[i].y * scaleY);
+          }
+          ctx.stroke();
+        }
+      }
+
+      // Reset composite operation to default
+      ctx.globalCompositeOperation = "source-over";
+    }
+    const maskBase64 = canvas.toDataURL("image/png");
+
+    const promptVal = promptText.value;
+
     restoreEditor(); // Remove red mask layer and restore editor immediately
 
     // Call NestJS backend inpaint endpoint
-    const res = await inpaintImage(imageUrl, [
-      {
-        left: finalLeft,
-        top: finalTop,
-        width: finalWidth,
-        height: finalHeight,
-      },
-    ]);
+    const res = await inpaintImage(
+      imageUrl,
+      [
+        {
+          left: finalLeft,
+          top: finalTop,
+          width: finalWidth,
+          height: finalHeight,
+        },
+      ],
+      maskBase64,
+      promptVal,
+    );
 
     if (res && res.taskId) {
       const rawParent = toRaw(parent);
@@ -681,5 +781,27 @@ onUnmounted(() => {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+}
+
+.prompt-control {
+  display: flex;
+  align-items: center;
+
+  .prompt-input {
+    width: 240px;
+    height: 24px;
+    font-size: 11px;
+    padding: 0 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: #ffffff;
+    transition: all 0.2s;
+
+    &:focus {
+      border-color: #007aff;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.15);
+    }
+  }
 }
 </style>

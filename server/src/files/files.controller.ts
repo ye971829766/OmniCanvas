@@ -99,11 +99,11 @@ export class FilesController {
 
   @Post('inpaint')
   async inpaint(
-    @Body() body: { imageUrl: string; rectangles: { left: number; top: number; width: number; height: number }[] },
+    @Body() body: { imageUrl: string; rectangles?: { left: number; top: number; width: number; height: number }[]; mask?: string; prompt?: string },
     @Headers() headers: Record<string, string>,
   ) {
-    const { imageUrl, rectangles } = body;
-    return this.filesService.inpaintImage(imageUrl, rectangles, this.getOrigin(headers));
+    const { imageUrl, rectangles, mask, prompt } = body;
+    return this.filesService.inpaintImage(imageUrl, rectangles || [], this.getOrigin(headers), mask, prompt);
   }
 
   @Post('convert-gif')
