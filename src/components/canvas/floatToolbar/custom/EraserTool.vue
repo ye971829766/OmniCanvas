@@ -70,7 +70,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, toRaw, onUnmounted, type PropType } from "vue";
-import { Loader2, Eraser, Check, X } from "lucide-vue-next";
+import { Loader2, Check, X } from "lucide-vue-next";
 import { Box, Group, Pen, Rect, Image } from "leafer-ui";
 import { inpaintImage } from "@/utils/api";
 import type {

@@ -2,6 +2,7 @@ import {
   Inject,
   Injectable,
   forwardRef,
+  Optional,
   HttpException,
   HttpStatus,
 } from "@nestjs/common";
@@ -15,6 +16,8 @@ import type { AiService } from "../ai/ai.service";
 import { AiService as AiServiceValue } from "../ai/ai.service";
 import type { GenerateImageJsonRequest } from "../types";
 import { deflateSync } from "zlib";
+import { BillingService } from "../billing/billing.service";
+import type { BillingTaskContext } from "../billing/billing.types";
 
 @Injectable()
 export class FilesService implements OnModuleInit {
@@ -22,6 +25,7 @@ export class FilesService implements OnModuleInit {
     private readonly dbService: DatabaseService,
     @Inject(forwardRef(() => AiServiceValue))
     private readonly aiService: AiService,
+    @Optional() private readonly billingService?: BillingService,
   ) {}
 
   private MAX_IMAGE_SIZE = parseInt(process.env.MAX_FILE_SIZE || "52428800");
@@ -45,9 +49,9 @@ export class FilesService implements OnModuleInit {
    * with verification disabled — scoped to downloading the result asset, never
    * to the channel API calls that carry credentials.
    */
-  private async downloadAsset(url: string): Promise<Response> {
+  private async downloadAsset(url: string, init?: RequestInit): Promise<Response> {
     try {
-      return await fetch(url);
+      return await fetch(url, init);
     } catch (err: any) {
       const msg = String(err?.message || err).toLowerCase();
       const isCertError =
@@ -61,7 +65,10 @@ export class FilesService implements OnModuleInit {
         `[downloadAsset] TLS verification failed for ${url}; retrying without verification`,
       );
       // Bun-specific fetch option; ignored harmlessly on Node.
-      return await fetch(url, { tls: { rejectUnauthorized: false } } as any);
+      return await fetch(url, {
+        ...(init || {}),
+        tls: { rejectUnauthorized: false },
+      } as any);
     }
   }
 
@@ -133,101 +140,102 @@ export class FilesService implements OnModuleInit {
     providerResponse: any,
     outputFormat: string,
   ): Promise<string> {
-    // 1. Try standard OpenAI DALL-E format: providerResponse.data[0]
-    const image = providerResponse?.data?.[0];
-    if (image) {
-      if (typeof image.b64_json === "string" && image.b64_json.length > 0) {
-        return this.saveImageFromBase64(image.b64_json, outputFormat);
-      }
-      if (typeof image.url === "string" && image.url.length > 0) {
-        return this.saveImageFromUrl(image.url, outputFormat);
-      }
-    }
-
-    // 2. Try OpenAI ChatCompletion multimodal format (Gemini responseModalities)
-    let b64OrUrl: string | undefined;
-    const choice = providerResponse?.choices?.[0];
-    if (choice) {
-      const message = choice.message;
-      if (message) {
-        if (Array.isArray(message.content)) {
-          for (const part of message.content) {
-            if (
-              part?.type === "image_url" &&
-              typeof part.image_url?.url === "string"
-            ) {
-              b64OrUrl = part.image_url.url;
-              break;
-            }
-          }
-        } else if (typeof message.content === "string") {
-          const contentStr = message.content.trim();
-          // Extract URL or base64 from markdown image syntax: ![alt](url)
-          const markdownMatch = contentStr.match(/!\[.*?\]\((.*?)\)/);
-          if (markdownMatch && markdownMatch[1]) {
-            b64OrUrl = markdownMatch[1].trim();
-          } else if (
-            contentStr.startsWith("data:image/") ||
-            contentStr.startsWith("http")
-          ) {
-            b64OrUrl = contentStr;
-          }
-        }
-      }
-    }
-
-    if (b64OrUrl) {
-      if (b64OrUrl.startsWith("data:image/")) {
-        const base64Data = b64OrUrl.replace(/^data:image\/\w+;base64,/, "");
-        return this.saveImageFromBase64(base64Data, outputFormat);
-      } else if (b64OrUrl.startsWith("http")) {
-        return this.saveImageFromUrl(b64OrUrl, outputFormat);
-      }
-    }
-
-    // 3. Try Gemini native response format: providerResponse.candidates[0].content.parts
-    const candidate = providerResponse?.candidates?.[0];
-    if (candidate) {
-      const parts = candidate.content?.parts;
-      if (Array.isArray(parts)) {
-        for (const part of parts) {
-          const inlineData = part?.inlineData || part?.inline_data;
-          if (
-            inlineData &&
-            typeof inlineData.data === "string" &&
-            inlineData.data.length > 0
-          ) {
-            return this.saveImageFromBase64(inlineData.data, outputFormat);
-          }
-          if (typeof part?.text === "string") {
-            const textStr = part.text.trim();
-            const markdownMatch = textStr.match(/!\[.*?\]\((.*?)\)/);
-            if (markdownMatch && markdownMatch[1]) {
-              const urlOrB64 = markdownMatch[1].trim();
-              if (urlOrB64.startsWith("data:image/")) {
-                const base64Data = urlOrB64.replace(
-                  /^data:image\/\w+;base64,/,
-                  "",
-                );
-                return this.saveImageFromBase64(base64Data, outputFormat);
-              } else if (urlOrB64.startsWith("http")) {
-                return this.saveImageFromUrl(urlOrB64, outputFormat);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    console.log(
-      "No image found in response. Full response details:",
-      JSON.stringify(providerResponse, null, 2),
-    );
-
+    const result = await this.saveGeneratedImages(providerResponse, outputFormat);
+    const first = result.filenames[0];
+    if (first) return first;
     throw new HttpException(
-      { error: "Provider response did not include an image" },
+      { error: result.errors[0] || "Provider response did not include an image" },
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
+  }
+
+  async saveGeneratedImages(
+    providerResponse: any,
+    outputFormat: string,
+  ): Promise<{ filenames: string[]; errors: string[] }> {
+    const assets: Array<{ kind: "base64" | "url"; value: string }> = [];
+    const addUrlOrBase64 = (value: unknown) => {
+      if (typeof value !== "string" || !value.trim()) return;
+      const normalized = value.trim();
+      if (normalized.startsWith("data:image/")) {
+        assets.push({
+          kind: "base64",
+          value: normalized.replace(/^data:image\/[^;]+;base64,/, ""),
+        });
+      } else if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+        assets.push({ kind: "url", value: normalized });
+      }
+    };
+    const addMarkdownImages = (value: unknown) => {
+      if (typeof value !== "string") return;
+      const matches = value.matchAll(/!\[.*?\]\((.*?)\)/g);
+      let matched = false;
+      for (const match of matches) {
+        matched = true;
+        addUrlOrBase64(match[1]);
+      }
+      if (!matched) addUrlOrBase64(value);
+    };
+
+    // OpenAI-compatible image generation/edit response.
+    for (const image of Array.isArray(providerResponse?.data) ? providerResponse.data : []) {
+      if (typeof image?.b64_json === "string" && image.b64_json) {
+        assets.push({ kind: "base64", value: image.b64_json });
+      } else {
+        addUrlOrBase64(image?.url);
+      }
+    }
+
+    // OpenAI-compatible multimodal chat response.
+    for (const choice of Array.isArray(providerResponse?.choices) ? providerResponse.choices : []) {
+      const content = choice?.message?.content;
+      if (Array.isArray(content)) {
+        for (const part of content) {
+          if (part?.type === "image_url") addUrlOrBase64(part.image_url?.url);
+        }
+      } else {
+        addMarkdownImages(content);
+      }
+    }
+
+    // Native Gemini response. Preserve every image part from every candidate.
+    for (const candidate of Array.isArray(providerResponse?.candidates)
+      ? providerResponse.candidates
+      : []) {
+      for (const part of Array.isArray(candidate?.content?.parts)
+        ? candidate.content.parts
+        : []) {
+        const inlineData = part?.inlineData || part?.inline_data;
+        if (typeof inlineData?.data === "string" && inlineData.data) {
+          assets.push({ kind: "base64", value: inlineData.data });
+        } else {
+          addMarkdownImages(part?.text);
+        }
+      }
+    }
+
+    if (assets.length === 0) {
+      console.log(
+        "No image found in response. Full response details:",
+        JSON.stringify(providerResponse, null, 2),
+      );
+      return { filenames: [], errors: ["Provider response did not include an image"] };
+    }
+
+    const saved = await Promise.allSettled(
+      assets.map((asset) =>
+        asset.kind === "base64"
+          ? this.saveImageFromBase64(asset.value, outputFormat)
+          : this.saveImageFromUrl(asset.value, outputFormat),
+      ),
+    );
+    const filenames: string[] = [];
+    const errors: string[] = [];
+    for (const result of saved) {
+      if (result.status === "fulfilled") filenames.push(result.value);
+      else errors.push(result.reason?.message || String(result.reason || "Failed to save image"));
+    }
+    return { filenames, errors };
   }
 
   async uploadVideoFile(video: Express.Multer.File | null, originUrl: string) {
@@ -417,7 +425,13 @@ export class FilesService implements OnModuleInit {
   }
 
   async downloadAndSaveVideo(videoUrl: string, originUrl: string) {
-    const response = await this.downloadAsset(videoUrl);
+    const configuredMaxVideoSize = Number(process.env.MAX_VIDEO_SIZE);
+    const maxVideoSize = Number.isFinite(configuredMaxVideoSize) && configuredMaxVideoSize > 0
+      ? Math.floor(configuredMaxVideoSize)
+      : 500 * 1024 * 1024;
+    const response = await this.downloadAsset(videoUrl, {
+      signal: AbortSignal.timeout(2 * 60 * 1000),
+    });
     if (!response.ok) {
       throw new HttpException(
         { error: "Failed to download generated video from upstream" },
@@ -425,14 +439,51 @@ export class FilesService implements OnModuleInit {
       );
     }
 
+    const contentType = (response.headers.get("content-type") || "").split(";")[0]!.toLowerCase();
+    if (
+      contentType &&
+      !contentType.startsWith("video/") &&
+      contentType !== "application/octet-stream"
+    ) {
+      throw new HttpException(
+        { error: `Generated asset is not a video (${contentType})` },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+    const declaredLength = Number(response.headers.get("content-length") || 0);
+    if (Number.isFinite(declaredLength) && declaredLength > maxVideoSize) {
+      throw new HttpException(
+        { error: "Generated video exceeds the configured file-size limit" },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
     const id = crypto.randomUUID();
-    const videoFilename = `${id}.mp4`;
+    const sourceExtension = (() => {
+      try {
+        return new URL(videoUrl).pathname.split(".").pop()?.toLowerCase();
+      } catch {
+        return undefined;
+      }
+    })();
+    const extension = contentType === "video/webm" || sourceExtension === "webm"
+      ? "webm"
+      : contentType === "video/quicktime" || sourceExtension === "mov"
+        ? "mov"
+        : "mp4";
+    const videoFilename = `${id}.${extension}`;
     const thumbnailFilename = `${id}.jpg`;
 
     const videoPath = join("files", videoFilename);
     const thumbnailPath = join("files", thumbnailFilename);
 
     const arrayBuffer = await response.arrayBuffer();
+    if (arrayBuffer.byteLength === 0 || arrayBuffer.byteLength > maxVideoSize) {
+      throw new HttpException(
+        { error: "Generated video is empty or exceeds the configured file-size limit" },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
     await Bun.write(videoPath, arrayBuffer);
 
     // Extract first frame thumbnail
@@ -454,6 +505,11 @@ export class FilesService implements OnModuleInit {
     if (exitCode !== 0) {
       const errText = await new Response(proc.stderr).text();
       console.error("FFmpeg error (downloadAndSaveVideo):", errText);
+      await Promise.allSettled([unlink(videoPath), unlink(thumbnailPath)]);
+      throw new HttpException(
+        { error: "Generated asset is not a playable video or its thumbnail could not be created" },
+        HttpStatus.BAD_GATEWAY,
+      );
     }
 
     return {
@@ -474,7 +530,10 @@ export class FilesService implements OnModuleInit {
     if (await testVideoFile.exists()) {
       await Bun.write(videoPath, testVideoFile);
     } else {
-      await Bun.write(videoPath, "");
+      throw new HttpException(
+        { error: "MOCK_VIDEO is enabled but test.mp4 is missing" },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     const proc = Bun.spawn([
@@ -495,6 +554,11 @@ export class FilesService implements OnModuleInit {
     if (exitCode !== 0) {
       const errText = await new Response(proc.stderr).text();
       console.error("FFmpeg error (generateMockVideo):", errText);
+      await Promise.allSettled([unlink(videoPath), unlink(thumbnailPath)]);
+      throw new HttpException(
+        { error: "MOCK_VIDEO test.mp4 is not a valid playable video" },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     return {
@@ -535,24 +599,36 @@ export class FilesService implements OnModuleInit {
   private setTaskStatus(id: string, status: string, data: any) {
     try {
       const stmt = this.dbService.db.prepare(`
-        INSERT INTO generation_tasks (id, status, data, createdAt)
-        VALUES ($id, $status, $data, $createdAt)
+        INSERT INTO generation_tasks (id, status, data, createdAt, updatedAt)
+        VALUES ($id, $status, $data, $createdAt, $updatedAt)
         ON CONFLICT(id) DO UPDATE SET
           status = excluded.status,
-          data = excluded.data
+          data = excluded.data,
+          updatedAt = excluded.updatedAt
       `);
       stmt.run({
         $id: id,
         $status: status,
         $data: JSON.stringify(data),
         $createdAt: Date.now(),
+        $updatedAt: Date.now(),
       });
     } catch (err) {
       console.error(`Failed to save task status for ${id}:`, err);
+      return;
+    }
+    try {
+      this.billingService?.settleTask(id, status, data?.error);
+    } catch (err) {
+      console.error(`Failed to settle billing for task ${id}:`, err);
     }
   }
 
-  async removeBackground(imageUrl: string, originUrl: string) {
+  async removeBackground(
+    imageUrl: string,
+    originUrl: string,
+    billingContext?: BillingTaskContext,
+  ) {
     if (!imageUrl) {
       throw new HttpException(
         { error: "Missing imageUrl" },
@@ -562,6 +638,10 @@ export class FilesService implements OnModuleInit {
 
     const taskId = crypto.randomUUID();
     this.setTaskStatus(taskId, "generating", {});
+    if (billingContext) {
+      if (!this.billingService) throw new Error("Billing service is unavailable");
+      this.billingService.attachTask(billingContext.operationId, taskId, billingContext.userId);
+    }
 
     this.runRemoveBgTaskInBackground(taskId, imageUrl, originUrl);
 
@@ -659,7 +739,12 @@ export class FilesService implements OnModuleInit {
     }
   }
 
-  async upscaleImage(imageUrl: string, scale: number = 4, originUrl: string) {
+  async upscaleImage(
+    imageUrl: string,
+    scale: number = 4,
+    originUrl: string,
+    billingContext?: BillingTaskContext,
+  ) {
     if (!imageUrl) {
       throw new HttpException(
         { error: "Missing imageUrl" },
@@ -669,6 +754,10 @@ export class FilesService implements OnModuleInit {
 
     const taskId = crypto.randomUUID();
     this.setTaskStatus(taskId, "generating", {});
+    if (billingContext) {
+      if (!this.billingService) throw new Error("Billing service is unavailable");
+      this.billingService.attachTask(billingContext.operationId, taskId, billingContext.userId);
+    }
 
     this.runUpscaleTaskInBackground(taskId, imageUrl, scale, originUrl);
 
@@ -774,6 +863,7 @@ export class FilesService implements OnModuleInit {
     originUrl: string,
     maskBase64?: string,
     prompt?: string,
+    billingContext?: BillingTaskContext,
   ) {
     if (!imageUrl) {
       throw new HttpException(
@@ -784,6 +874,10 @@ export class FilesService implements OnModuleInit {
 
     const taskId = crypto.randomUUID();
     this.setTaskStatus(taskId, "generating", {});
+    if (billingContext) {
+      if (!this.billingService) throw new Error("Billing service is unavailable");
+      this.billingService.attachTask(billingContext.operationId, taskId, billingContext.userId);
+    }
 
     this.runAiInpaintTaskInBackground(
       taskId,

@@ -18,6 +18,10 @@ request.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const method = String(config.method || 'get').toLowerCase();
+    if (['post', 'put', 'patch', 'delete'].includes(method) && !config.headers['Idempotency-Key']) {
+      config.headers['Idempotency-Key'] = crypto.randomUUID();
+    }
 
     const isCryptoEnabled = import.meta.env.VITE_API_CRYPTO === 'true';
     if (isCryptoEnabled && config.data && !(config.data instanceof FormData)) {
@@ -73,6 +77,11 @@ request.interceptors.response.use(
       // Token expired or invalid
       localStorage.removeItem("omnicanvas_token");
       window.dispatchEvent(new CustomEvent("omnicanvas:unauthorized"));
+    }
+    if (error.response?.status === 402) {
+      window.dispatchEvent(new CustomEvent("omnicanvas:payment-required", {
+        detail: error.response.data,
+      }));
     }
     console.error('Request error:', error);
     return Promise.reject(error);

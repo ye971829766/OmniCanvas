@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body } from "@nestjs/common";
+import { Controller, Get, Post, Body, UseGuards } from "@nestjs/common";
+import { AdminGuard } from "../auth/auth.guard";
 import { TokensService } from "./tokens.service";
 import type { SystemTokenStats, RecordTokenPayload } from "./tokens.service";
 
@@ -6,6 +7,7 @@ import type { SystemTokenStats, RecordTokenPayload } from "./tokens.service";
 export class TokensController {
   constructor(private readonly tokensService: TokensService) {}
 
+  @UseGuards(AdminGuard)
   @Get("admin/token-stats")
   getTokenStats(): SystemTokenStats {
     return this.tokensService.getTokenStats();

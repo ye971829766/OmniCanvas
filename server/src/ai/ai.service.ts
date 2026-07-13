@@ -1,4 +1,5 @@
-import { Inject, Injectable, forwardRef, HttpException, HttpStatus } from "@nestjs/common";
+import { Inject, Injectable, Optional, forwardRef, HttpException, HttpStatus } from "@nestjs/common";
+import type { OnModuleInit } from "@nestjs/common";
 import type { FilesService } from "../files/files.service";
 import { FilesService as FilesServiceValue } from "../files/files.service";
 import { ChannelsService, type Channel } from "../channels/channels.service";
@@ -24,9 +25,11 @@ import type {
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import { TokensService } from "../tokens/tokens.service";
+import { BillingService } from "../billing/billing.service";
+import type { BillingTaskContext } from "../billing/billing.types";
 
 @Injectable()
-export class AiService {
+export class AiService implements OnModuleInit {
   private YUNWU_BASE_URL = (
     process.env.BASE_URL ||
     process.env.OPENAI_BASE_URL ||
@@ -36,6 +39,12 @@ export class AiService {
   private YUNWU_IMAGE_MODEL = process.env.YUNWU_IMAGE_MODEL || "gpt-image-1";
   private YUNWU_CHAT_MODEL = process.env.YUNWU_CHAT_MODEL || "gpt-4o-mini";
   private MAX_REFERENCE_IMAGES = 16;
+  private MAX_VIDEO_REFERENCE_SIZE = (() => {
+    const configured = Number(process.env.MAX_VIDEO_REFERENCE_SIZE);
+    return Number.isFinite(configured) && configured > 0
+      ? Math.floor(configured)
+      : 10 * 1024 * 1024;
+  })();
   private ALLOWED_OUTPUT_FORMATS = new Set(["png", "jpeg", "webp"]);
   private readonly imageHostUrlCache = new Map<string, string>();
 
@@ -46,7 +55,42 @@ export class AiService {
     private readonly modelConfigService: ModelConfigService,
     private readonly dbService: DatabaseService,
     private readonly tokensService: TokensService,
+    @Optional() private readonly billingService?: BillingService,
   ) {}
+
+  async onModuleInit() {
+    let rows: Array<{ id: string; data: string }>;
+    try {
+      rows = this.dbService.db.query(`
+        SELECT id, data FROM generation_tasks WHERE status = 'generating'
+      `).all() as Array<{ id: string; data: string }>;
+    } catch (error) {
+      console.warn("[AiService] Skipped generation task recovery because the task table is unavailable:", error);
+      return;
+    }
+    for (const row of rows) {
+      let state: any;
+      try {
+        state = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (state?.kind !== "video") continue;
+      if (
+        state.phase === "polling" &&
+        state.upstreamTaskId &&
+        state.providerId &&
+        state.originUrl &&
+        Number.isFinite(Number(state.deadlineAt))
+      ) {
+        void this.resumeVideoGenerationTask(row.id, state);
+      } else {
+        this.setTaskStatus(row.id, "error", {
+          error: "服务器重启前视频任务尚未提交完成，预留积分已退回，请重新生成",
+        });
+      }
+    }
+  }
 
   getOutputFormat(format: unknown): GenerateImageOutputFormat {
     const value = typeof format === "string" ? format.toLowerCase() : "";
@@ -65,6 +109,171 @@ export class AiService {
 
   getSelectedModel(model: unknown, fallback: string): string {
     return typeof model === "string" && model.trim() ? model.trim() : fallback;
+  }
+
+  async prepareImageGenerationRequest(
+    body: GenerateImageJsonRequest,
+  ): Promise<GenerateImageJsonRequest> {
+    const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+    if (!prompt) {
+      throw new HttpException({ error: "Missing prompt" }, HttpStatus.BAD_REQUEST);
+    }
+
+    let model = this.getSelectedModel(body?.model, "");
+    if (!model) {
+      const mappings = await this.modelConfigService.getEnabledMappingsByPurpose("image");
+      const activeMapping = mappings.find((mapping) => mapping.enabled);
+      model = activeMapping?.id || this.YUNWU_IMAGE_MODEL;
+    }
+
+    const options = await this.getImageModelOptions(model);
+    const configuredMaxCount = Number(options.maxGenerationCount ?? 1);
+    const maxGenerationCount = Number.isSafeInteger(configuredMaxCount) && configuredMaxCount > 0
+      ? configuredMaxCount
+      : 1;
+    const count = body?.n === undefined ? 1 : Number(body.n);
+    if (!Number.isSafeInteger(count) || count < 1 || count > maxGenerationCount) {
+      throw new HttpException(
+        {
+          code: "INVALID_IMAGE_COUNT",
+          error: `Image count must be an integer between 1 and ${maxGenerationCount} for model ${model}`,
+          maxGenerationCount,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const images = Array.isArray(body?.images) ? body.images : undefined;
+    const maxReferenceImages = Math.max(0, options.maxReferenceImages ?? 1);
+    if (images && images.length > maxReferenceImages) {
+      throw new HttpException(
+        {
+          code: "TOO_MANY_REFERENCE_IMAGES",
+          error: `Up to ${maxReferenceImages} reference image(s) allowed for model ${model}`,
+          maxReferenceImages,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return { ...body, prompt, model, n: count };
+  }
+
+  async prepareVideoGenerationRequest(
+    body: GenerateVideoJsonRequest,
+  ): Promise<GenerateVideoJsonRequest> {
+    const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+    if (!prompt) {
+      throw new HttpException({ error: "Missing prompt" }, HttpStatus.BAD_REQUEST);
+    }
+
+    let model = this.getSelectedModel(body?.model, "");
+    if (!model) {
+      const mappings = await this.modelConfigService.getEnabledMappingsByPurpose("video");
+      model = mappings.find((mapping) => mapping.enabled)?.id || "veo_3_1_fast_vip";
+    }
+    const options = await this.getVideoModelOptions(model);
+    const seconds = body?.seconds === undefined
+      ? options.defaults.seconds
+      : Number(typeof body.seconds === "string" ? body.seconds.trim() : body.seconds);
+    if (
+      !Number.isSafeInteger(seconds) ||
+      seconds < options.minSeconds ||
+      seconds > options.maxSeconds
+    ) {
+      throw new HttpException(
+        {
+          code: "INVALID_VIDEO_DURATION",
+          error: `Video duration must be an integer between ${options.minSeconds} and ${options.maxSeconds} seconds for model ${model}`,
+          minSeconds: options.minSeconds,
+          maxSeconds: options.maxSeconds,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const allowedSizes = options.sizes.map((option) => option.value);
+    const size = typeof body?.size === "string" && body.size.trim()
+      ? body.size.trim()
+      : options.defaults.size;
+    if (allowedSizes.length > 0 && !allowedSizes.includes(size)) {
+      throw new HttpException(
+        {
+          code: "INVALID_VIDEO_SIZE",
+          error: `Unsupported video size ${size} for model ${model}`,
+          allowedSizes,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const supportReferenceType = options.supportReferenceType || "none";
+    const inputReference = this.validateVideoReference(
+      body?.input_reference,
+      "First-frame reference",
+    );
+    const inputTailReference = this.validateVideoReference(
+      body?.input_tail_reference,
+      "Tail-frame reference",
+    );
+    if (inputReference && supportReferenceType === "none") {
+      throw new HttpException(
+        { code: "VIDEO_REFERENCE_NOT_SUPPORTED", error: `Model ${model} does not support reference images` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (inputTailReference && supportReferenceType !== "first_last") {
+      throw new HttpException(
+        { code: "VIDEO_TAIL_REFERENCE_NOT_SUPPORTED", error: `Model ${model} does not support a tail-frame reference` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (inputTailReference && !inputReference) {
+      throw new HttpException(
+        { code: "VIDEO_FIRST_REFERENCE_REQUIRED", error: "A first-frame reference is required when a tail frame is provided" },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const watermark = body?.watermark === undefined ? "false" : String(body.watermark).trim().toLowerCase();
+    if (watermark !== "true" && watermark !== "false") {
+      throw new HttpException(
+        { code: "INVALID_VIDEO_WATERMARK", error: "watermark must be true or false" },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return {
+      prompt,
+      model,
+      seconds: String(seconds),
+      size,
+      watermark,
+      ...(inputReference ? { input_reference: inputReference } : {}),
+      ...(inputTailReference ? { input_tail_reference: inputTailReference } : {}),
+    };
+  }
+
+  private validateVideoReference(value: unknown, label: string): string | undefined {
+    if (value === undefined || value === null || value === "") return undefined;
+    if (typeof value !== "string") {
+      throw new HttpException({ error: `${label} must be a base64 image data URL` }, HttpStatus.BAD_REQUEST);
+    }
+    const match = value.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/i);
+    if (!match?.[2]) {
+      throw new HttpException(
+        { error: `${label} must be a PNG, JPEG, or WebP base64 image` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const byteLength = Buffer.from(match[2], "base64").byteLength;
+    if (byteLength <= 0 || byteLength > this.MAX_VIDEO_REFERENCE_SIZE) {
+      throw new HttpException(
+        { error: `${label} must be ${Math.floor(this.MAX_VIDEO_REFERENCE_SIZE / 1024 / 1024)}MB or smaller` },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return value;
   }
 
   private isGptImage2(model: string): boolean {
@@ -1065,7 +1274,10 @@ export class AiService {
     );
   }
 
-  async chatWithYunwu(body: any): Promise<ChatResponse> {
+  async chatWithYunwu(
+    body: any,
+    user?: { userId?: string; username?: string },
+  ): Promise<ChatResponse> {
     const messages = Array.isArray(body?.messages)
       ? body.messages.filter((m: any) => this.isChatMessage(m))
       : [];
@@ -1107,8 +1319,8 @@ export class AiService {
 
     if (usage) {
       this.tokensService.recordTokenUsage({
-        userId: body?.userId,
-        username: body?.username,
+        userId: user?.userId,
+        username: user?.username,
         model: typeof providerResponseBody?.model === "string" ? providerResponseBody.model : model,
         promptTokens: usage.prompt_tokens || 0,
         completionTokens: usage.completion_tokens || 0,
@@ -1131,12 +1343,14 @@ export class AiService {
     };
   }
 
-  getTaskStatus(id: string) {
+  getTaskStatus(id: string, userId?: string) {
     try {
       const stmt = this.dbService.db.prepare(
-        "SELECT * FROM generation_tasks WHERE id = $id",
+        userId
+          ? "SELECT * FROM generation_tasks WHERE id = $id AND userId = $userId"
+          : "SELECT * FROM generation_tasks WHERE id = $id",
       );
-      const row = stmt.get({ $id: id }) as any;
+      const row = stmt.get(userId ? { $id: id, $userId: userId } : { $id: id }) as any;
       if (!row) {
         throw new HttpException(
           { error: "Task not found" },
@@ -1158,23 +1372,36 @@ export class AiService {
     }
   }
 
-  private setTaskStatus(id: string, status: string, data: any) {
+  private setTaskStatus(
+    id: string,
+    status: string,
+    data: any,
+    finalBillingMicros?: number,
+  ) {
     try {
       const stmt = this.dbService.db.prepare(`
-        INSERT INTO generation_tasks (id, status, data, createdAt)
-        VALUES ($id, $status, $data, $createdAt)
+        INSERT INTO generation_tasks (id, status, data, createdAt, updatedAt)
+        VALUES ($id, $status, $data, $createdAt, $updatedAt)
         ON CONFLICT(id) DO UPDATE SET
           status = excluded.status,
-          data = excluded.data
+          data = excluded.data,
+          updatedAt = excluded.updatedAt
       `);
       stmt.run({
         $id: id,
         $status: status,
         $data: JSON.stringify(data),
         $createdAt: Date.now(),
+        $updatedAt: Date.now(),
       });
     } catch (err) {
       console.error(`Failed to save task status for ${id}:`, err);
+      return;
+    }
+    try {
+      this.billingService?.settleTask(id, status, data?.error, finalBillingMicros);
+    } catch (err) {
+      console.error(`Failed to settle billing for task ${id}:`, err);
     }
   }
 
@@ -1196,6 +1423,7 @@ export class AiService {
     taskId: string,
     body: GenerateImageJsonRequest,
     originUrl: string,
+    billingContext?: BillingTaskContext,
   ) {
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const outputFormat = this.getOutputFormat(body?.outputFormat);
@@ -1208,8 +1436,28 @@ export class AiService {
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
         const imageUrl = `http://101.200.138.2:8093/i/49496bbf-85cc-4f9b-a275-5736cb2497f8.png`;
+        const requestedCount = body.n || 1;
+        const images = Array.from({ length: requestedCount }, (_, index) => ({
+          imageUrl,
+          url: imageUrl,
+          index,
+        }));
+        const finalBillingMicros = billingContext && this.billingService
+          ? this.billingService.quoteForOperation(billingContext.operationId, {
+              ...body,
+              n: images.length,
+            }).amountMicros
+          : undefined;
 
-        this.setTaskStatus(taskId, "success", { imageUrl });
+        this.setTaskStatus(taskId, "success", {
+          imageUrl,
+          url: imageUrl,
+          images,
+          requestedCount,
+          successfulCount: images.length,
+          failedCount: 0,
+          partial: false,
+        }, finalBillingMicros);
         return;
       } catch (err: any) {
         this.setTaskStatus(taskId, "error", {
@@ -1236,7 +1484,9 @@ export class AiService {
     }
 
     try {
-      let imageUrl = "";
+      const requestedCount = body.n || 1;
+      const filenames: string[] = [];
+      const saveErrors: string[] = [];
 
       const route = await this.resolveChannelAndModel("image", model);
       const upstreamModel = route.upstreamModel;
@@ -1362,12 +1612,14 @@ export class AiService {
           },
         };
 
-        const responseFromGeminiSdk = await googleClient.models.generateContent(
-          {
-            model: upstreamModel,
-            contents: payload.contents,
-            config: payload.generationConfig,
-          },
+        const nativeResults = await Promise.allSettled(
+          Array.from({ length: requestedCount }, () =>
+            googleClient.models.generateContent({
+              model: upstreamModel,
+              contents: payload.contents,
+              config: payload.generationConfig,
+            }),
+          ),
         );
 
         // const response = await fetch(url, {
@@ -1388,11 +1640,18 @@ export class AiService {
         //   );
         // }
 
-        const filename = await this.filesService.saveGeneratedImage(
-          responseFromGeminiSdk,
-          outputFormat,
-        );
-        imageUrl = `${originUrl}/files/${filename}`;
+        for (const result of nativeResults) {
+          if (result.status === "rejected") {
+            saveErrors.push(result.reason?.message || String(result.reason || "Gemini generation failed"));
+            continue;
+          }
+          const saved = await this.filesService.saveGeneratedImages(
+            result.value,
+            outputFormat,
+          );
+          filenames.push(...saved.filenames);
+          saveErrors.push(...saved.errors);
+        }
       } else {
         // If base64 reference images are provided for image-to-image / edits
         const channel = route.channel;
@@ -1413,6 +1672,7 @@ export class AiService {
             requestSize,
           );
           upstreamForm.append("output_format", outputFormat);
+          upstreamForm.append("n", String(requestedCount));
 
           if (requestQuality) {
             upstreamForm.append("quality", requestQuality);
@@ -1496,11 +1756,12 @@ export class AiService {
             upstreamForm,
           );
 
-          const filename = await this.filesService.saveGeneratedImage(
+          const saved = await this.filesService.saveGeneratedImages(
             providerBody,
             outputFormat,
           );
-          imageUrl = `${originUrl}/files/${filename}`;
+          filenames.push(...saved.filenames);
+          saveErrors.push(...saved.errors);
         } else {
           // Otherwise, standard Text-to-Image (Generations)
           if (!channel) {
@@ -1519,7 +1780,7 @@ export class AiService {
               typeof body?.style === "string" ? body.style : undefined,
             ),
             size: requestSize,
-            n: body?.n || 1,
+            n: requestedCount,
           };
 
           if (requestQuality) {
@@ -1531,17 +1792,43 @@ export class AiService {
           );
           const providerBody = JSON.parse(JSON.stringify(sdkResponse));
 
-          const filename = await this.filesService.saveGeneratedImage(
+          const saved = await this.filesService.saveGeneratedImages(
             providerBody,
             outputFormat,
           );
-          imageUrl = `${originUrl}/files/${filename}`;
+          filenames.push(...saved.filenames);
+          saveErrors.push(...saved.errors);
         }
       }
 
-      this.setTaskStatus(taskId, "success", {
-        imageUrl,
+      const successfulFilenames = filenames.slice(0, requestedCount);
+      if (successfulFilenames.length === 0) {
+        throw new Error(saveErrors[0] || "Provider response did not include an image");
+      }
+      const images = successfulFilenames.map((filename, index) => {
+        const imageUrl = `${originUrl}/files/${filename}`;
+        return { imageUrl, url: imageUrl, index };
       });
+      const successfulCount = images.length;
+      const failedCount = Math.max(0, requestedCount - successfulCount);
+      const firstImageUrl = images[0]!.imageUrl;
+      const finalBillingMicros = billingContext && this.billingService
+        ? this.billingService.quoteForOperation(billingContext.operationId, {
+            ...body,
+            n: successfulCount,
+          }).amountMicros
+        : undefined;
+
+      this.setTaskStatus(taskId, "success", {
+        imageUrl: firstImageUrl,
+        url: firstImageUrl,
+        images,
+        requestedCount,
+        successfulCount,
+        failedCount,
+        partial: failedCount > 0,
+        warnings: saveErrors.length > 0 ? saveErrors : undefined,
+      }, finalBillingMicros);
     } catch (err: any) {
       console.error(
         `[runGenerationTaskInBackground] Task ${taskId} failed:`,
@@ -1570,19 +1857,27 @@ export class AiService {
   async generateImageFromJson(
     body: GenerateImageJsonRequest,
     originUrl: string,
+    billingContext?: BillingTaskContext,
   ): Promise<GenerateImageResponse> {
-    const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-    if (!prompt) {
-      throw new HttpException(
-        { error: "Missing prompt" },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    const preparedBody = await this.prepareImageGenerationRequest(body);
 
     const taskId = crypto.randomUUID();
     this.setTaskStatus(taskId, "generating", {});
+    if (billingContext) {
+      if (!this.billingService) throw new Error("Billing service is unavailable");
+      this.billingService.attachTask(
+        billingContext.operationId,
+        taskId,
+        billingContext.userId,
+      );
+    }
 
-    void this.runGenerationTaskInBackground(taskId, body, originUrl).catch(
+    void this.runGenerationTaskInBackground(
+      taskId,
+      preparedBody,
+      originUrl,
+      billingContext,
+    ).catch(
       (error) => this.handleBackgroundTaskRejection(taskId, "image", error),
     );
 
@@ -1590,7 +1885,123 @@ export class AiService {
       type: "image",
       taskId,
       status: "generating",
+      requestedCount: preparedBody.n,
     };
+  }
+
+  private getVideoGenerationTimeoutMs(): number {
+    const configured = Number(process.env.VIDEO_GENERATION_TIMEOUT_MS);
+    return Number.isFinite(configured) && configured >= 30_000
+      ? Math.floor(configured)
+      : 5 * 60 * 1000;
+  }
+
+  private buildVideoProviderForm(body: GenerateVideoJsonRequest, upstreamModel: string): FormData {
+    const form = new FormData();
+    form.append("model", upstreamModel);
+    form.append("prompt", body.prompt!);
+    form.append("seconds", body.seconds!);
+    form.append("size", body.size!);
+    form.append("watermark", body.watermark || "false");
+    const appendReference = (field: string, value: string | undefined) => {
+      if (!value) return;
+      const match = value.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/i);
+      if (!match?.[1] || !match[2]) return;
+      const extension = match[1].toLowerCase() === "image/jpeg" ? "jpg" : match[1].split("/")[1];
+      const file = new File(
+        [Buffer.from(match[2], "base64")],
+        `${field}.${extension}`,
+        { type: match[1] },
+      );
+      form.append(field, file as any, file.name);
+    };
+    appendReference("input_reference", body.input_reference);
+    appendReference("input_tail_reference", body.input_tail_reference);
+    return form;
+  }
+
+  private async getVideoProviderCredentials(providerId: string, fallbackBaseUrl?: string) {
+    if (providerId === "__env__") {
+      const apiKey = this.getYunwuApiKey("video");
+      return apiKey ? { baseUrl: fallbackBaseUrl || this.YUNWU_BASE_URL, apiKey } : null;
+    }
+    const channels = await this.channelsService.getAll();
+    const channel = channels.find((item) => item.id === providerId);
+    return channel ? { baseUrl: channel.baseUrl, apiKey: channel.apiKey } : null;
+  }
+
+  private async resumeVideoGenerationTask(taskId: string, state: any) {
+    try {
+      await this.pollVideoProviderTask(taskId, state);
+    } catch (error: any) {
+      console.error(`[resumeVideoGenerationTask] Task ${taskId} failed:`, error);
+      this.setTaskStatus(taskId, "error", {
+        error: error?.message || "恢复视频生成任务失败，预留积分已退回",
+      });
+    }
+  }
+
+  private async pollVideoProviderTask(
+    taskId: string,
+    state: {
+      upstreamTaskId: string;
+      providerId: string;
+      providerBaseUrl?: string;
+      originUrl: string;
+      deadlineAt: number;
+    },
+  ) {
+    const credentials = await this.getVideoProviderCredentials(
+      state.providerId,
+      state.providerBaseUrl,
+    );
+    if (!credentials) throw new Error("视频渠道已被删除或密钥不可用");
+
+    while (Date.now() < Number(state.deadlineAt)) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      let statusRes: Response;
+      try {
+        statusRes = await this.fetchProvider(
+          `${credentials.baseUrl.replace(/\/+$/, "")}/videos/${encodeURIComponent(state.upstreamTaskId)}`,
+          {
+            headers: { Authorization: `Bearer ${credentials.apiKey}` },
+            signal: AbortSignal.timeout(20_000),
+          },
+        );
+      } catch (error: any) {
+        console.warn(`[VideoTaskPolling] Temporary polling error for ${state.upstreamTaskId}:`, error?.message);
+        continue;
+      }
+
+      const statusData = await this.readJsonSafely(statusRes);
+      if (!statusRes.ok) {
+        if ([400, 401, 403, 404].includes(statusRes.status)) {
+          throw new Error(this.parseProviderError(statusData) || `Video status HTTP ${statusRes.status}`);
+        }
+        console.warn(`[VideoTaskPolling] Temporary HTTP ${statusRes.status}:`, statusData);
+        continue;
+      }
+
+      const status = String(statusData?.status || "").toLowerCase();
+      if (status === "succeeded" || status === "success" || status === "completed") {
+        const videoUrl =
+          statusData?.video_url ||
+          statusData?.videoUrl ||
+          statusData?.output?.video_url ||
+          statusData?.data?.video_url;
+        if (!videoUrl) throw new Error("Succeeded status but no video URL returned");
+        const localResult = await this.filesService.downloadAndSaveVideo(videoUrl, state.originUrl);
+        this.setTaskStatus(taskId, "success", {
+          videoUrl: localResult.videoUrl,
+          thumbnailUrl: localResult.thumbnailUrl,
+        });
+        return;
+      }
+      if (["failed", "error", "cancelled", "canceled"].includes(status)) {
+        throw new Error(this.parseProviderError(statusData) || "Video generation failed upstream");
+      }
+    }
+    throw new Error("Video generation timed out");
   }
 
   async runVideoGenerationTaskInBackground(
@@ -1598,260 +2009,129 @@ export class AiService {
     body: GenerateVideoJsonRequest,
     originUrl: string,
   ) {
-    const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-
-    // Resolve fallback model dynamically from mappings
-    const mappings =
-      await this.modelConfigService.getEnabledMappingsByPurpose("video");
-    const defaultModelFallback = mappings[0]?.id || "veo_3_1_fast_vip";
-    const model = this.getSelectedModel(body?.model, defaultModelFallback);
-
-    // Resolve fallback size & seconds dynamically from resolved model options
-    const opts = await this.getVideoModelOptions(model);
-    
-    // Parse seconds and clamp to range
-    let reqSeconds = typeof body?.seconds === "string" ? parseFloat(body.seconds) : NaN;
-    if (isNaN(reqSeconds)) {
-      reqSeconds = typeof (body as any)?.seconds === "number" ? (body as any).seconds : NaN;
-    }
-    const minSeconds = opts.minSeconds ?? 5;
-    const maxSeconds = opts.maxSeconds ?? 10;
-    const defaultSeconds = opts.defaults?.seconds ?? minSeconds;
-    
-    const secondsNum = isNaN(reqSeconds)
-      ? defaultSeconds
-      : Math.max(minSeconds, Math.min(maxSeconds, reqSeconds));
-    const seconds = String(secondsNum);
-
-    const size =
-      typeof body?.size === "string" && body.size.trim()
-        ? body.size.trim()
-        : opts.defaults?.size || "16x9";
-    const watermark =
-      typeof body?.watermark === "string" ? body.watermark.trim() : "false";
-
     try {
+      const model = body.model!;
       const route = await this.resolveChannelAndModel("video", model);
       const upstreamModel = route.upstreamModel;
-      const channels = route.channel ? [route.channel] : [];
 
-      const isMockMode =
-        process.env.MOCK_VIDEO === "true" ||
-        (channels.length === 0 && !this.getYunwuApiKey("video"));
-
-      if (!isMockMode && channels.length === 0) {
-        throw new Error("未配置该模型的可用渠道");
-      }
-
-      const upstreamForm = new FormData();
-      upstreamForm.append("model", upstreamModel);
-      upstreamForm.append("prompt", prompt);
-      upstreamForm.append("seconds", seconds);
-      upstreamForm.append("size", size);
-      upstreamForm.append("watermark", watermark);
-
-      if (
-        typeof body?.input_reference === "string" &&
-        body.input_reference.startsWith("data:")
-      ) {
-        const base64Str = body.input_reference;
-        const matches = base64Str.match(/^data:(image\/\w+);base64,(.+)$/);
-        if (matches && matches[2]) {
-          const mimeType = matches[1]!;
-          const base64Data = matches[2]!;
-          const buffer = Buffer.from(base64Data, "base64");
-          const extension = mimeType.split("/")[1] || "png";
-          const file = new File([buffer], `input_reference.${extension}`, {
-            type: mimeType,
-          });
-          upstreamForm.append("input_reference", file as any, file.name);
-        }
-      }
-
-      if (
-        typeof body?.input_tail_reference === "string" &&
-        body.input_tail_reference.startsWith("data:")
-      ) {
-        const base64Str = body.input_tail_reference;
-        const matches = base64Str.match(/^data:(image\/\w+);base64,(.+)$/);
-        if (matches && matches[2]) {
-          const mimeType = matches[1]!;
-          const base64Data = matches[2]!;
-          const buffer = Buffer.from(base64Data, "base64");
-          const extension = mimeType.split("/")[1] || "png";
-          const file = new File([buffer], `input_tail_reference.${extension}`, {
-            type: mimeType,
-          });
-          upstreamForm.append("input_tail_reference", file as any, file.name);
-        }
-      }
-
-      if (isMockMode) {
-        // Simulate video generation with a quick 2-second delay
+      if (process.env.MOCK_VIDEO === "true" || process.env.MOCK_AGENT === "true") {
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        const localResult =
-          await this.filesService.generateMockVideo(originUrl);
-        this.setTaskStatus(taskId, "success", {
-          videoUrl: localResult.videoUrl,
-          thumbnailUrl: localResult.thumbnailUrl,
-        });
+        const localResult = await this.filesService.generateMockVideo(originUrl);
+        this.setTaskStatus(taskId, "success", localResult);
         return;
       }
 
-      let success = false;
-      let responseBody: any = null;
-      let chosenBaseUrl = "";
-      let chosenApiKey = "";
-
-      const attemptVideoCall = async (baseUrl: string, key: string) => {
-        const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/videos`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${key}`,
-          },
-          body: upstreamForm,
-          verbose: true,
-        } as any);
-
-        const resBody = await this.readJsonSafely(response);
-        if (!response.ok) {
-          throw new Error(
-            this.parseProviderError(resBody) || `HTTP ${response.status}`,
-          );
-        }
-        return resBody;
-      };
-
-      const errors: string[] = [];
-
-      // Try channels in order
-      for (const channel of channels) {
-        try {
-          responseBody = await attemptVideoCall(
-            channel.baseUrl,
-            channel.apiKey,
-          );
-          chosenBaseUrl = channel.baseUrl;
-          chosenApiKey = channel.apiKey;
-          success = true;
-          break;
-        } catch (err: any) {
-          console.warn(
-            `[VideoGenTask] Channel ${channel.name} failed to create task:`,
-            err.message,
-          );
-          errors.push(`[Channel ${channel.name}]: ${err.message}`);
-        }
-      }
-
-      if (!success || !responseBody) {
-        throw new Error(
-          `Video generation failed across all channels:\n${errors.join("\n")}`,
-        );
-      }
-
-      const yunwuTaskId = responseBody?.id;
-      if (!yunwuTaskId) {
-        throw new Error("No video task ID returned from upstream API");
-      }
-
-      let attempts = 0;
-      const maxAttempts = 600; // 5 minutes max
-      let finished = false;
-
-      while (!finished && attempts < maxAttempts) {
-        attempts++;
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-
-        const statusRes = await fetch(
-          `${chosenBaseUrl.replace(/\/+$/, "")}/videos/${yunwuTaskId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${chosenApiKey}`,
-            },
-            verbose: true,
-          } as any,
-        );
-
-        const statusData = await this.readJsonSafely(statusRes);
-
-        if (!statusRes.ok) {
-          console.warn(
-            `[VideoTaskPolling] Failed to poll status for ${yunwuTaskId}:`,
-            statusData,
-          );
-          continue;
-        }
-
-        const status = statusData?.status;
-        if (status === "succeeded" || status === "success") {
-          finished = true;
-          const videoUrl = statusData?.video_url;
-          if (!videoUrl) {
-            throw new Error("Succeeded status but no video_url returned");
-          }
-
-          const localResult = await this.filesService.downloadAndSaveVideo(
-            videoUrl,
-            originUrl,
-          );
-
-          this.setTaskStatus(taskId, "success", {
-            videoUrl: localResult.videoUrl,
-            thumbnailUrl: localResult.thumbnailUrl,
-          });
-        } else if (status === "failed" || status === "error") {
-          finished = true;
-          throw new Error(
-            statusData?.error || "Video generation failed upstream",
-          );
-        }
-      }
-
-      if (!finished) {
-        throw new Error("Video generation timed out");
-      }
-    } catch (err: any) {
-      console.error(
-        `[runVideoGenerationTaskInBackground] Task ${taskId} failed:`,
-        err,
+      const discoveredChannels = await this.channelsService.getActiveChannelsForModel(
+        "video",
+        upstreamModel,
       );
-      let errMsg = err.message || "视频生成失败，请重试";
-      if (err instanceof HttpException) {
-        const resp: any = err.getResponse();
-        if (resp && typeof resp === "object") {
-          if (
-            Array.isArray(resp.providerErrors) &&
-            resp.providerErrors.length > 0
-          ) {
-            errMsg = resp.providerErrors.join("; ");
-          } else if (resp.error) {
-            errMsg = resp.error;
+      const candidates = [route.channel, ...discoveredChannels]
+        .filter(Boolean)
+        .filter((channel: any, index, all) => all.findIndex((item: any) => item?.id === channel.id) === index) as Channel[];
+      const environmentApiKey = this.getYunwuApiKey("video");
+      if (candidates.length === 0 && environmentApiKey) {
+        candidates.push({
+          id: "__env__",
+          name: "Environment video provider",
+          baseUrl: this.YUNWU_BASE_URL,
+          apiKey: environmentApiKey,
+          type: "video",
+          models: [upstreamModel],
+          weight: 0,
+          status: true,
+          createdAt: "",
+        });
+      }
+      if (candidates.length === 0) throw new Error("未配置该模型的可用视频渠道");
+
+      let responseBody: any;
+      let chosenChannel: Channel | undefined;
+      const providerErrors: string[] = [];
+      for (const channel of candidates) {
+        try {
+          const response = await this.fetchProvider(
+            `${channel.baseUrl.replace(/\/+$/, "")}/videos`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${channel.apiKey}`,
+                "Idempotency-Key": taskId,
+              },
+              body: this.buildVideoProviderForm(body, upstreamModel),
+              signal: AbortSignal.timeout(30_000),
+            },
+          );
+          const parsed = await this.readJsonSafely(response);
+          if (!response.ok) {
+            const error: any = new Error(this.parseProviderError(parsed) || `HTTP ${response.status}`);
+            error.definitiveHttpResponse = true;
+            throw error;
           }
+          responseBody = parsed;
+          chosenChannel = channel;
+          break;
+        } catch (error: any) {
+          providerErrors.push(`[${channel.name}]: ${error?.message || error}`);
+          if (!error?.definitiveHttpResponse) throw error;
         }
       }
-      this.setTaskStatus(taskId, "error", {
-        error: errMsg,
-      });
+      if (!responseBody || !chosenChannel) {
+        throw new Error(`Video generation failed across all channels:\n${providerErrors.join("\n")}`);
+      }
+
+      const immediateVideoUrl = responseBody?.video_url || responseBody?.videoUrl;
+      if (immediateVideoUrl) {
+        const localResult = await this.filesService.downloadAndSaveVideo(immediateVideoUrl, originUrl);
+        this.setTaskStatus(taskId, "success", localResult);
+        return;
+      }
+      const upstreamTaskId = responseBody?.id || responseBody?.task_id;
+      if (!upstreamTaskId) throw new Error("No video task ID returned from upstream API");
+
+      const pollState = {
+        kind: "video",
+        phase: "polling",
+        upstreamTaskId: String(upstreamTaskId),
+        providerId: chosenChannel.id,
+        providerBaseUrl: chosenChannel.baseUrl,
+        originUrl,
+        deadlineAt: Date.now() + this.getVideoGenerationTimeoutMs(),
+      };
+      this.setTaskStatus(taskId, "generating", pollState);
+      await this.pollVideoProviderTask(taskId, pollState);
+    } catch (err: any) {
+      console.error(`[runVideoGenerationTaskInBackground] Task ${taskId} failed:`, err);
+      let errMsg = err?.message || "视频生成失败，请重试";
+      if (err instanceof HttpException) {
+        const response: any = err.getResponse();
+        if (response && typeof response === "object" && response.error) errMsg = response.error;
+      }
+      this.setTaskStatus(taskId, "error", { error: errMsg });
     }
   }
 
   async generateVideoFromJson(
     body: GenerateVideoJsonRequest,
     originUrl: string,
+    billingContext?: BillingTaskContext,
   ): Promise<any> {
-    const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-    if (!prompt) {
-      throw new HttpException(
-        { error: "Missing prompt" },
-        HttpStatus.BAD_REQUEST,
+    const preparedBody = await this.prepareVideoGenerationRequest(body);
+
+    const taskId = crypto.randomUUID();
+    this.setTaskStatus(taskId, "generating", {
+      kind: "video",
+      phase: "queued",
+    });
+    if (billingContext) {
+      if (!this.billingService) throw new Error("Billing service is unavailable");
+      this.billingService.attachTask(
+        billingContext.operationId,
+        taskId,
+        billingContext.userId,
       );
     }
 
-    const taskId = crypto.randomUUID();
-    this.setTaskStatus(taskId, "generating", {});
-
-    void this.runVideoGenerationTaskInBackground(taskId, body, originUrl).catch(
+    void this.runVideoGenerationTaskInBackground(taskId, preparedBody, originUrl).catch(
       (error) => this.handleBackgroundTaskRejection(taskId, "video", error),
     );
 
@@ -1859,6 +2139,9 @@ export class AiService {
       type: "video",
       taskId,
       status: "generating",
+      model: preparedBody.model,
+      seconds: preparedBody.seconds,
+      size: preparedBody.size,
     };
   }
 
@@ -1951,16 +2234,37 @@ export class AiService {
       }
     }
 
+    const normalizedMinSeconds = Number.isSafeInteger(minSeconds) && minSeconds > 0
+      ? minSeconds
+      : 5;
+    const normalizedMaxSeconds = Number.isSafeInteger(maxSeconds) && maxSeconds >= normalizedMinSeconds
+      ? maxSeconds
+      : Math.max(normalizedMinSeconds, 10);
+    const normalizedDefaultSeconds = Number.isSafeInteger(defaultSeconds)
+      ? Math.max(normalizedMinSeconds, Math.min(normalizedMaxSeconds, defaultSeconds))
+      : normalizedMinSeconds;
+    const normalizedSizes = sizes.filter(
+      (option, index, all) => option.value && all.findIndex((item) => item.value === option.value) === index,
+    );
+    const normalizedDefaultSize = normalizedSizes.some((option) => option.value === defaultSize)
+      ? defaultSize
+      : normalizedSizes[0]?.value || defaultSize;
+    const normalizedReferenceType = (["none", "first", "first_last"] as const).includes(
+      supportReferenceType as any,
+    )
+      ? supportReferenceType as "none" | "first" | "first_last"
+      : "none";
+
     return {
       model,
-      sizes,
-      minSeconds,
-      maxSeconds,
+      sizes: normalizedSizes,
+      minSeconds: normalizedMinSeconds,
+      maxSeconds: normalizedMaxSeconds,
       defaults: {
-        size: defaultSize,
-        seconds: defaultSeconds,
+        size: normalizedDefaultSize,
+        seconds: normalizedDefaultSeconds,
       },
-      supportReferenceType,
+      supportReferenceType: normalizedReferenceType,
     };
   }
 

@@ -115,6 +115,7 @@ const COMPARE_KEYS = [
   "seconds",
   "images",
   "inputReference",
+  "inputTailReference",
   "generationStatus",
   "errorMessage",
   "taskId",
@@ -153,6 +154,10 @@ export function useCanvasHistory(
   let isRestoring = false;
   let debounceTimeout: any = null;
   let saveTimeout: any = null;
+  let renderedWorkspaceId: string | null = null;
+  let workspaceLoadGeneration = 0;
+  let isApplyingWorkspaceState = false;
+  let disposed = false;
   let transactionActive = false;
   let transactionDirty = false;
   let transactionStartState: HistoryState | null = null;
@@ -202,6 +207,7 @@ export function useCanvasHistory(
       data.errorMessage = node.errorMessage;
       data.taskId = node.taskId;
       data.inputReference = node.inputReference;
+      data.inputTailReference = node.inputTailReference;
       delete data.children;
     } else if (data.tag === "VideoNode") {
       data.videoUrl = node.videoUrl;
@@ -505,6 +511,14 @@ export function useCanvasHistory(
     if (!app?.tree) return;
     const targetId = workspaceId || activeWorkspaceIdRef?.value;
     if (!targetId) return;
+    const normalizedTargetId = String(targetId);
+    if (
+      disposed ||
+      isApplyingWorkspaceState ||
+      renderedWorkspaceId !== normalizedTargetId
+    ) {
+      return;
+    }
     try {
       const childrenData = app.tree.children
         .filter(
@@ -517,7 +531,7 @@ export function useCanvasHistory(
         )
         .map((child: any) => serializeNode(child));
 
-      await updateWorkspaceCanvas(String(targetId), childrenData);
+      await updateWorkspaceCanvas(normalizedTargetId, childrenData);
       console.log("saveCanvasState: successfully saved canvas state.");
     } catch (e) {
       console.error("Failed to save canvas state to server:", e);
@@ -528,8 +542,10 @@ export function useCanvasHistory(
     if (saveTimeout) {
       clearTimeout(saveTimeout);
     }
+    const targetId = renderedWorkspaceId;
+    if (!targetId || disposed || isApplyingWorkspaceState) return;
     saveTimeout = setTimeout(() => {
-      saveCanvasState();
+      saveCanvasState(targetId);
     }, delay);
   };
 
@@ -538,58 +554,72 @@ export function useCanvasHistory(
     if (!app?.tree) return;
     const targetId = workspaceId || activeWorkspaceIdRef?.value;
     if (!targetId) return;
+    const normalizedTargetId = String(targetId);
+    const loadGeneration = ++workspaceLoadGeneration;
     try {
-      const dataList = await getWorkspaceCanvas(String(targetId));
+      const dataList = await getWorkspaceCanvas(normalizedTargetId);
+
+      if (
+        disposed ||
+        loadGeneration !== workspaceLoadGeneration ||
+        String(activeWorkspaceIdRef?.value ?? "") !== normalizedTargetId
+      ) {
+        return;
+      }
 
       if (Array.isArray(dataList)) {
-        if (app.editor) {
-          app.editor.cancel();
-        }
-        // 清理旧 VideoNode 的 DOM 层
-        app.tree.children.forEach((child: any) => cleanUpSingleNode(child));
-        app.tree.clear();
-        dataList.forEach((data: any) => {
-          if (isLeftoverCropOverlay(data) || isLeftoverTaskOverlay(data))
-            return;
-          const child = deserializeNode(data);
-          if (child) {
-            ensureHistoryIdDeep(child);
-            app.tree.add(child);
+        isApplyingWorkspaceState = true;
+        isRestoring = true;
+        try {
+          if (app.editor) {
+            app.editor.cancel();
           }
-        });
+          // 清理旧 VideoNode 的 DOM 层
+          app.tree.children.forEach((child: any) => cleanUpSingleNode(child));
+          app.tree.clear();
+          dataList.forEach((data: any) => {
+            if (isLeftoverCropOverlay(data) || isLeftoverTaskOverlay(data))
+              return;
+            const child = deserializeNode(data);
+            if (child) {
+              ensureHistoryIdDeep(child);
+              app.tree.add(child);
+            }
+          });
 
-        // 重置历史基线：使用 JSON 序列化快照
-        history.length = 0;
-        const serialized = app.tree.children
-          .filter(
-            (child: any) =>
-              child.tag !== "SimulateElement" &&
-              child.__tag !== "SimulateElement" &&
-              !child.isCropOverlay &&
-              !child.isTaskOverlay &&
-              !isLeftoverTaskOverlay(child),
-          )
-          .map((child: any) => serializeNode(child));
-        history.push({ serialized, selectedHistoryIds: [] });
-        currentIndex = 0;
+          // 重置历史基线：使用 JSON 序列化快照
+          history.length = 0;
+          const serialized = app.tree.children
+            .filter(
+              (child: any) =>
+                child.tag !== "SimulateElement" &&
+                child.__tag !== "SimulateElement" &&
+                !child.isCropOverlay &&
+                !child.isTaskOverlay &&
+                !isLeftoverTaskOverlay(child),
+            )
+            .map((child: any) => serializeNode(child));
+          history.push({ serialized, selectedHistoryIds: [] });
+          currentIndex = 0;
+          renderedWorkspaceId = normalizedTargetId;
+        } finally {
+          isRestoring = false;
+          isApplyingWorkspaceState = false;
+        }
         return;
       }
     } catch (e) {
       console.error("Failed to restore canvas state:", e);
     }
+  };
 
-    // Fallback default node if no saved state on server or fetch error
-    if (app.tree.children.length === 0) {
-      const imageGen = new ImageGen({
-        x: 300,
-        y: 200,
-        width: 400,
-        height: 300,
-        editable: true,
-      });
-      ensureHistoryId(imageGen);
-      app.tree.add(imageGen);
-    }
+  const disposeCanvasHistory = () => {
+    disposed = true;
+    workspaceLoadGeneration++;
+    if (debounceTimeout) clearTimeout(debounceTimeout);
+    if (saveTimeout) clearTimeout(saveTimeout);
+    debounceTimeout = null;
+    saveTimeout = null;
   };
 
   // ── 历史记录 ──────────────────────────────────────────────────────────────
@@ -762,5 +792,6 @@ export function useCanvasHistory(
     beginTransaction,
     commitTransaction,
     rollbackTransaction,
+    disposeCanvasHistory,
   };
 }

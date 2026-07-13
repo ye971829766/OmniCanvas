@@ -209,6 +209,30 @@
 
         <!-- Footer Profile & Settings -->
         <div class="border-t border-[var(--p-surface-100)] pt-4 mt-auto">
+          <Button
+            v-if="isLoggedIn && renderExpandedContent"
+            variant="text"
+            class="!justify-between !px-3 !py-2 mb-2 w-full rounded-xl bg-[var(--p-surface-50)] hover:bg-[var(--p-surface-100)]"
+            title="查看积分与账单"
+            @click="openBilling('plans')"
+          >
+            <span class="flex items-center gap-2 text-xs font-semibold text-[var(--p-text-muted-color)]">
+              <Coins :size="16" /> 可用积分
+            </span>
+            <span class="text-xs font-bold text-[var(--p-text-color)]">
+              {{ balanceLoading ? "—" : formatBalance(balance?.availableCredits || 0) }}
+            </span>
+          </Button>
+          <Button
+            v-else-if="isLoggedIn"
+            variant="text"
+            rounded
+            class="!p-1.5 mb-3 mx-auto w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)]"
+            :title="`可用积分 ${formatBalance(balance?.availableCredits || 0)}`"
+            @click="openBilling('plans')"
+          >
+            <Coins :size="18" />
+          </Button>
           <!-- Expanded State -->
           <div
             v-if="renderExpandedContent"
@@ -386,6 +410,7 @@ import {
   Settings,
   Sun,
   Moon,
+  Coins,
 } from "lucide-vue-next";
 import { gsap } from "gsap";
 import vTooltip from "primevue/tooltip";
@@ -394,6 +419,7 @@ import { useToast } from "primevue/usetoast";
 import { useTheme } from "@/composables/useTheme";
 import { useUser } from "@/composables/useUser";
 import UserProfileModal from "@/components/auth/UserProfileModal.vue";
+import { useBilling } from "@/composables/useBilling";
 
 const { isDark, toggleTheme } = useTheme();
 const {
@@ -404,6 +430,8 @@ const {
   openAuthModal,
   openProfileModal,
 } = useUser();
+const { balance, balanceLoading, openBilling, refreshBalance } = useBilling();
+const formatBalance = (value: number) => new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(value);
 
 const props = defineProps<{
   activeWorkspaceId: string | number | null;
@@ -439,10 +467,12 @@ const loadWorkspaces = async () => {
 
 onMounted(async () => {
   await loadWorkspaces();
+  if (isLoggedIn.value) await refreshBalance();
 });
 
 watch(isLoggedIn, async () => {
   await loadWorkspaces();
+  if (isLoggedIn.value) await refreshBalance();
   if (workspaces.value.length > 0) {
     emit("update:activeWorkspaceId", workspaces.value[0].id);
   } else {

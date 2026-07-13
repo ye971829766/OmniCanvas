@@ -58,11 +58,23 @@ export interface GenerateImageResponse {
   status?: "generating" | "success" | "error";
   mode?: GenerateImageMode;
   imageUrl?: string;
+  /** All successfully persisted images. imageUrl/url remain aliases for the first item. */
+  images?: GeneratedImageResult[];
+  requestedCount?: number;
+  successfulCount?: number;
+  failedCount?: number;
+  partial?: boolean;
   url?: string;
   model?: string;
   width?: number;
   height?: number;
   error?: string;
+}
+
+export interface GeneratedImageResult {
+  imageUrl: string;
+  url: string;
+  index: number;
 }
 
 export interface ChatMessage {
@@ -127,6 +139,5 @@ export interface VideoModelOptionsResponse {
   notes?: string[];
   source?: string;
   sourceUrls?: string[];
-  supportReferenceType?: string;
+  supportReferenceType?: "none" | "first" | "first_last";
 }
-

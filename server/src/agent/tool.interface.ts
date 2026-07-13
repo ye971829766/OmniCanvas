@@ -3,6 +3,7 @@ import type { EventSink } from './event-sink';
 import type { AgentMemory } from './agent.memory';
 import type { FilesService } from '../files/files.service';
 import type { AgentAsset } from './agent-assets';
+import type { BillingService } from '../billing/billing.service';
 
 /** Context handed to every tool execution. */
 export interface ToolContext {
@@ -31,6 +32,14 @@ export interface ToolContext {
   directImageRequest?: boolean;
   /** one unambiguous image reference for the current turn, when available */
   defaultImageReferenceIds?: string[];
+  /** Authenticated owner. Never accepted from tool input or request bodies. */
+  userId: string;
+  /** Shared billing engine used by every cost-bearing tool. */
+  billing: BillingService;
+  /** Stable namespace for tool-call idempotency within this Agent request. */
+  billingNamespace: string;
+  /** Set by AgentService immediately around a single tool execution. */
+  billingToolCallId?: string;
 }
 
 export interface ToolResult {

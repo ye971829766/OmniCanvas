@@ -349,6 +349,14 @@ watch(referenceImages, async (newFiles) => {
   }
 });
 
+watch(n, (value) => {
+  const targetAny = props.target as any;
+  if (targetAny && targetAny.n !== value) {
+    targetAny.set({ n: value });
+    emit("change", { key: "n", value });
+  }
+});
+
 const togglePanel = (event: Event) => {
   popoverRef.value?.toggle(event);
 };

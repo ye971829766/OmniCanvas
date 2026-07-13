@@ -227,6 +227,11 @@ export class UsersService {
     return this.toPublicInfo(row);
   }
 
+  hasRole(id: string, role: "user" | "admin"): boolean {
+    const row = this.db.query("SELECT role FROM users WHERE id = ?").get(id) as { role?: string } | null;
+    return row?.role === role;
+  }
+
   async updateProfile(id: string, dto: UpdateProfileDto): Promise<UserPublicInfo> {
     const row = this.db
       .query("SELECT * FROM users WHERE id = $id")

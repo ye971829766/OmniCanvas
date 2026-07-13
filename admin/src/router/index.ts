@@ -6,6 +6,7 @@ import UsersSection from "../components/UsersSection.vue";
 import TokensSection from "../components/TokensSection.vue";
 import AgentSection from "../components/AgentSection.vue";
 import DiagnosticsSection from "../components/DiagnosticsSection.vue";
+import BillingSection from "../components/BillingSection.vue";
 
 const routes = [
   {
@@ -50,6 +51,16 @@ const routes = [
       key: "users",
       title: "用户管理",
       description: "管理系统注册账号、用户角色权限及密码重置",
+    },
+  },
+  {
+    path: "/billing",
+    name: "Billing",
+    component: BillingSection,
+    meta: {
+      key: "billing",
+      title: "计费与支付",
+      description: "查看积分账户、支付订单、计价规则并执行可审计调账",
     },
   },
   {

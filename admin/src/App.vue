@@ -1,5 +1,8 @@
 <template>
+  <div v-if="authState === 'checking'" class="auth-checking"><el-icon class="is-loading" :size="30"><Loading /></el-icon></div>
+  <AdminLogin v-else-if="authState === 'guest'" @authenticated="handleAuthenticated" />
   <el-container
+    v-else
     class="admin-dashboard-layout"
     style="height: 100vh; width: 100vw; background-color: #f1f3f5"
   >
@@ -119,6 +122,9 @@
           </span>
         </div>
       </div>
+      <el-button text style="justify-content: flex-start; color: #64748b" @click="handleLogout">
+        <el-icon style="margin-right: 8px"><SwitchButton /></el-icon>退出登录
+      </el-button>
     </el-aside>
 
     <!-- Content Workspace -->
@@ -200,6 +206,14 @@
             </el-button>
           </template>
           <el-button
+            v-else-if="currentKey === 'billing'"
+            type="info"
+            plain
+            @click="refreshActiveSection"
+          >
+            <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新计费数据
+          </el-button>
+          <el-button
             v-else-if="currentKey === 'dashboard'"
             type="info"
             plain
@@ -264,10 +278,16 @@ import {
   Refresh,
   User,
   DataAnalysis,
+  CreditCard,
+  Loading,
+  SwitchButton,
 } from "@element-plus/icons-vue";
+import AdminLogin from "./components/AdminLogin.vue";
 import {
+  getAdminMe,
   getChannels,
   getModelConfig,
+  logoutAdmin,
   type Channel,
   type ModelMapping,
   type ImageConfig,
@@ -276,6 +296,7 @@ import {
 
 const route = useRoute();
 const router = useRouter();
+const authState = ref<"checking" | "guest" | "authenticated">("checking");
 
 const currentKey = computed(() => (route.meta?.key as string) || "dashboard");
 
@@ -293,6 +314,7 @@ const navItems = [
   { key: "channels", label: "上游渠道", icon: Connection },
   { key: "models", label: "模型目录", icon: Files },
   { key: "users", label: "用户管理", icon: User },
+  { key: "billing", label: "计费与支付", icon: CreditCard },
   { key: "tokens", label: "Token 统计", icon: DataAnalysis, badge: "Live", badgeBg: "#dcfce7", badgeColor: "#15803d" },
   { key: "agent", label: "Agent 配置", icon: Cpu },
   { key: "diagnostics", label: "接口测试", icon: ChatLineRound },
@@ -407,8 +429,38 @@ async function refreshAllData() {
   ElMessage.success("数据已刷新");
 }
 
-onMounted(() => {
-  loadChannels();
-  loadMappings();
+async function refreshActiveSection() {
+  await activeComponentRef.value?.refresh?.();
+  ElMessage.success("计费数据已刷新");
+}
+
+async function handleAuthenticated() {
+  authState.value = "authenticated";
+  await Promise.all([loadChannels(), loadMappings()]);
+}
+
+function handleLogout() {
+  logoutAdmin();
+  authState.value = "guest";
+}
+
+onMounted(async () => {
+  const token = localStorage.getItem("omnicanvas_admin_token");
+  if (!token) {
+    authState.value = "guest";
+    return;
+  }
+  try {
+    await getAdminMe();
+    authState.value = "authenticated";
+    await Promise.all([loadChannels(), loadMappings()]);
+  } catch {
+    logoutAdmin();
+    authState.value = "guest";
+  }
 });
 </script>
+
+<style scoped>
+.auth-checking { width: 100vw; height: 100vh; display: grid; place-items: center; color: #64748b; background: #f1f3f5; }
+</style>

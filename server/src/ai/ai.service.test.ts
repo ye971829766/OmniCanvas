@@ -5,7 +5,10 @@ function createService() {
   return new AiService(
     {} as any,
     {} as any,
-    {} as any,
+    {
+      getEnabledMappingsByPurpose: async () => [],
+      getConfig: async () => ({ mappings: [], imageConfigs: [] }),
+    } as any,
     {} as any,
     {} as any,
   );
@@ -147,6 +150,91 @@ describe("AiService GPT Image 2 request defaults", () => {
     expect(service.resolveImageRequestQuality("gpt-image-2", "hd")).toBe("high");
     expect(service.resolveImageRequestQuality("gpt-image-2", "low")).toBe("low");
     expect(service.resolveImageRequestSize("gpt-image-2", "2000x2000", options)).toBe("2000x2000");
+  });
+});
+
+describe("AiService image count validation", () => {
+  test("normalizes a valid count and rejects counts outside the model limit", async () => {
+    const service = createService() as any;
+    service.getImageModelOptions = mock(async () => ({
+      maxGenerationCount: 3,
+      maxReferenceImages: 2,
+      defaults: { size: "1024x1024" },
+      qualities: ["standard"],
+    }));
+
+    await expect(service.prepareImageGenerationRequest({
+      prompt: "three products",
+      model: "test-image",
+      n: 3,
+    })).resolves.toMatchObject({ n: 3, model: "test-image" });
+    await expect(service.prepareImageGenerationRequest({
+      prompt: "too many products",
+      model: "test-image",
+      n: 4,
+    })).rejects.toThrow();
+    await expect(service.prepareImageGenerationRequest({
+      prompt: "fractional products",
+      model: "test-image",
+      n: 1.5,
+    })).rejects.toThrow();
+  });
+});
+
+describe("AiService video request validation", () => {
+  test("normalizes valid parameters before billing and provider submission", async () => {
+    const service = createService() as any;
+    service.getVideoModelOptions = mock(async () => ({
+      model: "video-model",
+      sizes: [{ label: "16:9", value: "16x9" }],
+      minSeconds: 5,
+      maxSeconds: 10,
+      defaults: { size: "16x9", seconds: 5 },
+      supportReferenceType: "first_last",
+    }));
+    const first = "data:image/png;base64,AQID";
+    const tail = "data:image/jpeg;base64,BAUG";
+
+    await expect(service.prepareVideoGenerationRequest({
+      prompt: " cinematic launch ",
+      model: "video-model",
+      seconds: "8",
+      size: "16x9",
+      input_reference: first,
+      input_tail_reference: tail,
+    })).resolves.toEqual({
+      prompt: "cinematic launch",
+      model: "video-model",
+      seconds: "8",
+      size: "16x9",
+      watermark: "false",
+      input_reference: first,
+      input_tail_reference: tail,
+    });
+  });
+
+  test("rejects ambiguous, out-of-range, and unsupported video parameters", async () => {
+    const service = createService() as any;
+    service.getVideoModelOptions = mock(async () => ({
+      model: "video-model",
+      sizes: [{ label: "16:9", value: "16x9" }],
+      minSeconds: 5,
+      maxSeconds: 10,
+      defaults: { size: "16x9", seconds: 5 },
+      supportReferenceType: "none",
+    }));
+
+    await expect(service.prepareVideoGenerationRequest({ prompt: "x", model: "video-model", seconds: "9abc" }))
+      .rejects.toThrow();
+    await expect(service.prepareVideoGenerationRequest({ prompt: "x", model: "video-model", seconds: "100" }))
+      .rejects.toThrow();
+    await expect(service.prepareVideoGenerationRequest({ prompt: "x", model: "video-model", size: "4x3" }))
+      .rejects.toThrow();
+    await expect(service.prepareVideoGenerationRequest({
+      prompt: "x",
+      model: "video-model",
+      input_reference: "data:image/png;base64,AQID",
+    })).rejects.toThrow();
   });
 });
 

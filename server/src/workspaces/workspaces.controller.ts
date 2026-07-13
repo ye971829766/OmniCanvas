@@ -15,17 +15,18 @@ export class WorkspacesController {
   }
 
   @Get(":id/canvas")
-  async getCanvas(@Param("id") id: string): Promise<any[]> {
-    return this.workspacesService.getCanvas(id);
+  async getCanvas(@Req() req: any, @Param("id") id: string): Promise<any[]> {
+    return this.workspacesService.getCanvas(id, req.user?.sub);
   }
 
   @Put(":id/canvas")
   @HttpCode(HttpStatus.OK)
   async updateCanvas(
+    @Req() req: any,
     @Param("id") id: string,
     @Body() body: any[],
   ): Promise<{ success: boolean }> {
-    await this.workspacesService.updateCanvas(id, body);
+    await this.workspacesService.updateCanvas(id, body, req.user?.sub);
     return { success: true };
   }
 
@@ -37,15 +38,16 @@ export class WorkspacesController {
 
   @Put(":id")
   async updateMetadata(
+    @Req() req: any,
     @Param("id") id: string,
     @Body("name") name: string,
   ): Promise<WorkspaceMetadata> {
-    return this.workspacesService.updateMetadata(id, name);
+    return this.workspacesService.updateMetadata(id, name, req.user?.sub);
   }
 
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
-  async delete(@Param("id") id: string): Promise<void> {
-    return this.workspacesService.delete(id);
+  async delete(@Req() req: any, @Param("id") id: string): Promise<void> {
+    return this.workspacesService.delete(id, req.user?.sub);
   }
 }

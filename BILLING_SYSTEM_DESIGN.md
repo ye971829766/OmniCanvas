@@ -1,5 +1,76 @@
 # OmniCanvas 收费系统设计方案
 
+> [!IMPORTANT]
+> **实施状态（2026-07-13）**：本文原始方案中的单余额表、直接确认异步扣费和可选身份设计已被实际实现取代。以下“已实施架构”是当前代码的权威说明；后面的章节保留为产品规划背景，不应再直接作为数据库或扣费流程的实现依据。
+
+## 0. 已实施架构
+
+### 0.1 核心原则
+
+- 内部金额全部使用整数微积分：`1 credit = 1,000,000 micros`，不使用浮点账务。
+- `billing_accounts` 是可用/冻结余额的事务投影，`billing_ledger_entries` 是不可变审计账本。
+- 积分按 `billing_credit_grants` 批次保存，支持购买、订阅、赠送、退款和不同有效期；消费时优先使用最早过期批次。
+- 每次收费动作先创建 `billing_operations` 并原子冻结积分，再启动上游调用。
+- 图片、视频和图片处理任务只有进入成功终态才确认扣费；失败终态释放冻结，普通超时不擅自退款。
+- `Idempotency-Key + userId + requestHash` 防止重试重复扣费，同一幂等键不能用于不同请求。
+- 报价绑定 `priceVersionId`，任务执行期间切换价格版本不会改变已经冻结操作的最终计价规则。
+- 用户身份只允许来自已验证 JWT；Agent 会话和生成任务均绑定所有者。
+
+### 0.2 已实施数据模型
+
+| 表 | 用途 |
+|---|---|
+| `billing_price_versions` | 可发布、可回溯的定价版本 |
+| `billing_price_rules` | 操作、模型、Token 和规格定价 |
+| `billing_accounts` | 可用余额、冻结余额及累计统计 |
+| `billing_credit_grants` | 带来源和有效期的积分批次 |
+| `billing_operations` | 幂等业务操作、报价、状态及异步任务关联 |
+| `billing_allocations` | 一次预扣从哪些积分批次冻结 |
+| `billing_ledger_entries` | 不可变的充值、冻结、确认、释放和过期流水 |
+| `billing_orders` | 保存价格/商品快照的支付订单边界 |
+| `billing_payment_events` | 第三方回调事件去重、验签处理与审计边界 |
+
+`generation_tasks` 已增加 `userId`、`billingOperationId` 和 `updatedAt`；`agent_sessions` 已增加 `userId`。SQLite 启动时启用 WAL、外键约束和 busy timeout。
+
+### 0.3 已接入的收费入口
+
+- Agent 每次 LLM 调用：按保守 Token 上限预授权，设置输出上限，完成后按实际 usage 确认并释放差额。
+- Agent 工具：`generate_image`、`generate_video`、`remove_background`、`upscale_image`、`inpaint_image`、`edit_image`。
+- 直接 API：`POST /chat`、`POST /generate-image`、`POST /generate-video`、`POST /remove-bg`、`POST /upscale`、`POST /inpaint`。
+- 所有上述 HTTP 写请求必须携带 JWT 和 `Idempotency-Key`。前端请求层会自动生成幂等键。
+
+### 0.4 已实施计费 API
+
+```text
+GET  /billing/balance
+GET  /billing/catalog
+GET  /billing/transactions?page=1&pageSize=30
+GET  /billing/operations/:id
+GET  /billing/orders
+GET  /billing/orders/:id
+POST /billing/orders
+POST /billing/orders/:id/checkout
+POST /billing/quote
+```
+
+所有接口只能访问当前 JWT 用户自己的账户和操作。余额不足返回 HTTP `402` 和稳定错误码 `INSUFFICIENT_CREDITS`。
+
+管理端已接入受 `AdminGuard` 保护的计费总览、积分账户、支付订单、商品目录、定价规则和可审计调账接口。用户端侧栏展示实时余额，并提供套餐、积分明细和订单记录；收到 `402` 会自动打开充值页。
+
+### 0.5 恢复与对账
+
+- 服务每 5 分钟检查仍处于 `reserved` 的操作。
+- 已绑定任务只按数据库中的真实终态确认或释放。
+- 超过 24 小时仍未绑定任务的预扣会被释放。
+- 任务可能先完成后关联账单；关联时会立即读取终态并补结算。
+- 上游任务启动前，任务 ID、用户和计费操作已完成关联，避免“任务已花钱但服务崩溃后找不到账单”的窗口。
+
+### 0.6 当前边界
+
+计费内核、订单快照、积分到账幂等接口、前后台界面和审计模型已经完成。Stripe 测试环境已经接入托管 Checkout：服务端从订单快照创建 Session，`POST /billing/webhooks/stripe` 使用原始请求体和 `Stripe-Signature` 验签，并在金额、币种、用户、SKU 全部匹配后幂等发放积分。配置 `STRIPE_SECRET_KEY`、`STRIPE_PUBLISHABLE_KEY`、`STRIPE_WEBHOOK_SECRET` 后自动启用；缺少 webhook 密钥时购买按钮保持禁用。`PAYMENT_CHECKOUT_URL_TEMPLATE` 仍可作为其他托管收银台的兼容回退。支付到账只相信平台 webhook，不能相信前端跳转结果。
+
+注册赠送积分由 `BILLING_SIGNUP_CREDITS` 配置，默认 100。正式运营前应根据真实渠道成本和目标毛利发布新的价格版本，而不是直接沿用本文后面的示例价格。
+
 ## 1. 现状分析
 
 ### 1.1 当前架构

@@ -8,15 +8,24 @@ import {
   Headers, 
   UseInterceptors, 
   UploadedFiles, 
-  BadRequestException 
+  BadRequestException,
+  ConflictException,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import type { Request } from 'express';
 import { AiService } from './ai.service';
 import type { GenerateImageJsonRequest, GenerateVideoJsonRequest } from '../types';
+import { AuthGuard } from '../auth/auth.guard';
+import { BillingService } from '../billing/billing.service';
 
 @Controller()
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly billing: BillingService,
+  ) {}
 
   private getOrigin(headers: Record<string, string | undefined>): string {
     const host = headers['host'] || 'localhost:3000';
@@ -51,28 +60,120 @@ export class AiController {
   }
 
   @Post("chat")
-  async chat(@Body() body: any) {
-    return this.aiService.chatWithYunwu(body);
+  @UseGuards(AuthGuard)
+  async chat(
+    @Body() body: any,
+    @Headers("idempotency-key") idempotencyKey: string,
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    const promptUpperBound = Buffer.byteLength(JSON.stringify(body?.messages || []), "utf8") + 2_048;
+    const completionUpperBound = Math.max(1, Math.min(32_768, Number(body?.maxTokens || 4_096)));
+    const operation = this.billing.reserve({
+      userId: user.sub,
+      idempotencyKey,
+      operation: "llm_chat",
+      params: {
+        model: body?.model,
+        promptTokens: promptUpperBound,
+        completionTokens: completionUpperBound,
+      },
+      metadata: { source: "direct_chat" },
+    });
+    if (operation.reused) {
+      return { type: "chat", replayed: true, billingOperation: operation };
+    }
+    try {
+      const result = await this.aiService.chatWithYunwu(body, {
+        userId: user.sub,
+        username: user.username,
+      });
+      const usage: any = result.usage || {};
+      const actual = this.billing.quoteForOperation(operation.id, {
+        model: result.model || body?.model,
+        promptTokens: usage.prompt_tokens || usage.inputTokens || 0,
+        completionTokens: usage.completion_tokens || usage.outputTokens || 0,
+      });
+      this.billing.capture(operation.id, actual.amountMicros);
+      return result;
+    } catch (error: any) {
+      this.billing.release(operation.id, error?.message || "Chat request failed");
+      throw error;
+    }
   }
 
   @Post("generate-image")
+  @UseGuards(AuthGuard)
   async generateImage(
     @Body() body: GenerateImageJsonRequest,
     @Headers() headers: Record<string, string>,
+    @Headers("idempotency-key") idempotencyKey: string,
+    @Req() req: Request,
   ) {
-    return this.aiService.generateImageFromJson(body, this.getOrigin(headers));
+    const preparedBody = await this.aiService.prepareImageGenerationRequest(body);
+    return this.startGeneration(
+      (req as any).user.sub,
+      idempotencyKey,
+      "image_generation",
+      preparedBody as any,
+      (billingContext) => this.aiService.generateImageFromJson(preparedBody, this.getOrigin(headers), billingContext),
+    );
   }
 
   @Post("generate-video")
+  @UseGuards(AuthGuard)
   async generateVideo(
     @Body() body: GenerateVideoJsonRequest,
     @Headers() headers: Record<string, string>,
+    @Headers("idempotency-key") idempotencyKey: string,
+    @Req() req: Request,
   ) {
-    return this.aiService.generateVideoFromJson(body, this.getOrigin(headers));
+    const preparedBody = await this.aiService.prepareVideoGenerationRequest(body);
+    return this.startGeneration(
+      (req as any).user.sub,
+      idempotencyKey,
+      "video_generation",
+      preparedBody as any,
+      (billingContext) => this.aiService.generateVideoFromJson(preparedBody, this.getOrigin(headers), billingContext),
+    );
   }
 
   @Get("tasks/:id")
-  getTaskStatus(@Param("id") id: string) {
-    return this.aiService.getTaskStatus(id);
+  @UseGuards(AuthGuard)
+  getTaskStatus(@Param("id") id: string, @Req() req: Request) {
+    return this.aiService.getTaskStatus(id, (req as any).user.sub);
+  }
+
+  private async startGeneration(
+    userId: string,
+    idempotencyKey: string,
+    operationType: "image_generation" | "video_generation",
+    params: Record<string, unknown>,
+    start: (billingContext: { operationId: string; userId: string }) => Promise<any>,
+  ) {
+    const operation = this.billing.reserve({
+      userId,
+      idempotencyKey,
+      operation: operationType,
+      params,
+      metadata: { source: "direct_api" },
+    });
+    if (operation.reused) {
+      if (operation.taskId) return this.aiService.getTaskStatus(operation.taskId, userId);
+      throw new ConflictException({
+        code: "OPERATION_IN_PROGRESS",
+        error: "The idempotent operation exists but has no attached task yet",
+        operationId: operation.id,
+      });
+    }
+    try {
+      const result = await start({ operationId: operation.id, userId });
+      if (!result?.taskId) throw new Error("Generation did not return a task id");
+      this.billing.attachTask(operation.id, result.taskId, userId);
+      return { ...result, billingOperationId: operation.id };
+    } catch (error: any) {
+      this.billing.release(operation.id, error?.message || "Failed to start generation");
+      throw error;
+    }
   }
 }

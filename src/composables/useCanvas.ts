@@ -219,6 +219,7 @@ export function useCanvas(
     beginTransaction: beginHistoryTransaction,
     commitTransaction: commitHistoryTransaction,
     rollbackTransaction: rollbackHistoryTransaction,
+    disposeCanvasHistory,
   } = useCanvasHistory(canvasApp, activeWorkspaceIdRef);
 
   // Sub-composable for frame creation and containment logic
@@ -884,52 +885,98 @@ export function useCanvas(
 
         try {
           const res = await getTaskStatus(taskId);
-          if (res.status === "success" && res.imageUrl) {
+          const generatedUrls = Array.isArray(res.images) && res.images.length > 0
+            ? res.images.map((image) => image.imageUrl || image.url).filter(Boolean)
+            : res.imageUrl
+              ? [res.imageUrl]
+              : [];
+          if (res.status === "success" && generatedUrls.length > 0) {
             clearInterval(pollInterval);
             delete node._pollingInterval;
             node.generationStatus = "success"; // hide placeholder immediately
 
-            const img = new window.Image();
-            img.src = res.imageUrl;
-            await new Promise((resolve) => {
-              img.onload = resolve;
-              img.onerror = resolve;
-            });
+            const loadedImages = await Promise.all(
+              generatedUrls.map((url) => new Promise<HTMLImageElement>((resolve) => {
+                const img = new window.Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(img);
+                img.src = url;
+              })),
+            );
 
-            let newWidth = node.width || 400;
-            let newHeight = node.height || 300;
-            if (
-              node.preserveGeneratedLayout !== true &&
-              img.naturalWidth &&
-              img.naturalHeight
-            ) {
-              newWidth = img.naturalWidth;
-              newHeight = img.naturalHeight;
-            }
+            const isBatch = generatedUrls.length > 1;
+            const baseWidth = node.width || 400;
+            const fallbackHeight = node.height || 300;
+            const layouts = loadedImages.map((img) => {
+              if (isBatch) {
+                return {
+                  width: baseWidth,
+                  height: img.naturalWidth && img.naturalHeight
+                    ? Math.max(1, Math.round(baseWidth * img.naturalHeight / img.naturalWidth))
+                    : fallbackHeight,
+                };
+              }
+              if (
+                node.preserveGeneratedLayout !== true &&
+                img.naturalWidth &&
+                img.naturalHeight
+              ) {
+                return { width: img.naturalWidth, height: img.naturalHeight };
+              }
+              return { width: baseWidth, height: fallbackHeight };
+            });
 
             const parent = node.parent;
             if (parent) {
-              const imageNode = createFitImage({
-                x: node.x,
-                y: node.y,
-                width: newWidth,
-                height: newHeight,
-                url: res.imageUrl,
-                editable: true,
-              });
-              if (node.refId) {
-                imageNode.refId = node.refId;
-              }
               const index = parent.children.indexOf(node);
-              parent.addAt(imageNode, index);
+              const columns = isBatch
+                ? Math.min(3, Math.ceil(Math.sqrt(generatedUrls.length)))
+                : 1;
+              const gap = 24;
+              const rowHeights: number[] = [];
+              layouts.forEach((layout, itemIndex) => {
+                const row = Math.floor(itemIndex / columns);
+                rowHeights[row] = Math.max(rowHeights[row] || 0, layout.height);
+              });
+              const createdNodes = generatedUrls.map((url, itemIndex) => {
+                const layout = layouts[itemIndex]!;
+                const column = itemIndex % columns;
+                const row = Math.floor(itemIndex / columns);
+                const yOffset = rowHeights
+                  .slice(0, row)
+                  .reduce((sum, height) => sum + height + gap, 0);
+                const imageNode = createFitImage({
+                  x: node.x + column * (baseWidth + gap),
+                  y: node.y + yOffset,
+                  width: layout.width,
+                  height: layout.height,
+                  url,
+                  editable: true,
+                });
+                if (itemIndex === 0 && node.refId) imageNode.refId = node.refId;
+                parent.addAt(imageNode, index + itemIndex);
+                return imageNode;
+              });
               node.emit("generation-complete", {});
               node.remove();
               if (app.editor) {
                 setTimeout(() => {
-                  if (imageNode.parent && app.editor) {
-                    app.editor.select(imageNode);
+                  const firstNode = createdNodes[0];
+                  if (firstNode?.parent && app.editor) {
+                    app.editor.select(firstNode);
                   }
                 }, 50);
+              }
+              if (res.partial) {
+                window.dispatchEvent(
+                  new CustomEvent("canvas:toast", {
+                    detail: {
+                      severity: "warn",
+                      summary: "部分生成成功",
+                      detail: `请求 ${res.requestedCount || generatedUrls.length} 张，成功 ${generatedUrls.length} 张；失败部分未扣积分。`,
+                    },
+                  }),
+                );
               }
               recordHistoryDebounced();
             }
@@ -1201,9 +1248,6 @@ export function useCanvas(
         try {
           const res = await getTaskStatus(taskId);
           if (res.status === "success" && res.videoUrl && res.thumbnailUrl) {
-            clearInterval(pollInterval);
-            delete node._pollingInterval;
-
             const img = new window.Image();
             img.src = res.thumbnailUrl;
             await new Promise((resolve) => {
@@ -1233,23 +1277,28 @@ export function useCanvas(
                 editable: true,
                 isSnap: true,
               });
-              if (videoNode) {
-                if (node.refId) {
-                  videoNode.refId = node.refId;
-                }
-                const index = parent.children.indexOf(node);
-                parent.addAt(videoNode as any, index);
-                node.emit("generation-complete", {});
-                node.remove();
-                if (app.editor) {
-                  setTimeout(() => {
-                    if (videoNode.parent && app.editor) {
-                      app.editor.select(videoNode as any);
-                    }
-                  }, 50);
-                }
-                recordHistoryDebounced();
+              if (!videoNode) {
+                const error: any = new Error("生成的视频缩略图无法加载，请重新生成");
+                error.terminalVideoDisplayError = true;
+                throw error;
               }
+              clearInterval(pollInterval);
+              delete node._pollingInterval;
+              if (node.refId) {
+                videoNode.refId = node.refId;
+              }
+              const index = parent.children.indexOf(node);
+              parent.addAt(videoNode as any, index);
+              node.emit("generation-complete", {});
+              node.remove();
+              if (app.editor) {
+                setTimeout(() => {
+                  if (videoNode.parent && app.editor) {
+                    app.editor.select(videoNode as any);
+                  }
+                }, 50);
+              }
+              recordHistoryDebounced();
             }
           } else if (res.status === "error") {
             clearInterval(pollInterval);
@@ -1263,12 +1312,14 @@ export function useCanvas(
           }
         } catch (err: any) {
           console.error(`Polling failed for video task ${taskId}:`, err);
-          if (err.response?.status === 404) {
+          if (err.terminalVideoDisplayError || err.response?.status === 404) {
             clearInterval(pollInterval);
             delete node._pollingInterval;
             node.set({
               generationStatus: "error",
-              errorMessage: "任务不存在或服务器已重启，请重新生成",
+              errorMessage: err.terminalVideoDisplayError
+                ? err.message
+                : "任务不存在或任务已过期，请重新生成",
             });
             // Error is a generation status change, not an element-level change — skip history
           }
@@ -1401,6 +1452,9 @@ export function useCanvas(
               if (oldId) {
                 await saveCanvasState(oldId);
               }
+              if (String(activeWorkspaceIdRef.value ?? "") !== String(newId)) {
+                return;
+              }
               await loadCanvasState(newId);
 
               // Resume frame and task start/polling listeners for the newly loaded nodes
@@ -1459,9 +1513,7 @@ export function useCanvas(
       el.off(PropertyEvent.CHANGE, onPropertyChange);
     });
     watchedElements = [];
-    if (activeWorkspaceIdRef?.value) {
-      void saveCanvasState(activeWorkspaceIdRef.value);
-    }
+    disposeCanvasHistory();
     if (canvasApp.value) {
       canvasApp.value.destroy();
     }

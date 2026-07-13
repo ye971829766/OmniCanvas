@@ -10,7 +10,6 @@ import {
   stopAgent,
   uploadImage,
 } from "@/utils/api";
-import { useUser } from "./useUser";
 import type {
   AgentAssetPayload,
   AgentAttachmentInput,
@@ -1105,6 +1104,12 @@ export function useAgent(
         break;
       }
       case "tool_result": {
+        const billingError = String(ev.output?.error || "");
+        if (billingError.includes("积分不足") || billingError.includes("INSUFFICIENT_CREDITS")) {
+          window.dispatchEvent(new CustomEvent("omnicanvas:payment-required", {
+            detail: ev.output,
+          }));
+        }
         const failed = Boolean(
           ev.output?.error ||
             ev.output?.status === "error" ||
@@ -1157,6 +1162,11 @@ export function useAgent(
       case "error": {
         if (!isInternalToolError(ev.message)) {
           const raw = String(ev.message ?? "");
+          if (raw.includes("积分不足") || raw.includes("INSUFFICIENT_CREDITS")) {
+            window.dispatchEvent(new CustomEvent("omnicanvas:payment-required", {
+              detail: { error: raw },
+            }));
+          }
           const friendly =
             raw.includes("insufficient_quota") || raw.includes("insufficient quota")
               ? "渠道额度不足，请在管理后台充值或更换渠道"
@@ -1266,9 +1276,11 @@ export function useAgent(
       const assets = await materializeAgentAssets(attachments || []);
       if (assets.length > 0) userMessage.images = assets.map((asset) => asset.url);
       assistant.progress = { message: "正在思考" };
-      const { currentUser } = useUser();
       const token = localStorage.getItem("omnicanvas_token");
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID(),
+      };
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
@@ -1284,13 +1296,20 @@ export function useAgent(
             canvasState: serializeCanvasForAgent(canvasApp.value, {
               ensureRefId: ensureNodeRefId,
             }),
-            userId: currentUser.value?.id,
-            username: currentUser.value?.username,
           }),
           signal: abort.signal,
         },
       );
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        if (res.status === 402) {
+          window.dispatchEvent(new CustomEvent("omnicanvas:payment-required", {
+            detail: payload,
+          }));
+        }
+        throw new Error(payload?.error || payload?.message || `HTTP ${res.status}`);
+      }
+      if (!res.body) throw new Error("Agent response stream is unavailable");
 
       // parse the SSE stream (data: {...}\n\n)
       const reader = res.body.getReader();

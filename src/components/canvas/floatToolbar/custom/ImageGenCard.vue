@@ -281,7 +281,7 @@ watch(promptText, (v) => {
 });
 
 watch(
-  [selectedModel, selectedSize, selectedQuality, selectedAspectRatio],
+    [selectedModel, selectedSize, selectedQuality, selectedAspectRatio, n],
   () => {
     const targetAny = props.target as any;
     if (targetAny) {

@@ -1,13 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AgentService } from './agent.service';
 import { AgentMemory } from './agent.memory';
 import { exportRegistry } from './export-registry';
-import { OptionalAuthGuard } from '../auth/auth.guard';
+import { AuthGuard } from '../auth/auth.guard';
 import type { AgentAssetInput } from './agent-assets';
 
 @Controller('agent')
-@UseGuards(OptionalAuthGuard)
+@UseGuards(AuthGuard)
 export class AgentController {
   constructor(
     private readonly agent: AgentService,
@@ -50,13 +50,15 @@ export class AgentController {
   @Post(':sessionId/chat')
   async chat(
     @Param('sessionId') sessionId: string,
-    @Body() body: { message: string; images?: string[]; assets?: AgentAssetInput[]; canvasState?: any[]; userId?: string; username?: string },
+    @Body() body: { message: string; images?: string[]; assets?: AgentAssetInput[]; canvasState?: any[] },
+    @Headers('idempotency-key') requestId: string,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     const reqUser = (req as any).user;
-    const userId = body?.userId || reqUser?.sub || reqUser?.id;
-    const username = body?.username || reqUser?.username;
+    const userId = reqUser.sub;
+    const username = reqUser.username;
+    this.memory.claimSession(sessionId, userId);
 
     const sink = this.agent.run(
       sessionId,
@@ -64,7 +66,7 @@ export class AgentController {
       this.getOrigin(req),
       body?.images,
       body?.canvasState,
-      { userId, username },
+      { userId, username, requestId },
       body?.assets,
     );
     await this.pipe(res, sink.stream());
@@ -78,14 +80,14 @@ export class AgentController {
   async stream(
     @Param('sessionId') sessionId: string,
     @Query('message') message: string,
-    @Query('userId') queryUserId: string,
-    @Query('username') queryUsername: string,
+    @Headers('idempotency-key') requestId: string,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     const reqUser = (req as any).user;
-    const userId = queryUserId || reqUser?.sub || reqUser?.id;
-    const username = queryUsername || reqUser?.username;
+    const userId = reqUser.sub;
+    const username = reqUser.username;
+    this.memory.claimSession(sessionId, userId);
 
     const sink = this.agent.run(
       sessionId,
@@ -93,37 +95,41 @@ export class AgentController {
       this.getOrigin(req),
       undefined,
       undefined,
-      { userId, username },
+      { userId, username, requestId },
     );
     await this.pipe(res, sink.stream());
   }
 
   @Delete(':sessionId')
-  reset(@Param('sessionId') sessionId: string): { ok: true } {
+  reset(@Param('sessionId') sessionId: string, @Req() req: Request): { ok: true } {
+    this.memory.assertOwner(sessionId, (req as any).user.sub);
     this.memory.reset(sessionId);
     return { ok: true };
   }
 
   @Post(':sessionId/stop')
-  stop(@Param('sessionId') sessionId: string): { ok: true; stopped: boolean } {
+  stop(@Param('sessionId') sessionId: string, @Req() req: Request): { ok: true; stopped: boolean } {
+    this.memory.assertOwner(sessionId, (req as any).user.sub);
     return { ok: true, stopped: this.agent.stop(sessionId) };
   }
 
   @Get(':sessionId/history')
-  getHistory(@Param('sessionId') sessionId: string) {
+  getHistory(@Param('sessionId') sessionId: string, @Req() req: Request) {
+    this.memory.claimSession(sessionId, (req as any).user.sub);
     const raw = this.memory.get(sessionId) || [];
     return this.transformToLegacyFormat(raw);
   }
 
   @Get(':sessionId/plan')
-  getPlan(@Param('sessionId') sessionId: string) {
+  getPlan(@Param('sessionId') sessionId: string, @Req() req: Request) {
+    this.memory.claimSession(sessionId, (req as any).user.sub);
     return this.memory.getPlan(sessionId);
   }
 
 
   @Get('sessions/all')
-  getAllSessions() {
-    const list = this.memory.getAllSessions();
+  getAllSessions(@Req() req: Request) {
+    const list = this.memory.getAllSessions((req as any).user.sub);
     return list.map((entry) => ({
       sessionId: entry.sessionId,
       messageCount: entry.messages.length,
@@ -141,7 +147,9 @@ export class AgentController {
   uploadScreenshot(
     @Param('sessionId') sessionId: string,
     @Body() body: { image: string },
+    @Req() req: Request,
   ): { ok: true } {
+    this.memory.assertOwner(sessionId, (req as any).user.sub);
     this.memory.setScreenshot(sessionId, body.image);
     return { ok: true };
   }

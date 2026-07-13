@@ -2001,8 +2001,8 @@ async function onChannelChange(channelId: string) {
   loadingUpstreamModels.value = true;
   try {
     const res = await discoverChannelModels(channelId);
-    if (res.success && res.models && res.models.length > 0) {
-      availableUpstreamModels.value = res.models;
+    if (res.length > 0) {
+      availableUpstreamModels.value = res;
     }
   } catch (err) {
     console.warn("Failed to discover upstream models: ", err);

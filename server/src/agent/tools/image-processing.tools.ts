@@ -1,4 +1,5 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
+import { startBilledAgentTask } from '../../billing/billing-task';
 import type { CanvasImageGenerationType } from '../agent.protocol';
 import { resolveCanvasContainerParentId, upsertCanvasNode } from '../canvas-state';
 import { promotePlannedEcommerceSource } from '../ecommerce-plan';
@@ -89,10 +90,16 @@ export const removeBackgroundTool: AgentTool = {
     const sourceUrl = await resolveReferenceUrl(input.source, ctx);
     if (!sourceUrl) throw new Error(`Unable to resolve source image: ${input.source}`);
     const refId = createProcessingTarget(input, ctx, sourceUrl, 'cutout');
-    const result = await ctx.files.removeBackground(sourceUrl, ctx.origin);
+    const billed = await startBilledAgentTask(
+      ctx,
+      'remove_background',
+      { source: input.source },
+      (billingContext) => ctx.files.removeBackground(sourceUrl, ctx.origin, billingContext),
+    );
+    const result = billed.result;
     startCanvasImageTask(refId, result.taskId, 'removeBg', ctx);
     const canonicalSource = promotePlannedEcommerceSource(input.source, refId, ctx);
-    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'remove_background', canonicalSource } };
+    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'remove_background', canonicalSource, billingOperationId: billed.billingOperationId } };
   },
 };
 
@@ -112,10 +119,16 @@ export const upscaleImageTool: AgentTool = {
     const sourceUrl = await resolveReferenceUrl(input.source, ctx);
     if (!sourceUrl) throw new Error(`Unable to resolve source image: ${input.source}`);
     const refId = createProcessingTarget(input, ctx, sourceUrl, 'upscale');
-    const result = await ctx.files.upscaleImage(sourceUrl, input.scale || 4, ctx.origin);
+    const billed = await startBilledAgentTask(
+      ctx,
+      'upscale_image',
+      { source: input.source, scale: input.scale || 4 },
+      (billingContext) => ctx.files.upscaleImage(sourceUrl, input.scale || 4, ctx.origin, billingContext),
+    );
+    const result = billed.result;
     startCanvasImageTask(refId, result.taskId, 'upscale', ctx);
     const canonicalSource = promotePlannedEcommerceSource(input.source, refId, ctx);
-    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'upscale_image', canonicalSource } };
+    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'upscale_image', canonicalSource, billingOperationId: billed.billingOperationId } };
   },
 };
 
@@ -149,9 +162,15 @@ export const inpaintImageTool: AgentTool = {
     const sourceUrl = await resolveReferenceUrl(input.source, ctx);
     if (!sourceUrl) throw new Error(`Unable to resolve source image: ${input.source}`);
     const refId = createProcessingTarget(input, ctx, sourceUrl, 'inpaint');
-    const result = await ctx.files.inpaintImage(sourceUrl, input.rectangles, ctx.origin);
+    const billed = await startBilledAgentTask(
+      ctx,
+      'inpaint_image',
+      { source: input.source, rectangleCount: input.rectangles.length },
+      (billingContext) => ctx.files.inpaintImage(sourceUrl, input.rectangles, ctx.origin, undefined, undefined, billingContext),
+    );
+    const result = billed.result;
     startCanvasImageTask(refId, result.taskId, 'inpaint', ctx);
-    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'inpaint_image' } };
+    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'inpaint_image', billingOperationId: billed.billingOperationId } };
   },
 };
 
@@ -182,17 +201,24 @@ export const editImageTool: AgentTool = {
 
     const mask = input.maskRef ? await resolveReferenceToBase64(input.maskRef, ctx) : undefined;
     const refId = createProcessingTarget(input, ctx, sourceUrl, 'edit');
-    const result = await ctx.ai.generateImageFromJson(
-      {
-        prompt: input.prompt,
-        model: input.model,
-        size: input.size,
-        quality: input.quality,
-        images: [sourceBase64],
-        mask: mask || undefined,
-      },
-      ctx.origin,
+    const billed = await startBilledAgentTask(
+      ctx,
+      'image_edit',
+      { prompt: input.prompt, model: input.model, size: input.size, quality: input.quality, source: input.source, localized: Boolean(mask) },
+      (billingContext) => ctx.ai.generateImageFromJson(
+        {
+          prompt: input.prompt,
+          model: input.model,
+          size: input.size,
+          quality: input.quality,
+          images: [sourceBase64],
+          mask: mask || undefined,
+        },
+        ctx.origin,
+        billingContext,
+      ),
     );
+    const result = billed.result;
     if (!result.taskId) throw new Error('Image edit did not return a taskId.');
     startCanvasImageTask(refId, result.taskId, 'edit', ctx);
     return {
@@ -202,6 +228,7 @@ export const editImageTool: AgentTool = {
         status: result.status,
         operation: 'edit_image',
         localized: Boolean(mask),
+        billingOperationId: billed.billingOperationId,
         referenceAssetId: ctx.assets?.some((asset) => asset.id === input.source)
           ? input.source
           : undefined,

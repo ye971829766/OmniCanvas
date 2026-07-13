@@ -1,4 +1,5 @@
 import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
+import { startBilledAgentTask } from '../../billing/billing-task';
 import {
   getCanvasNodeMap,
   reserveRootGridPlacement,
@@ -244,18 +245,25 @@ export const generateImageTool: AgentTool = {
     ctx.sink.canvas({ op: 'add_node', node: nodeSpec });
 
     // 2. kick off the REAL generation through the existing AiService
-    const res = await ctx.ai.generateImageFromJson(
-      {
-        prompt,
-        model: input.model,
-        style: input.style,
-        size,
-        aspectRatio,
-        quality,
-        images: base64Images,
-      },
-      ctx.origin,
+    const billed = await startBilledAgentTask(
+      ctx,
+      'image_generation',
+      { prompt, model: input.model, quality, size, aspectRatio, referenceCount: base64Images.length },
+      (billingContext) => ctx.ai.generateImageFromJson(
+        {
+          prompt,
+          model: input.model,
+          style: input.style,
+          size,
+          aspectRatio,
+          quality,
+          images: base64Images,
+        },
+        ctx.origin,
+        billingContext,
+      ),
     );
+    const res = billed.result;
 
     upsertCanvasNode(ctx, refId, {
       ...nodeSpec,
@@ -288,6 +296,7 @@ export const generateImageTool: AgentTool = {
         platform: plannedPlacement?.platform ?? input.platform,
         deliverable: plannedPlacement?.deliverable ?? input.deliverable,
         referenceAssetId,
+        billingOperationId: billed.billingOperationId,
         note: 'ImageGen node created and generation started. The canvas will poll for the result.',
       },
     };
@@ -328,33 +337,41 @@ export const generateVideoTool: AgentTool = {
     const parentId = resolveCanvasContainerParentId(ctx, input.parentId);
     const base64Images = await resolveReferencesToBase64(input.refImages, ctx);
     const inputReference = base64Images[0] || '';
+    const preparedRequest = await ctx.ai.prepareVideoGenerationRequest({
+      prompt: input.prompt,
+      model: input.model,
+      size: input.size,
+      seconds: input.seconds,
+      input_reference: inputReference,
+    });
 
     const nodeSpec = {
       refId,
       type: 'video_gen' as const,
       parentId,
-      prompt: input.prompt,
-      model: input.model,
+      prompt: preparedRequest.prompt,
+      model: preparedRequest.model,
       aspectRatio: input.aspectRatio,
-      size: input.size,
-      seconds: input.seconds,
+      size: preparedRequest.size,
+      seconds: preparedRequest.seconds,
       x: input.x,
       y: input.y,
-      inputReference,
+      inputReference: preparedRequest.input_reference,
     };
 
     ctx.sink.canvas({ op: 'add_node', node: nodeSpec });
 
-    const res = await ctx.ai.generateVideoFromJson(
-      {
-        prompt: input.prompt,
-        model: input.model,
-        size: input.size,
-        seconds: input.seconds,
-        input_reference: inputReference,
-      },
-      ctx.origin,
+    const billed = await startBilledAgentTask(
+      ctx,
+      'video_generation',
+      { ...preparedRequest, hasReference: Boolean(preparedRequest.input_reference) },
+      (billingContext) => ctx.ai.generateVideoFromJson(
+        preparedRequest,
+        ctx.origin,
+        billingContext,
+      ),
     );
+    const res = billed.result;
 
     upsertCanvasNode(ctx, refId, {
       ...nodeSpec,
@@ -375,6 +392,7 @@ export const generateVideoTool: AgentTool = {
         refId,
         taskId: (res as any).taskId,
         status: (res as any).status,
+        billingOperationId: billed.billingOperationId,
         note: 'VideoGen node created and generation started.',
       },
     };

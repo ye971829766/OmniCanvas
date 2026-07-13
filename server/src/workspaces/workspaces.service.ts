@@ -106,34 +106,79 @@ export class WorkspacesService implements OnModuleInit {
     }
   }
 
-  async getCanvas(id: string): Promise<any[]> {
+  async getCanvas(id: string, userId?: string): Promise<any[]> {
     try {
-      const query = this.db.query("SELECT canvasData FROM workspaces WHERE id = $id");
-      const row = query.get({ $id: id }) as { canvasData: string } | null;
+      if (!userId) {
+        throw new HttpException("Unauthorized", HttpStatus.UNAUTHORIZED);
+      }
+      const query = this.db.query(`
+        SELECT canvasData FROM workspaces WHERE id = $id AND userId = $userId
+      `);
+      const row = query.get({ $id: id, $userId: userId }) as { canvasData: string } | null;
       if (!row) {
-        return [];
+        throw new HttpException("Workspace not found", HttpStatus.NOT_FOUND);
       }
       return JSON.parse(row.canvasData);
     } catch (err) {
+      if (err instanceof HttpException) throw err;
       console.error(`Failed to read canvas from database for workspace ${id}:`, err);
-      return [];
+      throw new HttpException("Failed to read canvas", HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
-  async updateCanvas(id: string, canvasData: any[]): Promise<void> {
+  async updateCanvas(id: string, canvasData: any[], userId?: string): Promise<void> {
+    if (!userId) {
+      throw new HttpException("Unauthorized", HttpStatus.UNAUTHORIZED);
+    }
+    if (!Array.isArray(canvasData)) {
+      throw new HttpException("Canvas data must be an array", HttpStatus.BAD_REQUEST);
+    }
     try {
       const now = new Date().toISOString();
-      const stmt = this.db.prepare(`
-        UPDATE workspaces 
-        SET canvasData = $canvasData, updatedAt = $updatedAt 
-        WHERE id = $id
-      `);
-      stmt.run({
-        $id: id,
-        $canvasData: JSON.stringify(canvasData),
-        $updatedAt: now
+      const nextCanvasData = JSON.stringify(canvasData);
+      const transaction = this.db.transaction(() => {
+        const current = this.db.query(`
+          SELECT canvasData FROM workspaces WHERE id = $id AND userId = $userId
+        `).get({ $id: id, $userId: userId }) as { canvasData: string } | null;
+        if (!current) {
+          throw new HttpException("Workspace not found", HttpStatus.NOT_FOUND);
+        }
+        if (current.canvasData === nextCanvasData) return;
+
+        this.db.query(`
+          INSERT INTO workspace_canvas_revisions (workspaceId, canvasData, createdAt)
+          VALUES ($workspaceId, $canvasData, $createdAt)
+        `).run({
+          $workspaceId: id,
+          $canvasData: current.canvasData,
+          $createdAt: now,
+        });
+
+        this.db.query(`
+          UPDATE workspaces
+          SET canvasData = $canvasData, updatedAt = $updatedAt
+          WHERE id = $id AND userId = $userId
+        `).run({
+          $id: id,
+          $userId: userId,
+          $canvasData: nextCanvasData,
+          $updatedAt: now,
+        });
+
+        this.db.query(`
+          DELETE FROM workspace_canvas_revisions
+          WHERE workspaceId = $workspaceId
+            AND id NOT IN (
+              SELECT id FROM workspace_canvas_revisions
+              WHERE workspaceId = $workspaceId
+              ORDER BY id DESC
+              LIMIT 50
+            )
+        `).run({ $workspaceId: id });
       });
+      transaction();
     } catch (err) {
+      if (err instanceof HttpException) throw err;
       console.error(`Failed to update canvas in database for workspace ${id}:`, err);
       throw new HttpException("Failed to update canvas", HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -174,16 +219,20 @@ export class WorkspacesService implements OnModuleInit {
     }
   }
 
-  async updateMetadata(id: string, name: string): Promise<WorkspaceMetadata> {
+  async updateMetadata(id: string, name: string, userId?: string): Promise<WorkspaceMetadata> {
+    if (!userId) {
+      throw new HttpException("Unauthorized", HttpStatus.UNAUTHORIZED);
+    }
     try {
       const now = new Date().toISOString();
       const stmt = this.db.prepare(`
         UPDATE workspaces 
         SET name = $name, updatedAt = $updatedAt 
-        WHERE id = $id
+        WHERE id = $id AND userId = $userId
       `);
       const info = stmt.run({
         $id: id,
+        $userId: userId,
         $name: name,
         $updatedAt: now
       });
@@ -192,8 +241,11 @@ export class WorkspacesService implements OnModuleInit {
         throw new HttpException("Workspace not found", HttpStatus.NOT_FOUND);
       }
 
-      const getStmt = this.db.query("SELECT id, name, createdAt, updatedAt FROM workspaces WHERE id = $id");
-      return getStmt.get({ $id: id }) as WorkspaceMetadata;
+      const getStmt = this.db.query(`
+        SELECT id, name, createdAt, updatedAt
+        FROM workspaces WHERE id = $id AND userId = $userId
+      `);
+      return getStmt.get({ $id: id, $userId: userId }) as WorkspaceMetadata;
     } catch (err) {
       if (err instanceof HttpException) throw err;
       console.error(`Failed to update workspace metadata in database for workspace ${id}:`, err);
@@ -201,10 +253,15 @@ export class WorkspacesService implements OnModuleInit {
     }
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, userId?: string): Promise<void> {
+    if (!userId) {
+      throw new HttpException("Unauthorized", HttpStatus.UNAUTHORIZED);
+    }
     try {
-      const stmt = this.db.prepare("DELETE FROM workspaces WHERE id = $id");
-      const info = stmt.run({ $id: id });
+      const stmt = this.db.prepare(`
+        DELETE FROM workspaces WHERE id = $id AND userId = $userId
+      `);
+      const info = stmt.run({ $id: id, $userId: userId });
       if (info.changes === 0) {
         throw new HttpException("Workspace not found", HttpStatus.NOT_FOUND);
       }

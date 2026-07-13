@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -7,7 +8,7 @@ import { UsersService } from "../users/users.service";
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(protected readonly usersService: UsersService) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
@@ -28,6 +29,18 @@ export class AuthGuard implements CanActivate {
     }
 
     request.user = payload;
+    return true;
+  }
+}
+
+@Injectable()
+export class AdminGuard extends AuthGuard {
+  override canActivate(context: ExecutionContext): boolean {
+    super.canActivate(context);
+    const request = context.switchToHttp().getRequest();
+    if (request.user?.role !== "admin" || !this.usersService.hasRole(request.user.sub, "admin")) {
+      throw new ForbiddenException("需要管理员权限");
+    }
     return true;
   }
 }

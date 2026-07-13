@@ -12,7 +12,7 @@ import {
   HttpStatus,
 } from "@nestjs/common";
 import { UsersService } from "./users.service";
-import { AuthGuard } from "../auth/auth.guard";
+import { AdminGuard, AuthGuard } from "../auth/auth.guard";
 import type { RegisterDto, LoginDto, UpdateProfileDto } from "./user.entity";
 
 @Controller()
@@ -60,21 +60,25 @@ export class UsersController {
   }
 
   // --- Admin User Management Endpoints ---
+  @UseGuards(AdminGuard)
   @Get("admin/users")
   async getAllUsers() {
     return this.usersService.getAllUsers();
   }
 
+  @UseGuards(AdminGuard)
   @Post("admin/users")
   async adminCreateUser(@Body() dto: any) {
     return this.usersService.adminCreateUser(dto);
   }
 
+  @UseGuards(AdminGuard)
   @Put("admin/users/:id")
   async adminUpdateUser(@Param("id") id: string, @Body() dto: any) {
     return this.usersService.adminUpdateUser(id, dto);
   }
 
+  @UseGuards(AdminGuard)
   @Delete("admin/users/:id")
   async adminDeleteUser(@Param("id") id: string) {
     return this.usersService.adminDeleteUser(id);

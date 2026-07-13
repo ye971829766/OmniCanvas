@@ -11,12 +11,14 @@ import { DatabaseModule } from "./database/database.module";
 import { UsersModule } from "./users/users.module";
 import { TokensModule } from "./tokens/tokens.module";
 import { ApiDecryptionMiddleware } from "./middleware/api-decryption.middleware";
+import { BillingModule } from "./billing/billing.module";
 
 @Module({
   imports: [
     DatabaseModule,
     UsersModule,
     TokensModule,
+    BillingModule,
     FilesModule,
     AiModule,
     ChannelsModule,

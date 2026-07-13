@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import type { OnModuleDestroy } from '@nestjs/common';
 import type { ModelMessage } from 'ai';
 import { DatabaseService } from '../database/database.service';
 import * as fs from 'fs';
@@ -21,6 +22,7 @@ import {
  *  - Preserves tool-call / tool-result pairs when truncating.
  */
 interface SessionEntry {
+  userId?: string;
   messages: ModelMessage[];
   lastAccess: number;
   brand?: {
@@ -41,7 +43,7 @@ interface SessionEntry {
 }
 
 @Injectable()
-export class AgentMemory {
+export class AgentMemory implements OnModuleDestroy {
   private readonly logger = new Logger(AgentMemory.name);
 
   /** Approximate max tokens to keep in history. */
@@ -57,6 +59,11 @@ export class AgentMemory {
   constructor(private readonly dbService: DatabaseService) {
     // Periodically clean up expired sessions
     this.cleanupTimer = setInterval(() => this.cleanup(), this.CLEANUP_INTERVAL_MS);
+    this.cleanupTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.cleanupTimer);
   }
 
   private getFilePath(sessionId: string, type: 'screenshot' | 'node_image'): string {
@@ -102,6 +109,7 @@ export class AgentMemory {
       if (!row) return null;
       return {
         messages: JSON.parse(row.messages),
+        userId: row.userId || undefined,
         lastAccess: Number(row.lastAccess),
         brand: row.brand ? JSON.parse(row.brand) : undefined,
         assets: row.assets ? JSON.parse(row.assets) : undefined,
@@ -122,7 +130,7 @@ export class AgentMemory {
       const row = db.query("SELECT sessionId FROM agent_sessions WHERE sessionId = ?").get(sessionId) as any;
       if (row) {
         db.query(
-          "UPDATE agent_sessions SET messages = ?, brand = ?, assets = ?, plan = ?, screenshot = ?, lastExportedNodeImage = ?, lastAccess = ? WHERE sessionId = ?"
+          "UPDATE agent_sessions SET messages = ?, brand = ?, assets = ?, plan = ?, screenshot = ?, lastExportedNodeImage = ?, userId = COALESCE(userId, ?), lastAccess = ? WHERE sessionId = ?"
         ).run(
           JSON.stringify(entry.messages),
           entry.brand ? JSON.stringify(entry.brand) : null,
@@ -130,12 +138,13 @@ export class AgentMemory {
           entry.plan ? JSON.stringify(entry.plan) : null,
           entry.screenshot || null,
           entry.lastExportedNodeImage || null,
+          entry.userId || null,
           now,
           sessionId
         );
       } else {
         db.query(
-          "INSERT INTO agent_sessions (sessionId, messages, brand, assets, plan, screenshot, lastExportedNodeImage, lastAccess) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO agent_sessions (sessionId, messages, brand, assets, plan, screenshot, lastExportedNodeImage, userId, lastAccess) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ).run(
           sessionId,
           JSON.stringify(entry.messages),
@@ -144,11 +153,40 @@ export class AgentMemory {
           entry.plan ? JSON.stringify(entry.plan) : null,
           entry.screenshot || null,
           entry.lastExportedNodeImage || null,
+          entry.userId || null,
           now
         );
       }
     } catch (e: any) {
       this.logger.error(`Failed to save session ${sessionId}: ${e.message}`);
+    }
+  }
+
+  claimSession(sessionId: string, userId: string): void {
+    const db = this.dbService.db;
+    db.transaction(() => {
+      const existing = db.query("SELECT userId FROM agent_sessions WHERE sessionId = ?").get(sessionId) as any;
+      if (existing?.userId && existing.userId !== userId) {
+        throw new ForbiddenException("Agent session belongs to another user");
+      }
+      if (existing) {
+        db.query("UPDATE agent_sessions SET userId = ?, lastAccess = ? WHERE sessionId = ?")
+          .run(userId, Date.now(), sessionId);
+      } else {
+        db.query(`
+          INSERT INTO agent_sessions (sessionId, messages, userId, lastAccess)
+          VALUES (?, '[]', ?, ?)
+        `).run(sessionId, userId, Date.now());
+      }
+    })();
+  }
+
+  assertOwner(sessionId: string, userId: string): void {
+    const row = this.dbService.db.query(
+      "SELECT userId FROM agent_sessions WHERE sessionId = ?",
+    ).get(sessionId) as any;
+    if (!row || row.userId !== userId) {
+      throw new ForbiddenException("Agent session not found or not owned by user");
     }
   }
 
@@ -339,10 +377,12 @@ export class AgentMemory {
     }
   }
 
-  getAllSessions(): { sessionId: string; messages: ModelMessage[]; lastAccess: number }[] {
+  getAllSessions(userId?: string): { sessionId: string; messages: ModelMessage[]; lastAccess: number }[] {
     const db = this.dbService.db;
     try {
-      const rows = db.query("SELECT sessionId, messages, lastAccess FROM agent_sessions").all() as any[];
+      const rows = userId
+        ? db.query("SELECT sessionId, messages, lastAccess FROM agent_sessions WHERE userId = ?").all(userId) as any[]
+        : db.query("SELECT sessionId, messages, lastAccess FROM agent_sessions").all() as any[];
       return rows.map((row) => ({
         sessionId: row.sessionId,
         messages: JSON.parse(row.messages),

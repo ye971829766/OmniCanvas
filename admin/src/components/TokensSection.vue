@@ -264,7 +264,7 @@ import {
   Search,
   Refresh,
 } from "@element-plus/icons-vue";
-import { getTokenStats, type SystemTokenStats, type UserTokenStat } from "../utils/api";
+import { getTokenStats, type SystemTokenStats } from "../utils/api";
 
 const loading = ref(false);
 const userSearchQuery = ref("");

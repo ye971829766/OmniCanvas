@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { streamText, type ModelMessage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { AiService } from "../ai/ai.service";
@@ -8,6 +8,7 @@ import { TOOL_MAP } from "./tool.registry";
 import { compactAgentSystemPrompt } from "./system-prompt";
 import { AgentMemory } from "./agent.memory";
 import { ModelConfigService } from "../model-config/model-config.service";
+import { BillingService } from "../billing/billing.service";
 import {
   HiddenReasoningStreamFilter,
   stripHiddenReasoning,
@@ -17,6 +18,12 @@ import {
 /** Extract a meaningful root-cause message from AI SDK wrapped errors. */
 function extractErrorMessage(e: any): string {
   if (!e) return "agent error";
+  try {
+    const response = typeof e?.getResponse === "function" ? e.getResponse() : undefined;
+    if (typeof response === "string" && response) return response;
+    if (response?.error) return String(response.error);
+    if (response?.message) return String(response.message);
+  } catch {}
   // Drill through cause chain to find the deepest message
   let cause = e?.cause ?? e?.error;
   while (cause?.cause || cause?.error) {
@@ -142,6 +149,7 @@ export class AgentService {
     private readonly modelConfigService: ModelConfigService,
     private readonly tokensService: TokensService,
     private readonly filesService: FilesService,
+    @Optional() private readonly billingService?: BillingService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -155,7 +163,7 @@ export class AgentService {
     origin: string,
     images?: string[],
     canvasState?: any[],
-    userInfo?: { userId?: string; username?: string },
+    userInfo?: { userId?: string; username?: string; requestId?: string },
     assets?: AgentAssetInput[],
   ): EventSink {
     const sink = new EventSink();
@@ -241,7 +249,7 @@ export class AgentService {
     images?: string[],
     canvasState?: any[],
     abortSignal?: AbortSignal,
-    userInfo?: { userId?: string; username?: string },
+    userInfo?: { userId?: string; username?: string; requestId?: string },
     assets?: AgentAssetInput[],
   ): Promise<void> {
     const usage: TurnUsage = {
@@ -279,6 +287,7 @@ export class AgentService {
         canvasState,
         abortSignal,
         assets,
+        userInfo,
       );
     } finally {
       const elapsedMs = Date.now() - usage.startedAt;
@@ -326,6 +335,7 @@ export class AgentService {
     canvasState?: any[],
     abortSignal?: AbortSignal,
     incomingAssets?: AgentAssetInput[],
+    userInfo?: { userId?: string; username?: string; requestId?: string },
   ): Promise<void> {
     const config = await this.modelConfigService.getConfig();
     let systemPrompt = compactAgentSystemPrompt(config.agentConfig?.systemPrompt);
@@ -509,6 +519,9 @@ ${videoModelInfo || "- None"}
       userInput,
       directImageRequest,
       defaultImageReferenceIds,
+      userId: userInfo?.userId,
+      billing: this.billingService,
+      billingNamespace: userInfo?.requestId || `agent:${sessionId}:${usage.startedAt}`,
       agentService: this,
     } as any;
 
@@ -531,87 +544,133 @@ ${videoModelInfo || "- None"}
 
       // Single turn with streamText
       const modelMessages = this.memory.compactForModel(messages);
-      const result = await this.withTimeout(
-        Promise.resolve(
-          streamText({
-            model: modelInstance,
-            messages: modelMessages as any,
-            tools: sdkTools,
-            toolChoice: "auto",
-            abortSignal,
-          }),
-        ),
-        this.LLM_TIMEOUT_MS,
-        "LLM streaming timed out",
-      );
-
       let text = "";
       const toolCalls: any[] = [];
-      const visibleText = new HiddenReasoningStreamFilter();
-
-      for await (const chunk of result.fullStream) {
-        if (abortSignal?.aborted) {
-          throw new DOMException("Agent run aborted", "AbortError");
-        }
-        if (chunk.type === "text-delta") {
-          const safeChunk = visibleText.push(chunk.text);
-          if (safeChunk) {
-            text += safeChunk;
-            sink.emit({ type: "thinking", text: safeChunk });
-          }
-        } else if (chunk.type === "tool-call") {
-          toolCalls.push({
-            id: chunk.toolCallId,
-            name: chunk.toolName,
-            args:
-              typeof chunk.input === "string"
-                ? chunk.input
-                : JSON.stringify(chunk.input),
+      let llmBillingOperationId: string | undefined;
+      try {
+        const maxOutputTokens = 4_096;
+        if (this.billingService && userInfo?.userId) {
+          const promptTokenUpperBound =
+            Buffer.byteLength(JSON.stringify(modelMessages), "utf8") +
+            Buffer.byteLength(
+              JSON.stringify(
+                [...selectedToolNames].map((name) => {
+                  const tool = TOOL_MAP.get(name);
+                  return tool
+                    ? { name: tool.name, description: tool.description, parameters: tool.parameters }
+                    : { name };
+                }),
+              ),
+              "utf8",
+            ) +
+            8_192;
+          const billingOperation = this.billingService.reserve({
+            userId: userInfo.userId,
+            idempotencyKey: `${ctx.billingNamespace}:llm:${step}`,
+            operation: "llm_chat",
+            params: {
+              model: chatModel,
+              promptTokens: promptTokenUpperBound,
+              completionTokens: maxOutputTokens,
+            },
+            metadata: { source: "agent", sessionId, step },
           });
+          llmBillingOperationId = billingOperation.id;
+          if (billingOperation.reused && billingOperation.status !== "reserved") {
+            throw new Error("This Agent model step was already finalized");
+          }
         }
-      }
-
-      const trailingText = visibleText.flush();
-      if (trailingText) {
-        text += trailingText;
-        sink.emit({ type: "thinking", text: trailingText });
-      }
-      text = stripHiddenReasoning(text);
-
-      for (const call of toolCalls) {
-        const normalizedInput = this.normalizeToolInput(
-          call.name,
-          this.safeParse(call.args),
+        const result = await this.withTimeout(
+          Promise.resolve(
+            streamText({
+              model: modelInstance,
+              messages: modelMessages as any,
+              tools: sdkTools,
+              toolChoice: "auto",
+              maxOutputTokens,
+              abortSignal,
+            }),
+          ),
+          this.LLM_TIMEOUT_MS,
+          "LLM streaming timed out",
         );
-        const normalizedCall = normalizeImageToolCallForSelection(
-          call.name,
-          normalizedInput,
-          implicitImageReference,
-          {
-            userInput,
-            selectedImageWasInspected,
-          },
-        );
-        call.name = normalizedCall.toolName;
-        call.input = normalizedCall.input;
-      }
+        const visibleText = new HiddenReasoningStreamFilter();
 
-      // Track usage
-      const currentUsage = await result.usage;
-      const currentPromptTokens = currentUsage.inputTokens ?? 0;
-      usage.modelCalls++;
-      usage.lastPromptTokens = currentPromptTokens;
-      usage.peakPromptTokens = Math.max(
-        usage.peakPromptTokens,
-        currentPromptTokens,
-      );
-      usage.promptTokens += currentPromptTokens;
-      usage.completionTokens += currentUsage.outputTokens ?? 0;
-      this.logger.debug(
-        `[session=${sessionId}] step=${step + 1} ` +
-          `input=${currentPromptTokens} output=${currentUsage.outputTokens ?? 0} ` +
-          `cumulativeInput=${usage.promptTokens} activeTools=${selectedToolNames.size}`,
-      );
+        for await (const chunk of result.fullStream) {
+          if (abortSignal?.aborted) {
+            throw new DOMException("Agent run aborted", "AbortError");
+          }
+          if (chunk.type === "text-delta") {
+            const safeChunk = visibleText.push(chunk.text);
+            if (safeChunk) {
+              text += safeChunk;
+              sink.emit({ type: "thinking", text: safeChunk });
+            }
+          } else if (chunk.type === "tool-call") {
+            toolCalls.push({
+              id: chunk.toolCallId,
+              name: chunk.toolName,
+              args:
+                typeof chunk.input === "string"
+                  ? chunk.input
+                  : JSON.stringify(chunk.input),
+            });
+          }
+        }
+
+        const trailingText = visibleText.flush();
+        if (trailingText) {
+          text += trailingText;
+          sink.emit({ type: "thinking", text: trailingText });
+        }
+        text = stripHiddenReasoning(text);
+
+        for (const call of toolCalls) {
+          const normalizedInput = this.normalizeToolInput(
+            call.name,
+            this.safeParse(call.args),
+          );
+          const normalizedCall = normalizeImageToolCallForSelection(
+            call.name,
+            normalizedInput,
+            implicitImageReference,
+            {
+              userInput,
+              selectedImageWasInspected,
+            },
+          );
+          call.name = normalizedCall.toolName;
+          call.input = normalizedCall.input;
+        }
+
+        // Track and settle actual usage, releasing the conservative preauth gap.
+        const currentUsage = await result.usage;
+        const currentPromptTokens = currentUsage.inputTokens ?? 0;
+        const currentCompletionTokens = currentUsage.outputTokens ?? 0;
+        usage.modelCalls++;
+        usage.lastPromptTokens = currentPromptTokens;
+        usage.peakPromptTokens = Math.max(usage.peakPromptTokens, currentPromptTokens);
+        usage.promptTokens += currentPromptTokens;
+        usage.completionTokens += currentCompletionTokens;
+        if (llmBillingOperationId && this.billingService) {
+          const actual = this.billingService.quoteForOperation(llmBillingOperationId, {
+            model: chatModel,
+            promptTokens: currentPromptTokens,
+            completionTokens: currentCompletionTokens,
+          });
+          this.billingService.capture(llmBillingOperationId, actual.amountMicros);
+        }
+        this.logger.debug(
+          `[session=${sessionId}] step=${step + 1} ` +
+            `input=${currentPromptTokens} output=${currentCompletionTokens} ` +
+            `cumulativeInput=${usage.promptTokens} activeTools=${selectedToolNames.size}`,
+        );
+      } catch (error: any) {
+        if (llmBillingOperationId && this.billingService) {
+          this.billingService.release(llmBillingOperationId, error?.message || "Agent model call failed");
+        }
+        throw error;
+      }
 
       // Record assistant turn
       const contentParts: any[] = [];
@@ -716,6 +775,7 @@ ${videoModelInfo || "- None"}
             );
           }
         } else {
+          ctx.billingToolCallId = call.id;
           try {
             const result = await this.withTimeout(
               tool.execute(input, ctx),
@@ -767,7 +827,7 @@ ${videoModelInfo || "- None"}
               generationOutputs,
             );
           } catch (e: any) {
-            const errMsg = e?.message ?? "tool failed";
+            const errMsg = extractErrorMessage(e);
             this.logger.warn(`[session=${sessionId}] ${call.name}: ${errMsg}`);
             content = { status: "error", error: errMsg };
             sink.emit({
@@ -785,6 +845,8 @@ ${videoModelInfo || "- None"}
                 true,
               );
             }
+          } finally {
+            delete ctx.billingToolCallId;
           }
         }
 

@@ -159,6 +159,16 @@ export interface GenerateImageResponse {
   status?: "generating" | "success" | "error";
   mode?: GenerateImageMode;
   imageUrl?: string;
+  images?: Array<{
+    imageUrl: string;
+    url: string;
+    index: number;
+  }>;
+  requestedCount?: number;
+  successfulCount?: number;
+  failedCount?: number;
+  partial?: boolean;
+  warnings?: string[];
   url?: string;
   videoUrl?: string;
   thumbnailUrl?: string;
@@ -592,6 +602,114 @@ export async function deleteAsset(id: string): Promise<boolean> {
 
 export async function reorderAssets(assetIds: string[]): Promise<boolean> {
   const res = await request.post<boolean>("/assets/reorder", { assetIds });
+  return res.data;
+}
+
+// ---- Billing APIs ----
+
+export interface BillingBalance {
+  userId: string;
+  availableMicros: number;
+  reservedMicros: number;
+  availableCredits: number;
+  reservedCredits: number;
+  lifetimeGrantedCredits: number;
+  lifetimeSpentCredits: number;
+  version: number;
+  updatedAt: string;
+}
+
+export interface BillingProduct {
+  id: string;
+  sku: string;
+  name: string;
+  description: string;
+  kind: "credit_pack" | "subscription";
+  credits: number;
+  amountMinor: number;
+  currency: string;
+  badge: string | null;
+  features: string[];
+  status: "active" | "archived";
+  sortOrder: number;
+}
+
+export interface BillingOrder {
+  id: string;
+  userId: string;
+  kind: "credit_pack" | "subscription";
+  sku: string;
+  product: BillingProduct;
+  amountMinor: number;
+  currency: string;
+  status: "pending" | "paid" | "closed" | "refunding" | "refunded";
+  provider: string | null;
+  providerPaymentId: string | null;
+  createdAt: string;
+  paidAt: string | null;
+  updatedAt: string;
+}
+
+export interface BillingTransaction {
+  id: string;
+  type: string;
+  availableDeltaCredits: number;
+  reservedDeltaCredits: number;
+  consumedDeltaCredits: number;
+  availableAfterMicros: number;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export async function getBillingBalance(): Promise<BillingBalance> {
+  const res = await request.get<BillingBalance>("/billing/balance");
+  return res.data;
+}
+
+export async function getBillingCatalog(): Promise<{
+  products: BillingProduct[];
+  payment: {
+    checkoutConfigured: boolean;
+    mode: string;
+    providers: string[];
+    stripe?: { secretConfigured: boolean; publishableConfigured: boolean; webhookConfigured: boolean };
+  };
+}> {
+  const res = await request.get("/billing/catalog");
+  return res.data;
+}
+
+export async function getBillingTransactions(page = 1, pageSize = 30): Promise<{
+  items: BillingTransaction[];
+  page: number;
+  pageSize: number;
+  total: number;
+}> {
+  const res = await request.get("/billing/transactions", { params: { page, pageSize } });
+  return res.data;
+}
+
+export async function getBillingOrders(page = 1, pageSize = 20): Promise<{
+  items: BillingOrder[];
+  page: number;
+  pageSize: number;
+  total: number;
+}> {
+  const res = await request.get("/billing/orders", { params: { page, pageSize } });
+  return res.data;
+}
+
+export async function createBillingOrder(sku: string): Promise<BillingOrder> {
+  const res = await request.post<BillingOrder>("/billing/orders", { sku });
+  return res.data;
+}
+
+export async function checkoutBillingOrder(orderId: string): Promise<{
+  orderId: string;
+  checkoutUrl: string;
+  mode: "redirect";
+}> {
+  const res = await request.post(`/billing/orders/${orderId}/checkout`);
   return res.data;
 }
 

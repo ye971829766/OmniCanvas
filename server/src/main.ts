@@ -4,14 +4,17 @@ import { ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./all-exceptions.filter";
 import { ApiEncryptionInterceptor } from "./interceptors/api-encryption.interceptor";
-import { json, urlencoded } from "express";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+    bodyParser: false,
+  });
 
   // Increase payload limit for base64 image uploads
-  app.use(json({ limit: "50mb" }));
-  app.use(urlencoded({ extended: true, limit: "50mb" }));
+  app.useBodyParser("json", { limit: "50mb" });
+  app.useBodyParser("urlencoded", { extended: true, limit: "50mb" });
 
   // Enable CORS with security restrictions
   const corsOrigin = process.env.CORS_ORIGIN;

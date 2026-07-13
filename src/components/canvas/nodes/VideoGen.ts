@@ -24,6 +24,7 @@ export class VideoGen extends Box {
   private _errorMessage!: string;
   private _taskId!: string;
   private _inputReference!: string; // base64 reference image URL
+  private _inputTailReference!: string;
 
   public get prompt() { return this._prompt; }
   public set prompt(val: string) {
@@ -89,6 +90,14 @@ export class VideoGen extends Box {
     }
   }
 
+  public get inputTailReference() { return this._inputTailReference; }
+  public set inputTailReference(val: string) {
+    if (this._inputTailReference !== val) {
+      this._inputTailReference = val;
+      this.updateVisuals();
+    }
+  }
+
   constructor(
     data: IBoxInputData & {
       prompt?: string;
@@ -99,6 +108,7 @@ export class VideoGen extends Box {
       errorMessage?: string;
       taskId?: string;
       inputReference?: string;
+      inputTailReference?: string;
     },
   ) {
     super(data);
@@ -110,6 +120,7 @@ export class VideoGen extends Box {
     this._errorMessage = data.errorMessage || "";
     this._taskId = data.taskId || "";
     this._inputReference = data.inputReference || "";
+    this._inputTailReference = data.inputTailReference || "";
     
     this.editable = true;
     this.widthRange = { min: 160 };
@@ -320,6 +331,7 @@ export class VideoGen extends Box {
     cloned.errorMessage = this.errorMessage;
     cloned.taskId = this.taskId;
     cloned.inputReference = this.inputReference;
+    cloned.inputTailReference = this.inputTailReference;
     cloned.updateVisuals();
     return cloned as this;
   }

@@ -2,6 +2,33 @@ import axios from "axios";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem("omnicanvas_admin_token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const method = String(config.method || "get").toLowerCase();
+  if (["post", "put", "patch", "delete"].includes(method) && !config.headers["Idempotency-Key"]) {
+    config.headers["Idempotency-Key"] = crypto.randomUUID();
+  }
+  return config;
+});
+
+export async function loginAdmin(username: string, password: string) {
+  const res = await axios.post(`${API_BASE_URL}/auth/login`, { username, password });
+  if (res.data?.user?.role !== "admin") throw new Error("该账号没有管理员权限");
+  localStorage.setItem("omnicanvas_admin_token", res.data.token);
+  return res.data.user as AdminUser;
+}
+
+export async function getAdminMe(): Promise<AdminUser> {
+  const res = await axios.get<AdminUser>(`${API_BASE_URL}/auth/me`);
+  if (res.data.role !== "admin") throw new Error("该账号没有管理员权限");
+  return res.data;
+}
+
+export function logoutAdmin() {
+  localStorage.removeItem("omnicanvas_admin_token");
+}
+
 export interface Channel {
   id: string;
   name: string;
@@ -95,6 +122,16 @@ export interface ModelConfigState {
     chatModel: string;
     visionModel?: string;
   };
+}
+
+export interface TaskResponse {
+  type?: string;
+  taskId: string;
+  status: string;
+  url?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  error?: string;
 }
 
 export async function getChannels(): Promise<Channel[]> {
@@ -256,3 +293,77 @@ export async function getTokenStats(): Promise<SystemTokenStats> {
   return res.data;
 }
 
+// --- Billing Administration APIs ---
+export interface BillingOverview {
+  accountCount: number;
+  availableCredits: number;
+  reservedCredits: number;
+  lifetimeSpentCredits: number;
+  totalOrders: number;
+  pendingOrders: number;
+  paidOrders: number;
+  paidAmountMinor: number;
+  currency: string;
+  totalOperations: number;
+  reservedOperations: number;
+  capturedOperations: number;
+  payment: {
+    checkoutConfigured: boolean;
+    mode: string;
+    providers: string[];
+    stripe?: { secretConfigured: boolean; publishableConfigured: boolean; webhookConfigured: boolean };
+  };
+}
+
+export interface BillingAccountAdmin {
+  userId: string;
+  username: string;
+  nickname: string;
+  avatarUrl?: string;
+  availableCredits: number;
+  reservedCredits: number;
+  lifetimeGrantedCredits: number;
+  lifetimeSpentCredits: number;
+  updatedAt: string | null;
+}
+
+export interface BillingOrderAdmin {
+  id: string;
+  userId: string;
+  username: string;
+  nickname: string;
+  sku: string;
+  product: { name: string; credits: number };
+  amountMinor: number;
+  currency: string;
+  status: "pending" | "paid" | "closed" | "refunding" | "refunded";
+  provider: string | null;
+  createdAt: string;
+  paidAt: string | null;
+}
+
+export interface BillingPricingRule {
+  id: string;
+  operation: string;
+  model: string | null;
+  baseCredits: number;
+  inputCreditsPerMillionTokens: number;
+  outputCreditsPerMillionTokens: number;
+  config: Record<string, unknown>;
+}
+
+export async function getBillingOverview(): Promise<BillingOverview> {
+  return (await axios.get(`${API_BASE_URL}/admin/billing/overview`)).data;
+}
+export async function getBillingAccounts(): Promise<BillingAccountAdmin[]> {
+  return (await axios.get(`${API_BASE_URL}/admin/billing/accounts`)).data;
+}
+export async function getBillingAdminOrders(status?: string): Promise<{ items: BillingOrderAdmin[]; total: number }> {
+  return (await axios.get(`${API_BASE_URL}/admin/billing/orders`, { params: { status: status || undefined } })).data;
+}
+export async function getBillingPricing(): Promise<{ version: any; rules: BillingPricingRule[] }> {
+  return (await axios.get(`${API_BASE_URL}/admin/billing/pricing`)).data;
+}
+export async function adjustUserCredits(userId: string, amountCredits: number, reason: string) {
+  return (await axios.post(`${API_BASE_URL}/admin/billing/accounts/${userId}/adjust`, { amountCredits, reason })).data;
+}

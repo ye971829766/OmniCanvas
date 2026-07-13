@@ -251,7 +251,7 @@ const popoverPt = {
   content: { style: { padding: "6px" } },
 };
 
-const supportReferenceType = computed(() => videoOptions.value?.supportReferenceType ?? 'first');
+const supportReferenceType = computed(() => videoOptions.value?.supportReferenceType ?? 'none');
 const hoveredType = ref<'first' | 'tail' | null>(null);
 const hoveredImage = computed(() => hoveredType.value === 'first' ? refImage.value : refTailImage.value);
 const hoveredImageUrl = computed(() => hoveredType.value === 'first' ? refImageUrl.value : refTailImageUrl.value);
@@ -388,6 +388,19 @@ watch(
         refImageUrl.value = "";
       }
     }
+
+    if (targetAny.inputTailReference) {
+      const file = dataURLtoFile(targetAny.inputTailReference, "ref_tail_image.png");
+      refTailImage.value = file;
+      if (refTailImageUrl.value) URL.revokeObjectURL(refTailImageUrl.value);
+      refTailImageUrl.value = URL.createObjectURL(file);
+    } else {
+      refTailImage.value = null;
+      if (refTailImageUrl.value) {
+        URL.revokeObjectURL(refTailImageUrl.value);
+        refTailImageUrl.value = "";
+      }
+    }
   },
   { immediate: true },
 );
@@ -400,7 +413,7 @@ watch(promptText, (v) => {
   }
 });
 
-watch([selectedModel, selectedSize, selectedSeconds, refImage], () => {
+watch([selectedModel, selectedSize, selectedSeconds, refImage, refTailImage], () => {
   const targetAny = props.target as any;
   if (targetAny) {
     const toBase64 = (file: File): Promise<string> =>
@@ -421,6 +434,16 @@ watch([selectedModel, selectedSize, selectedSeconds, refImage], () => {
       if (targetAny.inputReference !== "") {
         targetAny.set({ inputReference: "" });
       }
+    }
+
+    if (refTailImage.value) {
+      toBase64(refTailImage.value).then((b64) => {
+        if (targetAny.inputTailReference !== b64) {
+          targetAny.set({ inputTailReference: b64 });
+        }
+      });
+    } else if (targetAny.inputTailReference !== "") {
+      targetAny.set({ inputTailReference: "" });
     }
 
     targetAny.set({
