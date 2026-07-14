@@ -482,269 +482,190 @@
 
         <!-- Tab 3: Configuration Dictionaries -->
         <el-tab-pane label="参数配置字典" name="dictionaries">
-          <div
-            style="
-              margin-top: 12px;
-              display: flex;
-              flex-direction: column;
-              gap: 20px;
-            "
-          >
-            <el-row :gutter="20">
-              <!-- Sizes Dictionary -->
+          <div class="dict-page">
+            <el-row :gutter="16">
               <el-col :span="8">
-                <el-card
-                  style="
-                    background-color: #141416;
-                    border: 1px solid #27272a;
-                    border-radius: 12px;
-                  "
-                >
-                  <template #header>
-                    <span style="font-size: 14px; font-weight: 600; color: #fff"
-                      >可选分辨率字典 (Sizes)</span
-                    >
-                  </template>
-                  <div style="display: flex; flex-direction: column; gap: 12px">
-                    <div
-                      style="
-                        display: flex;
-                        flex-wrap: wrap;
-                        gap: 8px;
-                        min-height: 120px;
-                        align-content: flex-start;
-                        border: 1px solid #27272a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        background-color: #09090b;
-                      "
-                    >
-                      <el-tag
-                        v-for="size in localDict.sizes"
-                        :key="size"
-                        closable
-                        type="primary"
-                        @close="removeDictItem('sizes', size)"
-                      >
-                        {{ size }}
-                      </el-tag>
-                      <span
-                        v-if="!localDict.sizes.length"
-                        style="color: #71717a; font-size: 13px"
-                        >字典为空</span
-                      >
-                    </div>
-                    <div style="display: flex; gap: 8px">
-                      <el-input
-                        v-model="newDictItemInput.sizes"
-                        placeholder="例如: 1024x1024"
-                        size="small"
-                        @keyup.enter="addDictItem('sizes')"
-                      />
-                      <el-button
-                        type="primary"
-                        size="small"
-                        @click="addDictItem('sizes')"
-                        >添加</el-button
-                      >
-                    </div>
+                <div class="dict-panel">
+                  <div class="dict-panel__title">分辨率 Sizes</div>
+                  <div class="dict-tags dict-tags--blue">
+                    <el-tag
+                      v-for="size in localDict.sizes"
+                      :key="size"
+                      closable
+                      effect="light"
+                      round
+                      @close="removeDictItem('sizes', size)"
+                    >{{ size }}</el-tag>
+                    <span v-if="!localDict.sizes.length" class="dict-empty">暂无条目</span>
                   </div>
-                </el-card>
+                  <div class="dict-add">
+                    <el-input
+                      v-model="newDictItemInput.sizes"
+                      placeholder="例如 1024x1024"
+                      @keyup.enter="addDictItem('sizes')"
+                    />
+                    <el-button type="primary" @click="addDictItem('sizes')">添加</el-button>
+                  </div>
+                </div>
               </el-col>
 
-              <!-- Aspect Ratios Dictionary -->
               <el-col :span="8">
-                <el-card
-                  style="
-                    background-color: #141416;
-                    border: 1px solid #27272a;
-                    border-radius: 12px;
-                  "
-                >
-                  <template #header>
-                    <span style="font-size: 14px; font-weight: 600; color: #fff"
-                      >可选宽高比字典 (Aspect Ratios)</span
-                    >
-                  </template>
-                  <div style="display: flex; flex-direction: column; gap: 12px">
-                    <div
-                      style="
-                        display: flex;
-                        flex-wrap: wrap;
-                        gap: 8px;
-                        min-height: 120px;
-                        align-content: flex-start;
-                        border: 1px solid #27272a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        background-color: #09090b;
-                      "
-                    >
-                      <el-tag
-                        v-for="ratio in localDict.aspectRatios"
-                        :key="ratio"
-                        closable
-                        type="warning"
-                        @close="removeDictItem('aspectRatios', ratio)"
-                      >
-                        {{ ratio }}
-                      </el-tag>
-                      <span
-                        v-if="!localDict.aspectRatios.length"
-                        style="color: #71717a; font-size: 13px"
-                        >字典为空</span
-                      >
-                    </div>
-                    <div style="display: flex; gap: 8px">
-                      <el-input
-                        v-model="newDictItemInput.aspectRatios"
-                        placeholder="例如: 16:9"
-                        size="small"
-                        @keyup.enter="addDictItem('aspectRatios')"
-                      />
-                      <el-button
-                        type="primary"
-                        size="small"
-                        @click="addDictItem('aspectRatios')"
-                        >添加</el-button
-                      >
-                    </div>
+                <div class="dict-panel">
+                  <div class="dict-panel__title">宽高比 Aspect Ratios</div>
+                  <div class="dict-tags dict-tags--amber">
+                    <el-tag
+                      v-for="ratio in localDict.aspectRatios"
+                      :key="ratio"
+                      closable
+                      effect="light"
+                      type="warning"
+                      round
+                      @close="removeDictItem('aspectRatios', ratio)"
+                    >{{ ratio }}</el-tag>
+                    <span v-if="!localDict.aspectRatios.length" class="dict-empty">暂无条目</span>
                   </div>
-                </el-card>
+                  <div class="dict-add">
+                    <el-input
+                      v-model="newDictItemInput.aspectRatios"
+                      placeholder="例如 16:9"
+                      @keyup.enter="addDictItem('aspectRatios')"
+                    />
+                    <el-button type="primary" @click="addDictItem('aspectRatios')">添加</el-button>
+                  </div>
+                </div>
               </el-col>
 
-              <!-- Qualities Dictionary -->
               <el-col :span="8">
-                <el-card
-                  style="
-                    background-color: #141416;
-                    border: 1px solid #27272a;
-                    border-radius: 12px;
-                  "
-                >
-                  <template #header>
-                    <span style="font-size: 14px; font-weight: 600; color: #fff"
-                      >可选质量/尺寸字典 (Qualities)</span
-                    >
-                  </template>
-                  <div style="display: flex; flex-direction: column; gap: 12px">
-                    <div
-                      style="
-                        display: flex;
-                        flex-wrap: wrap;
-                        gap: 8px;
-                        min-height: 120px;
-                        align-content: flex-start;
-                        border: 1px solid #27272a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        background-color: #09090b;
-                      "
-                    >
-                      <el-tag
-                        v-for="q in localDict.qualities"
-                        :key="q"
-                        closable
-                        type="success"
-                        @close="removeDictItem('qualities', q)"
-                      >
-                        {{ q }}
-                      </el-tag>
-                      <span
-                        v-if="!localDict.qualities.length"
-                        style="color: #71717a; font-size: 13px"
-                        >字典为空</span
-                      >
-                    </div>
-                    <div style="display: flex; gap: 8px">
-                      <el-input
-                        v-model="newDictItemInput.qualities"
-                        placeholder="例如: standard"
-                        size="small"
-                        @keyup.enter="addDictItem('qualities')"
-                      />
-                      <el-button
-                        type="primary"
-                        size="small"
-                        @click="addDictItem('qualities')"
-                        >添加</el-button
-                      >
-                    </div>
+                <div class="dict-panel">
+                  <div class="dict-panel__title">质量 Qualities</div>
+                  <div class="dict-tags dict-tags--green">
+                    <el-tag
+                      v-for="q in localDict.qualities"
+                      :key="q"
+                      closable
+                      effect="light"
+                      type="success"
+                      round
+                      @close="removeDictItem('qualities', q)"
+                    >{{ q }}</el-tag>
+                    <span v-if="!localDict.qualities.length" class="dict-empty">暂无条目</span>
                   </div>
-                </el-card>
+                  <div class="dict-add">
+                    <el-input
+                      v-model="newDictItemInput.qualities"
+                      placeholder="例如 standard"
+                      @keyup.enter="addDictItem('qualities')"
+                    />
+                    <el-button type="primary" @click="addDictItem('qualities')">添加</el-button>
+                  </div>
+                </div>
               </el-col>
             </el-row>
 
-            <el-row :gutter="20" style="margin-top: 16px">
-              <!-- Video Sizes Dictionary -->
-              <el-col :span="24">
-                <el-card
-                  style="
-                    background-color: #141416;
-                    border: 1px solid #27272a;
-                    border-radius: 12px;
-                  "
-                >
-                  <template #header>
-                    <span style="font-size: 14px; font-weight: 600; color: #fff"
-                      >可选视频分辨率/比例字典 (Video Sizes)</span
-                    >
-                  </template>
-                  <div style="display: flex; flex-direction: column; gap: 12px">
-                    <div
-                      style="
-                        display: flex;
-                        flex-wrap: wrap;
-                        gap: 8px;
-                        min-height: 120px;
-                        align-content: flex-start;
-                        border: 1px solid #27272a;
-                        border-radius: 8px;
-                        padding: 12px;
-                        background-color: #09090b;
-                      "
-                    >
-                      <el-tag
-                        v-for="size in localDict.videoSizes"
-                        :key="size"
-                        closable
-                        type="danger"
-                        @close="removeDictItem('videoSizes', size)"
-                      >
-                        {{ size }}
-                      </el-tag>
-                      <span
-                        v-if="!localDict.videoSizes?.length"
-                        style="color: #71717a; font-size: 13px"
-                        >字典为空</span
-                      >
-                    </div>
-                    <div style="display: flex; gap: 8px">
-                      <el-input
-                        v-model="newDictItemInput.videoSizes"
-                        placeholder="例如: 16x9"
-                        size="small"
-                        @keyup.enter="addDictItem('videoSizes')"
-                      />
-                      <el-button
-                        type="primary"
-                        size="small"
-                        @click="addDictItem('videoSizes')"
-                        >添加</el-button
-                      >
-                    </div>
-                  </div>
-                </el-card>
-              </el-col>
-            </el-row>
+            <div class="dict-panel">
+              <div class="dict-panel__title">视频比例 Video Sizes</div>
+              <div class="dict-tags dict-tags--rose">
+                <el-tag
+                  v-for="size in localDict.videoSizes"
+                  :key="size"
+                  closable
+                  effect="light"
+                  type="danger"
+                  round
+                  @close="removeDictItem('videoSizes', size)"
+                >{{ size }}</el-tag>
+                <span v-if="!localDict.videoSizes?.length" class="dict-empty">暂无条目</span>
+              </div>
+              <div class="dict-add dict-add--wide">
+                <el-input
+                  v-model="newDictItemInput.videoSizes"
+                  placeholder="例如 16x9"
+                  @keyup.enter="addDictItem('videoSizes')"
+                />
+                <el-button type="primary" @click="addDictItem('videoSizes')">添加</el-button>
+              </div>
+            </div>
 
-            <div style="display: flex; justify-content: flex-end">
-              <el-button
-                type="primary"
-                :loading="savingDict"
-                @click="saveDictionaries"
-                >保存字典配置</el-button
-              >
+            <!-- Model Logo Library -->
+            <div class="logo-dict">
+              <div class="logo-dict__header">
+                <div>
+                  <h3>模型 Logo 字典</h3>
+                  <p>预先维护常用品牌 Logo，新增/编辑模型时直接点选，无需重复上传。</p>
+                </div>
+                <div class="logo-dict__actions">
+                  <el-input
+                    v-model="logoSearchQuery"
+                    clearable
+                    placeholder="搜索名称…"
+                    style="width: 200px"
+                    :prefix-icon="Search"
+                  />
+                  <el-button @click="importLogosFromMappings">从现有模型导入</el-button>
+                </div>
+              </div>
+
+              <div class="logo-dict__grid">
+                <div
+                  v-for="logo in filteredLogoLibrary"
+                  :key="logo.id"
+                  class="logo-tile"
+                >
+                  <button
+                    type="button"
+                    class="logo-tile__remove"
+                    title="删除"
+                    @click="removeLogoFromLibrary(logo.id)"
+                  >
+                    ×
+                  </button>
+                  <div class="logo-tile__icon">
+                    <img :src="logo.url" :alt="logo.label" />
+                  </div>
+                  <div class="logo-tile__name" :title="logo.label">{{ logo.label }}</div>
+                  <div v-if="logo.brandInitial" class="logo-tile__badge">{{ logo.brandInitial }}</div>
+                </div>
+
+                <div v-if="!filteredLogoLibrary.length" class="logo-dict__empty">
+                  <div class="logo-dict__empty-icon">◎</div>
+                  <strong>{{ localLogoLibrary.length ? "无匹配结果" : "还没有 Logo" }}</strong>
+                  <span>{{ localLogoLibrary.length ? "试试其他关键词" : "下方添加，或从现有模型一键导入" }}</span>
+                </div>
+              </div>
+
+              <div class="logo-dict__composer">
+                <div class="logo-dict__preview">
+                  <img v-if="newLogoForm.url" :src="newLogoForm.url" alt="preview" />
+                  <span v-else>预览</span>
+                </div>
+                <div class="logo-dict__fields">
+                  <el-input v-model="newLogoForm.label" placeholder="显示名称，如 OpenAI / Gemini" />
+                  <el-input v-model="newLogoForm.url" placeholder="图片 URL" />
+                  <div class="logo-dict__fields-row">
+                    <el-input v-model="newLogoForm.brandInitial" placeholder="简称 1–2 字" maxlength="2" style="width: 120px" />
+                    <el-input v-model="newLogoForm.brandColor" placeholder="背景色 #hex（可选）" style="flex: 1" />
+                    <el-input v-model="newLogoForm.id" placeholder="ID 可选" style="width: 140px" />
+                  </div>
+                </div>
+                <div class="logo-dict__composer-actions">
+                  <el-upload
+                    action=""
+                    :before-upload="beforeLogoLibraryUpload"
+                    :show-file-list="false"
+                    accept="image/*"
+                  >
+                    <el-button>上传图片</el-button>
+                  </el-upload>
+                  <el-button type="primary" @click="addLogoToLibrary">加入字典</el-button>
+                </div>
+              </div>
+            </div>
+
+            <div class="dict-page__footer">
+              <span class="dict-page__hint">修改后请保存，才会写入服务端配置。</span>
+              <el-button type="primary" :loading="savingDict" @click="saveDictionaries">
+                保存字典配置
+              </el-button>
             </div>
           </div>
         </el-tab-pane>
@@ -846,8 +767,25 @@
             </el-col>
           </el-row>
 
-          <el-form-item label="图标图片 / 远程 URL">
-            <div style="display: flex; gap: 8px; width: 100%">
+          <el-form-item label="模型 Logo">
+            <div class="logo-picker">
+              <button
+                v-for="logo in logoLibrary"
+                :key="logo.id"
+                type="button"
+                class="logo-picker__item"
+                :class="{ 'is-selected': mappingForm.iconUrl === logo.url }"
+                :title="logo.label"
+                @click="selectLogoFromLibrary(logo)"
+              >
+                <img :src="logo.url" :alt="logo.label" />
+                <span>{{ logo.label }}</span>
+              </button>
+              <div v-if="!logoLibrary.length" class="logo-picker__empty">
+                Logo 字典为空，请到「参数配置字典」维护，或下方直接上传
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; width: 100%; margin-top: 10px">
               <el-input
                 v-model="mappingForm.iconUrl"
                 placeholder="输入远程图片 URL，或点击右侧上传"
@@ -861,6 +799,22 @@
               >
                 <el-button type="info" plain>上传图片</el-button>
               </el-upload>
+              <el-button
+                plain
+                :disabled="!mappingForm.iconUrl?.trim()"
+                @click="saveCurrentIconToLibrary"
+              >存入字典</el-button>
+            </div>
+            <div
+              v-if="mappingForm.iconUrl"
+              style="margin-top: 10px; display: flex; align-items: center; gap: 10px"
+            >
+              <img
+                :src="mappingForm.iconUrl"
+                alt="preview"
+                style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain; background: #09090b; border: 1px solid #27272a"
+              />
+              <span style="font-size: 12px; color: #71717a">当前已选 Logo 预览</span>
             </div>
           </el-form-item>
 
@@ -1671,6 +1625,7 @@ import {
   type Channel,
   type ModelType,
   type ModelMapping,
+  type ModelLogoAsset,
   type ImageConfig,
   type VideoConfig,
 } from "../utils/api";
@@ -1686,8 +1641,11 @@ const props = defineProps<{
     qualities: string[];
     videoSizes?: string[];
   };
+  logoLibrary?: ModelLogoAsset[];
   mappingsLoading: boolean;
 }>();
+
+const logoLibrary = computed(() => props.logoLibrary || []);
 
 const emit = defineEmits<{
   (e: "refresh-mappings"): void;
@@ -1727,6 +1685,26 @@ const newDictItemInput = ref({
   videoSizes: "",
 });
 const savingDict = ref(false);
+const localLogoLibrary = ref<ModelLogoAsset[]>([]);
+const logoSearchQuery = ref("");
+const newLogoForm = ref({
+  id: "",
+  label: "",
+  url: "",
+  brandInitial: "",
+  brandColor: "",
+});
+
+const filteredLogoLibrary = computed(() => {
+  const q = logoSearchQuery.value.trim().toLowerCase();
+  if (!q) return localLogoLibrary.value;
+  return localLogoLibrary.value.filter(
+    (item) =>
+      item.label.toLowerCase().includes(q) ||
+      item.id.toLowerCase().includes(q) ||
+      (item.brandInitial || "").toLowerCase().includes(q),
+  );
+});
 
 watch(
   () => props.dictionaries,
@@ -1739,6 +1717,16 @@ watch(
         videoSizes: [...(newVal.videoSizes || [])],
       };
     }
+  },
+  { immediate: true, deep: true },
+);
+
+watch(
+  () => props.logoLibrary,
+  (newVal) => {
+    localLogoLibrary.value = Array.isArray(newVal)
+      ? newVal.map((item) => ({ ...item }))
+      : [];
   },
   { immediate: true, deep: true },
 );
@@ -1769,13 +1757,153 @@ async function saveDictionaries() {
       imageConfigs: props.imageConfigs,
       videoConfigs: props.videoConfigs,
       dictionaries: localDict.value,
+      logoLibrary: localLogoLibrary.value,
     });
     ElMessage.success("配置字典已成功保存！");
     emit("refresh-mappings");
   } catch (err: any) {
-    ElMessage.error("字典保存失败: " + (err.message || "未知错误"));
+    ElMessage.error(
+      "字典保存失败: " + (err?.response?.data?.message || err.message || "未知错误"),
+    );
   } finally {
     savingDict.value = false;
+  }
+}
+
+function selectLogoFromLibrary(logo: ModelLogoAsset) {
+  mappingForm.value.iconUrl = logo.url;
+  if (logo.brandInitial) mappingForm.value.brandInitial = logo.brandInitial;
+  if (logo.brandColor) mappingForm.value.brandColor = logo.brandColor;
+}
+
+function removeLogoFromLibrary(id: string) {
+  localLogoLibrary.value = localLogoLibrary.value.filter((item) => item.id !== id);
+}
+
+function importLogosFromMappings() {
+  const existingUrls = new Set(
+    localLogoLibrary.value.map((item) => item.url.toLowerCase()),
+  );
+  let added = 0;
+  for (const mapping of props.mappings) {
+    const url = mapping.iconUrl?.trim();
+    if (!url || existingUrls.has(url.toLowerCase())) continue;
+    existingUrls.add(url.toLowerCase());
+    const idBase = `logo-${mapping.id}`.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 48);
+    let id = idBase;
+    let n = 1;
+    while (localLogoLibrary.value.some((item) => item.id === id)) {
+      id = `${idBase}-${n++}`;
+    }
+    localLogoLibrary.value.push({
+      id,
+      label: mapping.label || mapping.id,
+      url,
+      brandInitial: mapping.brandInitial,
+      brandColor: mapping.brandColor,
+    });
+    added += 1;
+  }
+  if (added === 0) {
+    ElMessage.info("没有可导入的新 Logo（模型未设置图标，或字典中已有）");
+  } else {
+    ElMessage.success(`已导入 ${added} 个 Logo，请点击「保存字典配置」落库`);
+  }
+}
+
+function addLogoToLibrary() {
+  const url = newLogoForm.value.url.trim();
+  const label = newLogoForm.value.label.trim() || "未命名 Logo";
+  if (!url) {
+    ElMessage.warning("请填写 Logo URL 或先上传图片");
+    return;
+  }
+  if (localLogoLibrary.value.some((item) => item.url.toLowerCase() === url.toLowerCase())) {
+    ElMessage.warning("该 URL 已在 Logo 字典中");
+    return;
+  }
+  let id =
+    newLogoForm.value.id.trim() ||
+    `logo-${label}`.replace(/[^a-zA-Z0-9_-]+/g, "-").toLowerCase().slice(0, 48) ||
+    `logo-${Date.now()}`;
+  if (localLogoLibrary.value.some((item) => item.id.toLowerCase() === id.toLowerCase())) {
+    id = `${id}-${Date.now().toString(36)}`;
+  }
+  localLogoLibrary.value.push({
+    id,
+    label,
+    url,
+    brandInitial: newLogoForm.value.brandInitial.trim() || undefined,
+    brandColor: newLogoForm.value.brandColor.trim() || undefined,
+  });
+  newLogoForm.value = { id: "", label: "", url: "", brandInitial: "", brandColor: "" };
+  ElMessage.success("已加入字典草稿，请记得点「保存字典配置」");
+}
+
+async function beforeLogoLibraryUpload(file: File) {
+  try {
+    const res = await uploadImage(file);
+    if (res?.url) {
+      newLogoForm.value.url = res.url;
+      if (!newLogoForm.value.label) {
+        newLogoForm.value.label = file.name.replace(/\.[^.]+$/, "").slice(0, 32);
+      }
+      ElMessage.success("上传成功，请点「添加」写入字典");
+    } else {
+      ElMessage.error("上传失败：未返回 URL");
+    }
+  } catch (err: any) {
+    ElMessage.error("上传失败：" + (err.message || "未知错误"));
+  }
+  return false;
+}
+
+async function persistLogoLibrary(nextLibrary: ModelLogoAsset[]) {
+  await updateModelConfig({
+    mappings: props.mappings,
+    imageConfigs: props.imageConfigs,
+    videoConfigs: props.videoConfigs,
+    dictionaries: props.dictionaries,
+    logoLibrary: nextLibrary,
+  });
+  localLogoLibrary.value = nextLibrary.map((item) => ({ ...item }));
+  emit("refresh-mappings");
+}
+
+async function saveCurrentIconToLibrary() {
+  const url = mappingForm.value.iconUrl?.trim();
+  if (!url) return;
+  const currentLibrary = logoLibrary.value;
+  if (currentLibrary.some((item) => item.url.toLowerCase() === url.toLowerCase())) {
+    ElMessage.info("该 Logo 已在字典中");
+    return;
+  }
+  const label =
+    mappingForm.value.label.trim() ||
+    mappingForm.value.id.trim() ||
+    "模型 Logo";
+  let id = `logo-${mappingForm.value.id || label}`
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .toLowerCase()
+    .slice(0, 48);
+  if (!id || currentLibrary.some((item) => item.id.toLowerCase() === id.toLowerCase())) {
+    id = `logo-${Date.now().toString(36)}`;
+  }
+  const next: ModelLogoAsset[] = [
+    ...currentLibrary,
+    {
+      id,
+      label,
+      url,
+      brandInitial: mappingForm.value.brandInitial?.trim() || undefined,
+      brandColor: mappingForm.value.brandColor?.trim() || undefined,
+    },
+  ];
+  try {
+    await persistLogoLibrary(next);
+    ElMessage.success("已存入 Logo 字典");
+  } catch (err: any) {
+    ElMessage.error("存入字典失败: " + (err?.response?.data?.message || err.message || "未知错误"));
   }
 }
 
@@ -2141,11 +2269,39 @@ async function saveMapping() {
       ...props.mappings.filter((item) => item.id !== editingMappingId.value),
       next,
     ];
+    // Auto-collect new icons into the logo library so next model can pick them.
+    const currentLibrary = logoLibrary.value;
+    let nextLogoLibrary = currentLibrary;
+    if (
+      next.iconUrl &&
+      !currentLibrary.some(
+        (item) => item.url.toLowerCase() === next.iconUrl!.toLowerCase(),
+      )
+    ) {
+      let logoId = `logo-${next.id}`.replace(/[^a-zA-Z0-9_-]+/g, "-").toLowerCase();
+      if (
+        !logoId ||
+        currentLibrary.some((item) => item.id.toLowerCase() === logoId)
+      ) {
+        logoId = `logo-${Date.now().toString(36)}`;
+      }
+      nextLogoLibrary = [
+        ...currentLibrary,
+        {
+          id: logoId,
+          label: next.label,
+          url: next.iconUrl,
+          brandInitial: next.brandInitial,
+          brandColor: next.brandColor,
+        },
+      ];
+    }
     await updateModelConfig({
       mappings: current,
       imageConfigs: props.imageConfigs,
       videoConfigs: props.videoConfigs,
       dictionaries: props.dictionaries,
+      logoLibrary: nextLogoLibrary,
     });
     ElMessage.success("模型映射已保存");
     mappingModalOpen.value = false;
@@ -2345,5 +2501,355 @@ function confirmDeleteVideoTemplate(item: VideoConfig) {
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
+}
+
+/* —— 参数配置字典（浅色） —— */
+.dict-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.dict-panel {
+  background: #fff;
+  border: 1px solid #e8ecf1;
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.dict-panel__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 12px;
+  letter-spacing: -0.01em;
+}
+
+.dict-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 88px;
+  align-content: flex-start;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+}
+
+.dict-empty {
+  color: #94a3b8;
+  font-size: 13px;
+  padding: 4px 2px;
+}
+
+.dict-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dict-add--wide :deep(.el-input) {
+  flex: 1;
+}
+
+.dict-page__footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.dict-page__hint {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+/* —— Logo 字典 —— */
+.logo-dict {
+  background: #fff;
+  border: 1px solid #e8ecf1;
+  border-radius: 18px;
+  padding: 20px 22px 18px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.logo-dict__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.logo-dict__header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 750;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.logo-dict__header p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.logo-dict__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.logo-dict__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 12px;
+  min-height: 120px;
+  padding: 14px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e8ecf1;
+}
+
+.logo-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px 12px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e8ecf1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.logo-tile:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
+}
+
+.logo-tile__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.logo-tile__icon img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.logo-tile__name {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 650;
+  color: #0f172a;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logo-tile__badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.logo-tile__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.logo-tile:hover .logo-tile__remove {
+  opacity: 1;
+}
+
+.logo-tile__remove:hover {
+  background: #fecaca;
+}
+
+.logo-dict__empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 36px 16px;
+  color: #94a3b8;
+}
+
+.logo-dict__empty-icon {
+  font-size: 22px;
+  opacity: 0.5;
+  margin-bottom: 4px;
+}
+
+.logo-dict__empty strong {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.logo-dict__empty span {
+  font-size: 12px;
+}
+
+.logo-dict__composer {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px dashed #dbe3ee;
+}
+
+.logo-dict__preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e8ecf1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.logo-dict__preview img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.logo-dict__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.logo-dict__fields-row {
+  display: flex;
+  gap: 8px;
+}
+
+.logo-dict__composer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 模型表单内 Logo 点选（对话框） */
+.logo-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.logo-picker__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 72px;
+  padding: 8px 6px;
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.logo-picker__item:hover {
+  border-color: #cbd5e1;
+}
+
+.logo-picker__item.is-selected {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+  color: #0f172a;
+}
+
+.logo-picker__item img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #f1f5f9;
+}
+
+.logo-picker__item span {
+  font-size: 10px;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logo-picker__empty {
+  width: 100%;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 8px 4px;
+}
+
+@media (max-width: 960px) {
+  .logo-dict__header {
+    flex-direction: column;
+  }
+  .logo-dict__composer {
+    grid-template-columns: 1fr;
+  }
+  .logo-dict__composer-actions {
+    flex-direction: row;
+  }
 }
 </style>

@@ -137,13 +137,35 @@ describe("BillingService", () => {
     });
   });
 
+  it("quotes video generation at ~100 credits per second", () => {
+    expect(billing.quote("video_generation", { seconds: 5 })).toMatchObject({
+      credits: 500,
+      amountMicros: 500_000_000,
+    });
+    expect(billing.quote("video_generation", { seconds: 10 })).toMatchObject({
+      credits: 1000,
+      amountMicros: 1_000_000_000,
+    });
+    expect(billing.quote("video_generation", { seconds: 6 })).toMatchObject({
+      credits: 600,
+      amountMicros: 600_000_000,
+    });
+  });
+
   it("releases a non-terminal generation task after the maximum reservation age", () => {
+    billing.grantCredits({
+      userId,
+      amountCredits: 500,
+      sourceType: "gift",
+      sourceId: "test-video-balance-stale",
+    });
     const operation = billing.reserve({
       userId,
       idempotencyKey: "stale-video",
       operation: "video_generation",
       params: { seconds: 5 },
     });
+    expect(operation.quotedMicros).toBe(500_000_000);
     dbService.db.query(`
       INSERT INTO generation_tasks (id, status, data, createdAt, updatedAt)
       VALUES ('stale-video-task', 'generating', '{"kind":"video"}', 1, 1)
@@ -160,6 +182,13 @@ describe("BillingService", () => {
   });
 
   it("releases a failed task and prevents concurrent overspending", () => {
+    // Signup = 100; video 5s = 500 credits → top up so two concurrent reserves fit.
+    billing.grantCredits({
+      userId,
+      amountCredits: 900,
+      sourceType: "gift",
+      sourceId: "test-video-balance-concurrent",
+    });
     const first = billing.reserve({
       userId,
       idempotencyKey: "video-1",
@@ -172,7 +201,7 @@ describe("BillingService", () => {
       operation: "video_generation",
       params: { seconds: 5 },
     });
-    expect(billing.getBalance(userId)).toMatchObject({ availableCredits: 0, reservedCredits: 100 });
+    expect(billing.getBalance(userId)).toMatchObject({ availableCredits: 0, reservedCredits: 1000 });
     expect(() => billing.reserve({
       userId,
       idempotencyKey: "remove-while-empty",
@@ -180,7 +209,7 @@ describe("BillingService", () => {
     })).toThrow();
 
     billing.release(first.id, "provider failed");
-    expect(billing.getBalance(userId)).toMatchObject({ availableCredits: 50, reservedCredits: 50 });
+    expect(billing.getBalance(userId)).toMatchObject({ availableCredits: 500, reservedCredits: 500 });
   });
 
   it("grants purchased credits exactly once for a payment source", () => {
@@ -233,6 +262,39 @@ describe("BillingService", () => {
     });
     expect(replay.granted).toBe(false);
     expect(replay.balance.availableCredits).toBe(104.5);
+  });
+
+  it("allows admin to update, create, and delete pricing rules", () => {
+    const commerce = new BillingCommerceService(dbService);
+    const pricing = commerce.getActivePricingRules();
+    const video = pricing.rules.find((rule) => rule.operation === "video_generation" && !rule.model);
+    expect(video).toBeTruthy();
+    expect(video!.baseCredits).toBe(500);
+    expect(video!.config.additionalCreditsPerSecond).toBe(100);
+
+    const updated = commerce.updatePricingRule(video!.id, {
+      baseCredits: 600,
+      config: { includedSeconds: 5, additionalCreditsPerSecond: 120 },
+    });
+    expect(updated.baseCredits).toBe(600);
+    expect(updated.config.additionalCreditsPerSecond).toBe(120);
+    expect(billing.quote("video_generation", { seconds: 5 }).credits).toBe(600);
+    expect(billing.quote("video_generation", { seconds: 6 }).credits).toBe(720);
+
+    const override = commerce.createPricingRule({
+      operation: "video_generation",
+      model: "premium-video",
+      baseCredits: 800,
+      priority: 20,
+      config: { includedSeconds: 5, additionalCreditsPerSecond: 150 },
+    });
+    expect(override.model).toBe("premium-video");
+    expect(billing.quote("video_generation", { seconds: 5, model: "premium-video" }).credits).toBe(800);
+    expect(billing.quote("video_generation", { seconds: 5 }).credits).toBe(600);
+
+    expect(commerce.deletePricingRule(override.id)).toMatchObject({ deleted: true });
+    expect(billing.quote("video_generation", { seconds: 5, model: "premium-video" }).credits).toBe(600);
+    expect(() => commerce.deletePricingRule(video!.id)).toThrow();
   });
 
   it("creates catalog orders from server snapshots exactly once", async () => {

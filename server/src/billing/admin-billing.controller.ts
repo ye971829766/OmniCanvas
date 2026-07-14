@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
 import { AdminGuard } from "../auth/auth.guard";
 import { BillingCommerceService } from "./billing-commerce.service";
@@ -39,6 +39,41 @@ export class AdminBillingController {
   @Get("pricing")
   pricing() {
     return this.commerce.getActivePricingRules();
+  }
+
+  @Post("pricing/rules")
+  createPricingRule(
+    @Body() body: {
+      operation: string;
+      model?: string | null;
+      baseCredits?: number;
+      inputCreditsPerMillionTokens?: number;
+      outputCreditsPerMillionTokens?: number;
+      priority?: number;
+      config?: Record<string, unknown>;
+    },
+  ) {
+    return this.commerce.createPricingRule(body || {});
+  }
+
+  @Put("pricing/rules/:id")
+  updatePricingRule(
+    @Param("id") id: string,
+    @Body() body: {
+      baseCredits?: number;
+      inputCreditsPerMillionTokens?: number;
+      outputCreditsPerMillionTokens?: number;
+      priority?: number;
+      config?: Record<string, unknown>;
+      model?: string | null;
+    },
+  ) {
+    return this.commerce.updatePricingRule(id, body || {});
+  }
+
+  @Delete("pricing/rules/:id")
+  deletePricingRule(@Param("id") id: string) {
+    return this.commerce.deletePricingRule(id);
   }
 
   @Post("accounts/:userId/adjust")

@@ -57,10 +57,20 @@ export interface VideoConfig {
   notes?: string;
 }
 
+/** Reusable model icon assets for the admin picker. */
+export interface ModelLogoAsset {
+  id: string;
+  label: string;
+  url: string;
+  brandInitial?: string;
+  brandColor?: string;
+}
+
 export interface ModelConfigState {
   mappings: ModelMapping[];
   imageConfigs?: ImageConfig[];
   videoConfigs?: VideoConfig[];
+  logoLibrary?: ModelLogoAsset[];
   dictionaries?: {
     sizes: string[];
     aspectRatios: string[];
@@ -161,6 +171,7 @@ export class ModelConfigService implements OnModuleInit {
       mappings: [],
       imageConfigs: [],
       videoConfigs: [],
+      logoLibrary: [],
       dictionaries: {
         sizes: ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
         aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
@@ -174,6 +185,63 @@ export class ModelConfigService implements OnModuleInit {
         inpaintModel: "",
       }
     };
+  }
+
+  private normalizeLogoAsset(raw: any, index: number): ModelLogoAsset | null {
+    const url = this.normalizeString(raw?.url);
+    if (!url) return null;
+    const id = this.normalizeString(raw?.id) || `logo-${index + 1}`;
+    const label = this.normalizeString(raw?.label) || id;
+    return {
+      id,
+      label,
+      url,
+      brandInitial: this.normalizeString(raw?.brandInitial) || undefined,
+      brandColor: this.normalizeString(raw?.brandColor) || undefined,
+    };
+  }
+
+  private normalizeLogoLibrary(raw: unknown): ModelLogoAsset[] {
+    if (!Array.isArray(raw)) return [];
+    const out: ModelLogoAsset[] = [];
+    const seenIds = new Set<string>();
+    const seenUrls = new Set<string>();
+    raw.forEach((item, index) => {
+      const logo = this.normalizeLogoAsset(item, index);
+      if (!logo) return;
+      const idKey = logo.id.toLowerCase();
+      const urlKey = logo.url.toLowerCase();
+      if (seenIds.has(idKey) || seenUrls.has(urlKey)) return;
+      seenIds.add(idKey);
+      seenUrls.add(urlKey);
+      out.push(logo);
+    });
+    return out;
+  }
+
+  /** Collect unique icons already used on models so the library isn't empty after upgrade. */
+  private seedLogoLibraryFromMappings(
+    library: ModelLogoAsset[],
+    mappings: ModelMapping[],
+  ): ModelLogoAsset[] {
+    if (library.length > 0) return library;
+    const out: ModelLogoAsset[] = [];
+    const seenUrls = new Set<string>();
+    for (const mapping of mappings) {
+      const url = this.normalizeString(mapping.iconUrl);
+      if (!url) continue;
+      const key = url.toLowerCase();
+      if (seenUrls.has(key)) continue;
+      seenUrls.add(key);
+      out.push({
+        id: `logo-from-${mapping.id}`.slice(0, 64),
+        label: mapping.label || mapping.id,
+        url,
+        brandInitial: mapping.brandInitial,
+        brandColor: mapping.brandColor,
+      });
+    }
+    return out;
   }
 
   private normalizeNumber(value: unknown): number | undefined {
@@ -438,10 +506,16 @@ export class ModelConfigService implements OnModuleInit {
           : ["16x9", "9x16", "1x1", "4x3", "3x4", "21x9"]
       };
       const agentConfig = this.normalizeAgentConfig(parsed.agentConfig);
+      // Only auto-seed from mappings when logoLibrary was never stored (undefined).
+      // An explicit empty array means the admin cleared the library.
+      const logoLibrary = Array.isArray(parsed.logoLibrary)
+        ? this.normalizeLogoLibrary(parsed.logoLibrary)
+        : this.seedLogoLibraryFromMappings([], mappings as ModelMapping[]);
       return {
         mappings: mappings as ModelMapping[],
         imageConfigs: imageConfigs as ImageConfig[],
         videoConfigs: videoConfigs as VideoConfig[],
+        logoLibrary,
         dictionaries,
         agentConfig,
       };
@@ -538,10 +612,26 @@ export class ModelConfigService implements OnModuleInit {
           ? this.mergeAgentConfig(nextState.agentConfig, existing.agentConfig)
           : this.normalizeAgentConfig(existing.agentConfig);
 
+      // logoLibrary: explicit array replaces; omit keeps existing
+      const sanitizedLogoLibrary = Array.isArray(nextState?.logoLibrary)
+        ? this.normalizeLogoLibrary(nextState.logoLibrary)
+        : this.normalizeLogoLibrary(existing.logoLibrary);
+
+      // Validate unique logo ids
+      const logoIdSet = new Set<string>();
+      for (const logo of sanitizedLogoLibrary) {
+        const idLower = logo.id.toLowerCase();
+        if (logoIdSet.has(idLower)) {
+          throw new BadRequestException(`Logo ID "${logo.id}" 已存在，不可重复添加`);
+        }
+        logoIdSet.add(idLower);
+      }
+
       const state: ModelConfigState = {
         mappings: sanitizedMappings as ModelMapping[],
         imageConfigs: sanitizedConfigs as ImageConfig[],
         videoConfigs: sanitizedVideoConfigs as VideoConfig[],
+        logoLibrary: sanitizedLogoLibrary,
         dictionaries: sanitizedDictionaries,
         agentConfig: sanitizedAgent,
       };

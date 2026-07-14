@@ -31,21 +31,6 @@
           </span>
           <div style="display: flex; gap: 12px">
             <el-button
-              type="info"
-              plain
-              style="
-                border-radius: 12px;
-                background: #ffffff;
-                border: 1px solid #e2e8f0;
-                color: #0f172a;
-              "
-              @click="resetToDefaultPrompt"
-              :disabled="saving || loading"
-            >
-              <el-icon style="margin-right: 4px"><Refresh /></el-icon
-              >恢复默认提示词
-            </el-button>
-            <el-button
               type="primary"
               @click="saveConfig"
               :loading="saving"

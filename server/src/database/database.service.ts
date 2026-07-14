@@ -441,11 +441,13 @@ export class DatabaseService implements OnModuleInit {
       VALUES ($id, 'active', $now, $now)
     `).run({ $id: versionId, $now: now });
 
+    // Video unit economics (target ~50–70% AI gross at pack ~¥0.03/credit):
+    // upstream ≈ ¥0.7–1.5/s → charge ~100 credits/s (≈ ¥2.0–3.0/s depending on pack).
     const rules = [
       { id: "v1-llm", operation: "llm_chat", base: 0, input: 1_000_000_000, output: 1_000_000_000, config: {} },
       { id: "v1-image", operation: "image_generation", base: 10_000_000, input: 0, output: 0, config: { qualityMultipliers: { high: 2, hd: 2 }, sizeMultipliers: { "2048x2048": 2, "4096x4096": 4, "4k": 4 } } },
       { id: "v1-edit", operation: "image_edit", base: 10_000_000, input: 0, output: 0, config: { qualityMultipliers: { high: 2, hd: 2 } } },
-      { id: "v1-video", operation: "video_generation", base: 50_000_000, input: 0, output: 0, config: { includedSeconds: 5, additionalMicrosPerSecond: 10_000_000 } },
+      { id: "v1-video", operation: "video_generation", base: 500_000_000, input: 0, output: 0, config: { includedSeconds: 5, additionalMicrosPerSecond: 100_000_000 } },
       { id: "v1-remove-bg", operation: "remove_background", base: 5_000_000, input: 0, output: 0, config: {} },
       { id: "v1-upscale", operation: "upscale_image", base: 8_000_000, input: 0, output: 0, config: { scaleMultipliers: { "2": 1, "4": 1.5 } } },
       { id: "v1-inpaint", operation: "inpaint_image", base: 10_000_000, input: 0, output: 0, config: {} },
@@ -464,6 +466,30 @@ export class DatabaseService implements OnModuleInit {
         $input: rule.input,
         $output: rule.output,
         $config: JSON.stringify(rule.config),
+      });
+    }
+
+    // One-time migration from the old loss-making video default (50 credits / 5s).
+    // Do not overwrite rules that admins have already retuned in the console.
+    const videoRule = rules.find((rule) => rule.id === "v1-video");
+    if (videoRule) {
+      this.dbInstance.query(`
+        UPDATE billing_price_rules
+        SET baseMicros = $base,
+            inputMicrosPerMillionTokens = $input,
+            outputMicrosPerMillionTokens = $output,
+            config = $config
+        WHERE id = $id
+          AND versionId = $versionId
+          AND model IS NULL
+          AND baseMicros = 50000000
+      `).run({
+        $id: videoRule.id,
+        $versionId: versionId,
+        $base: videoRule.base,
+        $input: videoRule.input,
+        $output: videoRule.output,
+        $config: JSON.stringify(videoRule.config),
       });
     }
   }

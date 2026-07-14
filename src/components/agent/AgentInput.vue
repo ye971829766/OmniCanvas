@@ -33,7 +33,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:modelValue", val: string): void;
-  (e: "submit", payload: { text: string; attachments: AgentAttachmentInput[] }): void;
+  (
+    e: "submit",
+    payload: { text: string; attachments: AgentAttachmentInput[] },
+  ): void;
   (e: "stop"): void;
 }>();
 
@@ -146,51 +149,50 @@ const canvasElements = computed(() => {
       return;
     }
 
-      let url = "";
-      let type = "shape";
-      if (tag === "Image") {
-        url = child.url || "";
-        type = "image";
-      } else if (tag === "VideoNode") {
-        url = child.thumbnailUrl || "";
-        type = "video";
-      } else if (tag === "ImageGen" && child.images?.length > 0) {
-        url = child.images[0] || "";
-        type = "image";
-      } else if (tag === "VideoGen") {
-        type = "video";
-      }
+    let url = "";
+    let type = "shape";
+    if (tag === "Image") {
+      url = child.url || "";
+      type = "image";
+    } else if (tag === "VideoNode") {
+      url = child.thumbnailUrl || "";
+      type = "video";
+    } else if (tag === "ImageGen" && child.images?.length > 0) {
+      url = child.images[0] || "";
+      type = "image";
+    } else if (tag === "VideoGen") {
+      type = "video";
+    }
 
-      let name = child.name;
-      if (!name) {
-        if (tag === "Rect") name = "矩形元素";
-        else if (tag === "VideoNode") name = "视频元素";
-        else if (tag === "Text") name = "文本元素";
-        else if (tag === "Frame") name = "画板容器";
-        else if (tag === "Line") name = "线段元素";
-        else if (tag === "Star") name = "星形元素";
-        else if (tag === "Ellipse") name = "椭圆元素";
-        else if (tag === "Group") name = "编组容器";
-        else name = tag || "元素";
-      }
+    let name = child.name;
+    if (!name) {
+      if (tag === "Rect") name = "矩形元素";
+      else if (tag === "VideoNode") name = "视频元素";
+      else if (tag === "Text") name = "文本元素";
+      else if (tag === "Frame") name = "画板容器";
+      else if (tag === "Line") name = "线段元素";
+      else if (tag === "Star") name = "星形元素";
+      else if (tag === "Ellipse") name = "椭圆元素";
+      else if (tag === "Group") name = "编组容器";
+      else name = tag || "元素";
+    }
 
-      const refId =
-        child.refId ||
-        `node_${String(child.innerId ?? child.id ?? Date.now())}`;
-      child.refId = refId;
+    const refId =
+      child.refId || `node_${String(child.innerId ?? child.id ?? Date.now())}`;
+    child.refId = refId;
 
-      elements.push({
-        refId,
-        name,
-        parentName,
-        tag,
-        url,
-        type,
-      });
+    elements.push({
+      refId,
+      name,
+      parentName,
+      tag,
+      url,
+      type,
+    });
 
-      if (child.children?.length) {
-        child.children.forEach((nested: any) => visit(nested, name));
-      }
+    if (child.children?.length) {
+      child.children.forEach((nested: any) => visit(nested, name));
+    }
   };
 
   props.canvasApp.tree.children.forEach((child: any) => visit(child));
@@ -658,21 +660,10 @@ function handleSubmit() {
       </div>
 
       <div class="toolbar-right">
-        <!-- Suggestions button -->
-        <Button
-          unstyled
-          class="toolbar-btn"
-          title="灵感建议"
-          @click="insertSuggestion"
-        >
-          <Lightbulb :size="14" />
-        </Button>
-
         <!-- Char counter or hint helper -->
         <span class="char-counter" v-if="modelValue.length > 0">
           {{ modelValue.length }}/1000
         </span>
-        <span class="kb-hint" v-else> ↵ 发送 / ⇧↵ 换行 </span>
 
         <!-- Send/Stop Button -->
         <Button
@@ -725,9 +716,14 @@ function handleSubmit() {
 
 .agent-input-wrap.is-dragging {
   border-color: var(--accent-primary, var(--p-primary-color));
-  background: color-mix(in srgb, var(--accent-primary, #161618) 3%, var(--surface-panel, #fff));
+  background: color-mix(
+    in srgb,
+    var(--accent-primary, #161618) 3%,
+    var(--surface-panel, #fff)
+  );
   border-style: dashed;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, #161618) 6%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--accent-primary, #161618) 6%, transparent);
 }
 
 .textarea-container {

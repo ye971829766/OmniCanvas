@@ -1,6 +1,11 @@
 <template>
-  <div v-if="authState === 'checking'" class="auth-checking"><el-icon class="is-loading" :size="30"><Loading /></el-icon></div>
-  <AdminLogin v-else-if="authState === 'guest'" @authenticated="handleAuthenticated" />
+  <div v-if="authState === 'checking'" class="auth-checking">
+    <el-icon class="is-loading" :size="30"><Loading /></el-icon>
+  </div>
+  <AdminLogin
+    v-else-if="authState === 'guest'"
+    @authenticated="handleAuthenticated"
+  />
   <el-container
     v-else
     class="admin-dashboard-layout"
@@ -66,7 +71,15 @@
       </div>
 
       <!-- Navigation Menu -->
-      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; width: 100%">
+      <div
+        style="
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          width: 100%;
+        "
+      >
         <div
           v-for="item in navItems"
           :key="item.key"
@@ -85,7 +98,14 @@
             width: 100%;
           "
         >
-          <div style="display: flex; align-items: center; gap: 10px; white-space: nowrap">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              white-space: nowrap;
+            "
+          >
             <el-icon
               :size="18"
               :style="{
@@ -122,7 +142,11 @@
           </span>
         </div>
       </div>
-      <el-button text style="justify-content: flex-start; color: #64748b" @click="handleLogout">
+      <el-button
+        text
+        style="justify-content: flex-start; color: #64748b"
+        @click="handleLogout"
+      >
         <el-icon style="margin-right: 8px"><SwitchButton /></el-icon>退出登录
       </el-button>
     </el-aside>
@@ -163,20 +187,15 @@
               font-weight: 500;
             "
           >
-            {{ route.meta.description || "企业级网关运行指标、信道延迟及配置统计" }}
+            {{
+              route.meta.description || "企业级网关运行指标、信道延迟及配置统计"
+            }}
           </p>
         </div>
 
         <div>
           <el-button
-            v-if="currentKey === 'channels'"
-            type="primary"
-            @click="openChannelModal"
-          >
-            <el-icon style="margin-right: 4px"><Plus /></el-icon>添加上游渠道
-          </el-button>
-          <el-button
-            v-else-if="currentKey === 'users'"
+            v-if="currentKey === 'users'"
             type="primary"
             @click="openUserModal"
           >
@@ -254,6 +273,7 @@
             :loading="loading"
             :mappings-loading="mappingsLoading"
             :dictionaries="dictionaries"
+            :logo-library="logoLibrary"
             @refresh-channels="loadChannels"
             @refresh-mappings="loadMappings"
             @update-ping-result="handleUpdatePingResult"
@@ -290,6 +310,7 @@ import {
   logoutAdmin,
   type Channel,
   type ModelMapping,
+  type ModelLogoAsset,
   type ImageConfig,
   type VideoConfig,
 } from "./utils/api";
@@ -300,7 +321,9 @@ const authState = ref<"checking" | "guest" | "authenticated">("checking");
 
 const currentKey = computed(() => (route.meta?.key as string) || "dashboard");
 
-const modelsSubTab = computed<"mappings" | "templates" | "videoTemplates" | "dictionaries">({
+const modelsSubTab = computed<
+  "mappings" | "templates" | "videoTemplates" | "dictionaries"
+>({
   get() {
     return (route.query.tab as any) || "mappings";
   },
@@ -315,7 +338,14 @@ const navItems = [
   { key: "models", label: "模型目录", icon: Files },
   { key: "users", label: "用户管理", icon: User },
   { key: "billing", label: "计费与支付", icon: CreditCard },
-  { key: "tokens", label: "Token 统计", icon: DataAnalysis, badge: "Live", badgeBg: "#dcfce7", badgeColor: "#15803d" },
+  {
+    key: "tokens",
+    label: "Token 统计",
+    icon: DataAnalysis,
+    badge: "Live",
+    badgeBg: "#dcfce7",
+    badgeColor: "#15803d",
+  },
   { key: "agent", label: "Agent 配置", icon: Cpu },
   { key: "diagnostics", label: "接口测试", icon: ChatLineRound },
 ];
@@ -357,6 +387,7 @@ const dictionaries = ref<{
   qualities: [],
   videoSizes: [],
 });
+const logoLibrary = ref<ModelLogoAsset[]>([]);
 const loading = ref(false);
 const mappingsLoading = ref(false);
 
@@ -417,6 +448,7 @@ async function loadMappings() {
         videoSizes: data.dictionaries.videoSizes || [],
       };
     }
+    logoLibrary.value = Array.isArray(data.logoLibrary) ? data.logoLibrary : [];
   } catch (e) {
     ElMessage.error("获取模型配置失败");
   } finally {
@@ -462,5 +494,12 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.auth-checking { width: 100vw; height: 100vh; display: grid; place-items: center; color: #64748b; background: #f1f3f5; }
+.auth-checking {
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  background: #f1f3f5;
+}
 </style>

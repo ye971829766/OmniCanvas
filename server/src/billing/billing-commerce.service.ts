@@ -247,10 +247,7 @@ export class BillingCommerceService {
   }
 
   getActivePricingRules() {
-    const version = this.db.query(`
-      SELECT * FROM billing_price_versions WHERE status = 'active'
-      ORDER BY publishedAt DESC, createdAt DESC LIMIT 1
-    `).get() as any;
+    const version = this.getActivePriceVersion();
     if (!version) return { version: null, rules: [] };
     const rules = this.db.query(`
       SELECT * FROM billing_price_rules WHERE versionId = $versionId
@@ -258,14 +255,238 @@ export class BillingCommerceService {
     `).all({ $versionId: version.id }) as any[];
     return {
       version,
-      rules: rules.map((row) => ({
-        ...row,
-        baseCredits: Number(row.baseMicros) / CREDIT_MICROS,
-        inputCreditsPerMillionTokens: Number(row.inputMicrosPerMillionTokens) / CREDIT_MICROS,
-        outputCreditsPerMillionTokens: Number(row.outputMicrosPerMillionTokens) / CREDIT_MICROS,
-        config: this.parseJson(row.config) || {},
-      })),
+      rules: rules.map((row) => this.mapPricingRule(row)),
     };
+  }
+
+  createPricingRule(input: {
+    operation: string;
+    model?: string | null;
+    baseCredits?: number;
+    inputCreditsPerMillionTokens?: number;
+    outputCreditsPerMillionTokens?: number;
+    priority?: number;
+    config?: Record<string, unknown>;
+  }) {
+    const version = this.getActivePriceVersion();
+    if (!version) {
+      throw new HttpException("No active billing price version", HttpStatus.BAD_REQUEST);
+    }
+    const operation = String(input.operation || "").trim();
+    if (!operation) {
+      throw new HttpException("operation is required", HttpStatus.BAD_REQUEST);
+    }
+    const model = this.normalizeModel(input.model);
+    const baseMicros = this.creditsToMicros(input.baseCredits ?? 0, "baseCredits");
+    const inputMicros = this.creditsToMicros(
+      input.inputCreditsPerMillionTokens ?? 0,
+      "inputCreditsPerMillionTokens",
+    );
+    const outputMicros = this.creditsToMicros(
+      input.outputCreditsPerMillionTokens ?? 0,
+      "outputCreditsPerMillionTokens",
+    );
+    const priority = this.nonNegativeInteger(input.priority ?? (model ? 10 : 0), "priority");
+    const config = this.normalizeRuleConfig(operation, input.config || {});
+    const id = `rule-${randomUUID()}`;
+
+    try {
+      this.db.query(`
+        INSERT INTO billing_price_rules
+          (id, versionId, operation, model, baseMicros, inputMicrosPerMillionTokens,
+           outputMicrosPerMillionTokens, config, priority)
+        VALUES
+          ($id, $versionId, $operation, $model, $base, $input, $output, $config, $priority)
+      `).run({
+        $id: id,
+        $versionId: version.id,
+        $operation: operation,
+        $model: model,
+        $base: baseMicros,
+        $input: inputMicros,
+        $output: outputMicros,
+        $config: JSON.stringify(config),
+        $priority: priority,
+      });
+    } catch (error: any) {
+      if (String(error?.message || "").includes("UNIQUE")) {
+        throw new ConflictException("A rule for this operation and model already exists");
+      }
+      throw error;
+    }
+
+    return this.getPricingRuleById(id);
+  }
+
+  updatePricingRule(
+    id: string,
+    input: {
+      baseCredits?: number;
+      inputCreditsPerMillionTokens?: number;
+      outputCreditsPerMillionTokens?: number;
+      priority?: number;
+      config?: Record<string, unknown>;
+      model?: string | null;
+    },
+  ) {
+    const existing = this.db.query("SELECT * FROM billing_price_rules WHERE id = ?").get(id) as any;
+    if (!existing) throw new NotFoundException("Pricing rule not found");
+
+    const baseMicros = input.baseCredits === undefined
+      ? Number(existing.baseMicros)
+      : this.creditsToMicros(input.baseCredits, "baseCredits");
+    const inputMicros = input.inputCreditsPerMillionTokens === undefined
+      ? Number(existing.inputMicrosPerMillionTokens)
+      : this.creditsToMicros(input.inputCreditsPerMillionTokens, "inputCreditsPerMillionTokens");
+    const outputMicros = input.outputCreditsPerMillionTokens === undefined
+      ? Number(existing.outputMicrosPerMillionTokens)
+      : this.creditsToMicros(input.outputCreditsPerMillionTokens, "outputCreditsPerMillionTokens");
+    const priority = input.priority === undefined
+      ? Number(existing.priority || 0)
+      : this.nonNegativeInteger(input.priority, "priority");
+    const model = input.model === undefined
+      ? existing.model
+      : this.normalizeModel(input.model);
+    const config = input.config === undefined
+      ? this.parseJson(existing.config) || {}
+      : this.normalizeRuleConfig(existing.operation, input.config);
+
+    try {
+      this.db.query(`
+        UPDATE billing_price_rules
+        SET model = $model,
+            baseMicros = $base,
+            inputMicrosPerMillionTokens = $input,
+            outputMicrosPerMillionTokens = $output,
+            config = $config,
+            priority = $priority
+        WHERE id = $id
+      `).run({
+        $id: id,
+        $model: model,
+        $base: baseMicros,
+        $input: inputMicros,
+        $output: outputMicros,
+        $config: JSON.stringify(config),
+        $priority: priority,
+      });
+    } catch (error: any) {
+      if (String(error?.message || "").includes("UNIQUE")) {
+        throw new ConflictException("A rule for this operation and model already exists");
+      }
+      throw error;
+    }
+
+    return this.getPricingRuleById(id);
+  }
+
+  deletePricingRule(id: string) {
+    const existing = this.db.query("SELECT * FROM billing_price_rules WHERE id = ?").get(id) as any;
+    if (!existing) throw new NotFoundException("Pricing rule not found");
+    if (!existing.model) {
+      throw new HttpException(
+        "Default (all-models) rules cannot be deleted; edit them instead",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    this.db.query("DELETE FROM billing_price_rules WHERE id = ?").run(id);
+    return { deleted: true, id };
+  }
+
+  private getActivePriceVersion() {
+    return this.db.query(`
+      SELECT * FROM billing_price_versions WHERE status = 'active'
+      ORDER BY publishedAt DESC, createdAt DESC LIMIT 1
+    `).get() as any;
+  }
+
+  private getPricingRuleById(id: string) {
+    const row = this.db.query("SELECT * FROM billing_price_rules WHERE id = ?").get(id) as any;
+    if (!row) throw new NotFoundException("Pricing rule not found");
+    return this.mapPricingRule(row);
+  }
+
+  private mapPricingRule(row: any) {
+    const config = this.parseJson(row.config) || {};
+    const displayConfig = { ...config };
+    if (displayConfig.additionalMicrosPerSecond != null) {
+      displayConfig.additionalCreditsPerSecond =
+        Number(displayConfig.additionalMicrosPerSecond) / CREDIT_MICROS;
+    }
+    return {
+      id: row.id,
+      versionId: row.versionId,
+      operation: row.operation,
+      model: row.model || null,
+      baseCredits: Number(row.baseMicros) / CREDIT_MICROS,
+      inputCreditsPerMillionTokens: Number(row.inputMicrosPerMillionTokens) / CREDIT_MICROS,
+      outputCreditsPerMillionTokens: Number(row.outputMicrosPerMillionTokens) / CREDIT_MICROS,
+      priority: Number(row.priority || 0),
+      config: displayConfig,
+    };
+  }
+
+  private normalizeModel(model: unknown): string | null {
+    if (model == null || model === "") return null;
+    const value = String(model).trim();
+    return value || null;
+  }
+
+  private creditsToMicros(value: unknown, field: string): number {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      throw new HttpException(`${field} must be a non-negative number`, HttpStatus.BAD_REQUEST);
+    }
+    const micros = Math.round(numeric * CREDIT_MICROS);
+    if (!Number.isSafeInteger(micros)) {
+      throw new HttpException(`${field} is out of range`, HttpStatus.BAD_REQUEST);
+    }
+    return micros;
+  }
+
+  private nonNegativeInteger(value: unknown, field: string): number {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < 0 || !Number.isInteger(numeric)) {
+      throw new HttpException(`${field} must be a non-negative integer`, HttpStatus.BAD_REQUEST);
+    }
+    return numeric;
+  }
+
+  /**
+   * Accept admin-friendly credits for video overage; persist micros for PricingService.
+   */
+  private normalizeRuleConfig(operation: string, config: Record<string, unknown>) {
+    const next: Record<string, unknown> = { ...config };
+    if (operation === "video_generation") {
+      if (next.additionalCreditsPerSecond != null) {
+        next.additionalMicrosPerSecond = this.creditsToMicros(
+          next.additionalCreditsPerSecond,
+          "additionalCreditsPerSecond",
+        );
+        delete next.additionalCreditsPerSecond;
+      } else if (next.additionalMicrosPerSecond != null) {
+        next.additionalMicrosPerSecond = this.creditsToMicros(
+          Number(next.additionalMicrosPerSecond) / CREDIT_MICROS,
+          "additionalMicrosPerSecond",
+        );
+      }
+      if (next.includedSeconds != null) {
+        next.includedSeconds = this.nonNegativeInteger(next.includedSeconds, "includedSeconds");
+      }
+    }
+    // Drop empty nested maps
+    for (const key of ["qualityMultipliers", "sizeMultipliers", "scaleMultipliers"] as const) {
+      if (next[key] && typeof next[key] === "object") {
+        const cleaned: Record<string, number> = {};
+        for (const [k, v] of Object.entries(next[key] as Record<string, unknown>)) {
+          const n = Number(v);
+          if (k.trim() && Number.isFinite(n) && n > 0) cleaned[k.trim()] = n;
+        }
+        if (Object.keys(cleaned).length) next[key] = cleaned;
+        else delete next[key];
+      }
+    }
+    return next;
   }
 
   private mapProduct(row: any) {

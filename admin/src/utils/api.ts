@@ -114,10 +114,20 @@ export interface VideoConfig {
   notes?: string;
 }
 
+export interface ModelLogoAsset {
+  id: string;
+  label: string;
+  url: string;
+  brandInitial?: string;
+  brandColor?: string;
+}
+
 export interface ModelConfigState {
   mappings: ModelMapping[];
   imageConfigs?: ImageConfig[];
   videoConfigs?: VideoConfig[];
+  /** Reusable model logos — pick when creating/editing a mapping */
+  logoLibrary?: ModelLogoAsset[];
   dictionaries?: {
     sizes: string[];
     aspectRatios: string[];
@@ -403,13 +413,25 @@ export interface BillingOrderAdmin {
 
 export interface BillingPricingRule {
   id: string;
+  versionId?: string;
   operation: string;
   model: string | null;
   baseCredits: number;
   inputCreditsPerMillionTokens: number;
   outputCreditsPerMillionTokens: number;
+  priority?: number;
   config: Record<string, unknown>;
 }
+
+export type BillingPricingRuleInput = {
+  operation?: string;
+  model?: string | null;
+  baseCredits?: number;
+  inputCreditsPerMillionTokens?: number;
+  outputCreditsPerMillionTokens?: number;
+  priority?: number;
+  config?: Record<string, unknown>;
+};
 
 export async function getBillingOverview(): Promise<BillingOverview> {
   return (await axios.get(`${API_BASE_URL}/admin/billing/overview`)).data;
@@ -431,6 +453,20 @@ export async function getBillingPricing(): Promise<{
   rules: BillingPricingRule[];
 }> {
   return (await axios.get(`${API_BASE_URL}/admin/billing/pricing`)).data;
+}
+export async function createBillingPricingRule(
+  body: BillingPricingRuleInput & { operation: string },
+): Promise<BillingPricingRule> {
+  return (await axios.post(`${API_BASE_URL}/admin/billing/pricing/rules`, body)).data;
+}
+export async function updateBillingPricingRule(
+  id: string,
+  body: BillingPricingRuleInput,
+): Promise<BillingPricingRule> {
+  return (await axios.put(`${API_BASE_URL}/admin/billing/pricing/rules/${id}`, body)).data;
+}
+export async function deleteBillingPricingRule(id: string): Promise<{ deleted: boolean; id: string }> {
+  return (await axios.delete(`${API_BASE_URL}/admin/billing/pricing/rules/${id}`)).data;
 }
 export async function adjustUserCredits(
   userId: string,
