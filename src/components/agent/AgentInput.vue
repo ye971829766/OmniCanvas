@@ -6,7 +6,6 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Mention from "@tiptap/extension-mention";
 import {
   Plus,
-  Lightbulb,
   Square,
   ArrowUp,
   X,
@@ -451,21 +450,6 @@ function handleDrop(e: DragEvent) {
     if (isImage) {
       void appendAttachment(file);
     }
-  }
-}
-
-function insertSuggestion() {
-  const suggestionsList = [
-    "上传产品图，生成淘宝、京东和 Amazon 电商套图",
-    "自动重排画布上的所有元素",
-    "做一张咖啡店开业海报，暖色调",
-    "生成一张可爱的橘猫照片",
-    "画一个科技感的产品 banner",
-  ];
-  const rand =
-    suggestionsList[Math.floor(Math.random() * suggestionsList.length)];
-  if (editor.value) {
-    editor.value.chain().focus().setContent(rand).run();
   }
 }
 

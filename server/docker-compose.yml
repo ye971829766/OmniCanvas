@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omnicanvas-backend
+    restart: always
+    environment:
+      - PORT=3000
+      - UPLOAD_DIR=/app/files
+    volumes:
+      - ./files:/app/files
+      - ./data:/app/data
+      - .env:/app/.env
+    ports:
+      - "3000:3000"

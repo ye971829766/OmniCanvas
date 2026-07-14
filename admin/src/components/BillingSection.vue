@@ -977,13 +977,7 @@ function ruleScenario(rule: BillingPricingRule): {
 
   if (op === "video_generation") {
     const included = Math.max(1, Number(cfg.includedSeconds ?? 5));
-    const extra =
-      Number(
-        cfg.additionalCreditsPerSecond ??
-          (cfg.additionalMicrosPerSecond != null
-            ? Number(cfg.additionalMicrosPerSecond) / 1_000_000
-            : 0),
-      ) || 0;
+
     // Scenario: included seconds block (typical default length)
     const credits = base;
     const costYuan = (Number(unitCosts.value.video_generation) || 0) * included;

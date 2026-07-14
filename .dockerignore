@@ -1,13 +1,16 @@
 node_modules
 admin/node_modules
 server/node_modules
-dist
-admin/dist
+# Keep dist/ + admin/dist for prebuilt web image
 server/data
 server/files
 server/.env
 .git
-# npm lockfiles unused by Bun Docker builds (optional local artifacts)
-**/package-lock.json
 **/.npm
 **/.cache
+**/package-lock.json
+agent-integration
+server/realesrgan
+server/test.mp4
+omnicanvas-images.tar
+*.tar

@@ -11,6 +11,11 @@ export default defineConfig({
   base: "/admin/",
   // Share monorepo root .env (VITE_API_CRYPTO, VITE_API_BASE_URL, secrets)
   envDir: path.resolve(__dirname, ".."),
+  build: {
+    sourcemap: process.env.DOCKER_BUILD === "1" ? false : undefined,
+    reportCompressedSize: process.env.DOCKER_BUILD !== "1",
+    chunkSizeWarningLimit: 1500,
+  },
   server: {
     host: "0.0.0.0",
     port: 5174,

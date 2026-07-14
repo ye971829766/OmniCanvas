@@ -406,10 +406,6 @@ function handleUpdatePingResult(payload: { id: string; result: any }) {
   pingResults.value[payload.id] = payload.result;
 }
 
-function openChannelModal() {
-  activeComponentRef.value?.openModal?.();
-}
-
 function openMappingModal() {
   activeComponentRef.value?.openMappingModal?.();
 }

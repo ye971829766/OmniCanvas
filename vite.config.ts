@@ -27,6 +27,12 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ["leafer-x-easy-snap"],
   },
+  // Docker/low-memory builds: skip sourcemaps & gzip size reporting (prevents OOM / exit 139)
+  build: {
+    sourcemap: process.env.DOCKER_BUILD === "1" ? false : undefined,
+    reportCompressedSize: process.env.DOCKER_BUILD !== "1",
+    chunkSizeWarningLimit: 2000,
+  },
   server: {
     host: "0.0.0.0",
     port: 5173,

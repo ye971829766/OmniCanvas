@@ -247,8 +247,21 @@
 
         <el-table-column label="操作" width="280" align="right" fixed="right">
           <template #default="{ row }">
-            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap">
-              <el-button size="small" type="primary" plain @click="openEditModal(row)">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: 6px;
+                flex-wrap: wrap;
+              "
+            >
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                @click="openEditModal(row)"
+              >
                 编辑
               </el-button>
               <el-button
@@ -377,15 +390,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import {
-  User,
-  UserFilled,
-  Lock,
-  Search,
-  Plus,
-  Edit,
-  Delete,
-} from "@element-plus/icons-vue";
+import { User, UserFilled, Lock, Search, Plus } from "@element-plus/icons-vue";
 import {
   getAdminUsers,
   createAdminUser,

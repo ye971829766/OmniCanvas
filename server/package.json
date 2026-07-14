@@ -13,6 +13,7 @@
   },
   "scripts": {
     "dev": "bun --use-system-ca --watch run src/main.ts",
+    "start": "bun --use-system-ca run src/main.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
