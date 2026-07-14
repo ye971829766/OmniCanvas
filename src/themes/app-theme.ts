@@ -234,6 +234,161 @@ export const NoirPreset = definePreset(Aura, {
         },
       },
     },
+    // Aura toast dark tokens assume surface.0 stays white (default PrimeVue
+    // ramp). Our SURFACE_DARK elevates panels (0) and climbs toward light text
+    // (900), so we re-map every severity to that model.
+    toast: {
+      colorScheme: {
+        light: {
+          root: {
+            blur: "1.5px",
+          },
+          info: {
+            background: "color-mix(in srgb, {blue.50}, transparent 5%)",
+            borderColor: "{blue.200}",
+            color: "{blue.600}",
+            detailColor: "{surface.700}",
+            shadow:
+              "0px 4px 8px 0px color-mix(in srgb, {blue.500}, transparent 96%)",
+            closeButton: {
+              hoverBackground: "{blue.100}",
+              focusRing: { color: "{blue.600}", shadow: "none" },
+            },
+          },
+          success: {
+            background: "color-mix(in srgb, {green.50}, transparent 5%)",
+            borderColor: "{green.200}",
+            color: "{green.600}",
+            detailColor: "{surface.700}",
+            shadow:
+              "0px 4px 8px 0px color-mix(in srgb, {green.500}, transparent 96%)",
+            closeButton: {
+              hoverBackground: "{green.100}",
+              focusRing: { color: "{green.600}", shadow: "none" },
+            },
+          },
+          warn: {
+            background: "color-mix(in srgb, {yellow.50}, transparent 5%)",
+            borderColor: "{yellow.200}",
+            color: "{yellow.600}",
+            detailColor: "{surface.700}",
+            shadow:
+              "0px 4px 8px 0px color-mix(in srgb, {yellow.500}, transparent 96%)",
+            closeButton: {
+              hoverBackground: "{yellow.100}",
+              focusRing: { color: "{yellow.600}", shadow: "none" },
+            },
+          },
+          error: {
+            background: "color-mix(in srgb, {red.50}, transparent 5%)",
+            borderColor: "{red.200}",
+            color: "{red.600}",
+            detailColor: "{surface.700}",
+            shadow:
+              "0px 4px 8px 0px color-mix(in srgb, {red.500}, transparent 96%)",
+            closeButton: {
+              hoverBackground: "{red.100}",
+              focusRing: { color: "{red.600}", shadow: "none" },
+            },
+          },
+          secondary: {
+            background: "{surface.100}",
+            borderColor: "{surface.200}",
+            color: "{surface.600}",
+            detailColor: "{surface.700}",
+            shadow:
+              "0px 4px 8px 0px color-mix(in srgb, {surface.500}, transparent 96%)",
+            closeButton: {
+              hoverBackground: "{surface.200}",
+              focusRing: { color: "{surface.600}", shadow: "none" },
+            },
+          },
+          contrast: {
+            background: "{surface.900}",
+            borderColor: "{surface.950}",
+            color: "{surface.50}",
+            detailColor: "{surface.0}",
+            shadow:
+              "0px 4px 8px 0px color-mix(in srgb, {surface.950}, transparent 96%)",
+            closeButton: {
+              hoverBackground: "{surface.800}",
+              focusRing: { color: "{surface.50}", shadow: "none" },
+            },
+          },
+        },
+        dark: {
+          root: {
+            blur: "10px",
+          },
+          info: {
+            background: "color-mix(in srgb, {blue.500}, transparent 78%)",
+            borderColor: "color-mix(in srgb, {blue.400}, transparent 55%)",
+            color: "{blue.300}",
+            detailColor: "{surface.900}",
+            shadow: "0px 4px 16px 0px rgba(0, 0, 0, 0.4)",
+            closeButton: {
+              hoverBackground: "rgba(255, 255, 255, 0.08)",
+              focusRing: { color: "{blue.300}", shadow: "none" },
+            },
+          },
+          success: {
+            background: "color-mix(in srgb, {green.500}, transparent 78%)",
+            borderColor: "color-mix(in srgb, {green.400}, transparent 55%)",
+            color: "{green.300}",
+            detailColor: "{surface.900}",
+            shadow: "0px 4px 16px 0px rgba(0, 0, 0, 0.4)",
+            closeButton: {
+              hoverBackground: "rgba(255, 255, 255, 0.08)",
+              focusRing: { color: "{green.300}", shadow: "none" },
+            },
+          },
+          warn: {
+            background: "color-mix(in srgb, {yellow.500}, transparent 78%)",
+            borderColor: "color-mix(in srgb, {yellow.400}, transparent 55%)",
+            color: "{yellow.300}",
+            detailColor: "{surface.900}",
+            shadow: "0px 4px 16px 0px rgba(0, 0, 0, 0.4)",
+            closeButton: {
+              hoverBackground: "rgba(255, 255, 255, 0.08)",
+              focusRing: { color: "{yellow.300}", shadow: "none" },
+            },
+          },
+          error: {
+            background: "color-mix(in srgb, {red.500}, transparent 78%)",
+            borderColor: "color-mix(in srgb, {red.400}, transparent 55%)",
+            color: "{red.300}",
+            detailColor: "{surface.900}",
+            shadow: "0px 4px 16px 0px rgba(0, 0, 0, 0.4)",
+            closeButton: {
+              hoverBackground: "rgba(255, 255, 255, 0.08)",
+              focusRing: { color: "{red.300}", shadow: "none" },
+            },
+          },
+          secondary: {
+            background: "{surface.100}",
+            borderColor: "{surface.200}",
+            color: "{surface.900}",
+            detailColor: "{surface.700}",
+            shadow: "0px 4px 16px 0px rgba(0, 0, 0, 0.4)",
+            closeButton: {
+              hoverBackground: "{surface.200}",
+              focusRing: { color: "{surface.900}", shadow: "none" },
+            },
+          },
+          contrast: {
+            background: "{surface.900}",
+            borderColor: "{surface.800}",
+            color: "{surface.50}",
+            detailColor: "{surface.100}",
+            shadow: "0px 4px 16px 0px rgba(0, 0, 0, 0.4)",
+            closeButton: {
+              hoverBackground: "{surface.800}",
+              focusRing: { color: "{surface.50}", shadow: "none" },
+            },
+          },
+        },
+      },
+    },
   },
 });
 

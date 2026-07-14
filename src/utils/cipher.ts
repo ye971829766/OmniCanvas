@@ -1,8 +1,10 @@
 /**
  * Browser AES-256-GCM helpers (must match server/src/utils/api-crypto.ts layout).
  *
- * The passphrase is derived into an AES key. When shipped to the browser it is
- * extractable — use HTTPS + RPC tunnel + auth; do not treat this as a vault.
+ * Web Crypto `subtle` is ONLY available in secure contexts:
+ *   - https://...
+ *   - http://localhost / http://127.0.0.1
+ * On http://公网IP:端口, subtle is undefined → encryption must be disabled.
  */
 
 function resolvePassphrase(): string {
@@ -13,7 +15,38 @@ function resolvePassphrase(): string {
   return "omnicanvas_secure_api_key_2026";
 }
 
+/** True when AES-GCM via Web Crypto can actually run in this page. */
+export function isWebCryptoSubtleAvailable(): boolean {
+  try {
+    const c = globalThis.crypto as Crypto | undefined;
+    return Boolean(c && c.subtle && typeof c.subtle.digest === "function");
+  } catch {
+    return false;
+  }
+}
+
+let warnedInsecureCrypto = false;
+
+export function isClientApiCryptoEnabled(): boolean {
+  const flag = String(import.meta.env.VITE_API_CRYPTO || "").toLowerCase() === "true";
+  if (!flag) return false;
+  if (!isWebCryptoSubtleAvailable()) {
+    if (!warnedInsecureCrypto && typeof console !== "undefined") {
+      warnedInsecureCrypto = true;
+      console.warn(
+        "[API Crypto] 当前页面不是安全上下文（需要 HTTPS 或 localhost），" +
+          "已自动关闭接口加密，改用明文请求。上线请配置 HTTPS，或构建时设 VITE_API_CRYPTO=false。",
+      );
+    }
+    return false;
+  }
+  return true;
+}
+
 async function getCryptoKey(): Promise<CryptoKey> {
+  if (!isWebCryptoSubtleAvailable()) {
+    throw new Error("Web Crypto subtle API unavailable (use HTTPS)");
+  }
   const enc = new TextEncoder();
   const keyData = enc.encode(resolvePassphrase());
   const hash = await crypto.subtle.digest("SHA-256", keyData);
@@ -74,8 +107,4 @@ export async function decryptData(ciphertextBase64: string): Promise<string> {
     data,
   );
   return new TextDecoder().decode(decrypted);
-}
-
-export function isClientApiCryptoEnabled(): boolean {
-  return String(import.meta.env.VITE_API_CRYPTO || "").toLowerCase() === "true";
 }

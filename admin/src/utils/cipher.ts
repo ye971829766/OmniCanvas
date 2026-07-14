@@ -1,5 +1,6 @@
 /**
- * Admin AES-256-GCM helpers — keep in sync with src/utils/cipher.ts and server api-crypto.
+ * Admin AES-256-GCM helpers — keep in sync with src/utils/cipher.ts
+ * Web Crypto subtle requires HTTPS or localhost.
  */
 
 function resolvePassphrase(): string {
@@ -10,7 +11,36 @@ function resolvePassphrase(): string {
   return "omnicanvas_secure_api_key_2026";
 }
 
+export function isWebCryptoSubtleAvailable(): boolean {
+  try {
+    const c = globalThis.crypto as Crypto | undefined;
+    return Boolean(c && c.subtle && typeof c.subtle.digest === "function");
+  } catch {
+    return false;
+  }
+}
+
+let warnedInsecureCrypto = false;
+
+export function isClientApiCryptoEnabled(): boolean {
+  const flag = String(import.meta.env.VITE_API_CRYPTO || "").toLowerCase() === "true";
+  if (!flag) return false;
+  if (!isWebCryptoSubtleAvailable()) {
+    if (!warnedInsecureCrypto && typeof console !== "undefined") {
+      warnedInsecureCrypto = true;
+      console.warn(
+        "[API Crypto] 非 HTTPS 页面已自动关闭加密。请使用 HTTPS 或 VITE_API_CRYPTO=false 重新构建。",
+      );
+    }
+    return false;
+  }
+  return true;
+}
+
 async function getCryptoKey(): Promise<CryptoKey> {
+  if (!isWebCryptoSubtleAvailable()) {
+    throw new Error("Web Crypto subtle API unavailable (use HTTPS)");
+  }
   const enc = new TextEncoder();
   const keyData = enc.encode(resolvePassphrase());
   const hash = await crypto.subtle.digest("SHA-256", keyData);
@@ -65,8 +95,4 @@ export async function decryptData(ciphertextBase64: string): Promise<string> {
     data,
   );
   return new TextDecoder().decode(decrypted);
-}
-
-export function isClientApiCryptoEnabled(): boolean {
-  return String(import.meta.env.VITE_API_CRYPTO || "").toLowerCase() === "true";
 }

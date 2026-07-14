@@ -29,6 +29,7 @@ import {
 } from "@/utils/agentMediaState";
 import { resolveAgentCanvasParent } from "@/utils/agentCanvasParent";
 import type { CanvasImageGenerationType } from "@/utils/imageTask";
+import { safeRandomId } from "@/utils/safeId";
 
 /**
  * useAgent — drives the Lovart-style chat panel.
@@ -1284,7 +1285,7 @@ export function useAgent(
       const token = localStorage.getItem("omnicanvas_token");
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "Idempotency-Key": crypto.randomUUID(),
+        "Idempotency-Key": safeRandomId(),
       };
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;

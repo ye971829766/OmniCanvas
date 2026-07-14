@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
 import { decryptData, encryptData, isClientApiCryptoEnabled } from "./cipher";
+import { safeRandomId, safeRandomToken } from "./safeId";
 import { userFacingError } from "./userFacingError";
 
 const API_BASE_URL =
@@ -79,7 +80,7 @@ request.interceptors.request.use(
       ["post", "put", "patch", "delete"].includes(method) &&
       !config.headers["Idempotency-Key"]
     ) {
-      config.headers["Idempotency-Key"] = crypto.randomUUID();
+      config.headers["Idempotency-Key"] = safeRandomId();
     }
 
     const cryptoOn = isClientApiCryptoEnabled();
@@ -113,7 +114,7 @@ request.interceptors.request.use(
             ? undefined
             : config.data ?? undefined,
         t: Date.now(),
-        n: crypto.randomUUID().replace(/-/g, ""),
+        n: safeRandomToken(32),
       };
       const encrypted = await encryptData(JSON.stringify(envelope));
       config.method = "post";

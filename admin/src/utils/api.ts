@@ -4,6 +4,7 @@ import {
   encryptData,
   isClientApiCryptoEnabled,
 } from "./cipher";
+import { safeRandomId } from "./safeId";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
@@ -63,7 +64,7 @@ axios.interceptors.request.use(async (config) => {
     ["post", "put", "patch", "delete"].includes(method) &&
     !config.headers["Idempotency-Key"]
   ) {
-    config.headers["Idempotency-Key"] = crypto.randomUUID();
+    config.headers["Idempotency-Key"] = safeRandomId();
   }
 
   if (!isClientApiCryptoEnabled()) return config;
@@ -89,7 +90,7 @@ axios.interceptors.request.use(async (config) => {
       q: query,
       b: config.data instanceof FormData ? undefined : config.data ?? undefined,
       t: Date.now(),
-      n: crypto.randomUUID().replace(/-/g, ""),
+      n: safeRandomId().replace(/-/g, ""),
     };
     config.method = "post";
     // Keep absolute base for admin (calls use full URL often)

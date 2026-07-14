@@ -1021,11 +1021,20 @@ $logo-size-collapsed: 44px;
 
     .item-menu-btn {
       opacity: 1;
-      color: color-mix(in srgb, #fff 72%, transparent);
+      /* Inverse of the active pill — white on light primary, dark on dark primary */
+      color: color-mix(
+        in srgb,
+        var(--text-inverse, #fff) 72%,
+        transparent
+      );
 
       &:hover {
-        background: color-mix(in srgb, #fff 14%, transparent);
-        color: #fff;
+        background: color-mix(
+          in srgb,
+          var(--text-inverse, #fff) 14%,
+          transparent
+        );
+        color: var(--text-inverse, #fff);
       }
     }
   }

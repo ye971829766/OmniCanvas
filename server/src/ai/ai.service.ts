@@ -1518,35 +1518,47 @@ export class AiService implements OnModuleInit {
         }
         const apiKey = channel.apiKey;
         const baseUrl = channel.baseUrl;
-        const nativeBaseUrl = baseUrl.replace(/\/v1\/?$/, "") + "/v1beta";
-        const url = `${nativeBaseUrl}/models/${upstreamModel}:generateContent?key=${apiKey}`;
-        const isYunWu = baseUrl.includes("yunwu.ai");
+        // Google GenAI SDK expects a host root (e.g. https://yunwu.ai/v1beta),
+        // not the full :generateContent endpoint URL.
+        const nativeBaseUrl = baseUrl
+          .replace(/\/+$/, "")
+          .replace(/\/v1$/i, "")
+          .replace(/\/v1beta$/i, "");
         const googleClient = new GoogleGenAI({
           apiKey: apiKey,
           httpOptions: {
-            baseUrl: isYunWu ? url : baseUrl,
+            baseUrl: `${nativeBaseUrl}/v1beta`,
           },
         });
 
         const contentsParts: any[] = [{ text: prompt }];
 
-        // Support reference images (Image-to-Image / Multi-modal)
+        // Support reference images (Image-to-Image / Multi-modal).
+        // @google/genai expects camelCase `inlineData.mimeType` — snake_case
+        // `inline_data` is ignored and yields:
+        //   required oneof field 'data' must have one initialized field
         if (Array.isArray(body?.images) && body.images.length > 0) {
-          body.images.forEach((imgBase64: any) => {
-            if (typeof imgBase64 === "string") {
-              const matches = imgBase64.match(
-                /^data:(image\/\w+);base64,(.+)$/,
-              );
-              if (matches && matches[2]) {
-                contentsParts.push({
-                  inline_data: {
-                    mime_type: matches[1]!,
-                    data: matches[2]!,
-                  },
-                });
-              }
+          let accepted = 0;
+          for (const imgBase64 of body.images) {
+            if (typeof imgBase64 !== "string" || !imgBase64.trim()) continue;
+            const matches = imgBase64
+              .replace(/\s+/g, "")
+              .match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
+            if (matches?.[1] && matches[2]) {
+              contentsParts.push({
+                inlineData: {
+                  mimeType: matches[1],
+                  data: matches[2],
+                },
+              });
+              accepted += 1;
             }
-          });
+          }
+          if (accepted === 0) {
+            throw new Error(
+              "参考图数据无效：未能解析为 data:image/*;base64,... 格式，请重新上传素材后重试",
+            );
+          }
         }
 
         // Resolve a valid imageSize (quality) for native Gemini

@@ -296,6 +296,34 @@ video {
   background-color: transparent !important;
 }
 
+/* ==================== PrimeVue Toast Theme Adaptation ==================== */
+/* Complements app-theme.ts toast colorScheme — keeps container chrome consistent */
+.p-toast {
+  opacity: 1;
+}
+
+.p-toast .p-toast-message {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 12px !important;
+}
+
+.p-toast .p-toast-message-content {
+  align-items: flex-start;
+}
+
+.p-toast .p-toast-summary {
+  font-weight: 600;
+}
+
+.p-toast .p-toast-detail {
+  margin-top: 0.15rem;
+}
+
+.p-toast .p-toast-close-button {
+  border-radius: 50% !important;
+}
+
 /* ==================== PrimeVue Image Preview Dark Mode Overrides ==================== */
 .p-dark .p-image-preview-mask,
 .p-dark .p-image-mask {
