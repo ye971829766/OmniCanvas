@@ -1,338 +1,288 @@
 <template>
   <div class="relative h-full flex">
-    <!-- Sidebar Container -->
     <div
       ref="containerRef"
-      class="h-full bg-[var(--p-surface-0)] border-r border-[var(--p-surface-200)] flex flex-col overflow-hidden"
-      style="width: 288px; padding: 10px"
+      class="sidebar-shell"
+      :class="{ 'is-collapsed': collapsed }"
     >
-      <!-- Content Wrapper -->
-      <div class="flex flex-col h-full justify-start">
-        <!-- header -->
-        <div class="w-full flex items-center justify-between">
-          <!-- Left side: logo/title, or expand button when collapsed -->
-          <div class="flex items-center">
+      <div class="sidebar-inner">
+        <!-- Header -->
+        <div class="sidebar-header">
+          <div class="sidebar-brand">
             <div
+              class="logo-btn-wrapper"
               @mouseenter="handleEnter"
               @mouseleave="handleLeave"
-              class="logo-btn-wrapper h-30px overflow-hidden relative flex items-center justify-center"
             >
-              <!-- Show Logo when expanded, or when collapsed and NOT hovered -->
-              <img
+              <span
                 v-if="!collapsed || !openShow"
-                src="@/assets/logo.jpg"
-                alt="OmniCanvas"
-                key="logo"
-                width="30"
-                height="30"
-                style="width: 30px; height: 30px; object-fit: cover"
-                class="w-30px h-30px rounded-full shadow-sm shrink-0"
-              />
-              <!-- Show Expand Button when collapsed and hovered -->
-              <Button
+                class="brand-mark"
+                aria-hidden="true"
+              >
+                <img
+                  class="brand-mark-img"
+                  :src="logoUrl"
+                  alt=""
+                  draggable="false"
+                />
+              </span>
+              <button
                 v-else
-                text
-                rounded
-                size="small"
+                type="button"
                 title="展开"
-                key="expand"
-                class="flex items-center justify-center p-0"
+                class="sidebar-icon-btn"
+                aria-label="展开侧栏"
                 @click="collapsed = false"
               >
-                <PanelRightClose :size="18" />
-              </Button>
+                <PanelRightClose :size="18" :stroke-width="2" />
+              </button>
             </div>
 
-            <!-- Title (visible only when expanded) -->
             <Transition name="fade">
-              <span
-                v-if="renderExpandedContent"
-                class="ml-2.5 text-xl font-bold font-mono tracking-wide whitespace-nowrap"
-              >
-                Omni
+              <span v-if="renderExpandedContent" class="brand-title">
+                OmniCanvas
               </span>
             </Transition>
           </div>
 
-          <!-- Collapse Button (visible only when expanded) -->
           <Transition name="fade">
-            <Button
+            <button
               v-if="renderExpandedContent"
-              rounded
-              size="small"
-              text
+              type="button"
               title="收起"
-              class="flex items-center justify-center p-0"
+              class="sidebar-icon-btn"
+              aria-label="收起侧栏"
               @click="collapsed = true"
             >
-              <PanelLeftClose :size="18" />
-            </Button>
+              <PanelLeftClose :size="18" :stroke-width="2" />
+            </button>
           </Transition>
         </div>
 
-        <!-- actions -->
-        <div class="flex items-center gap-1 flex-col mt-2">
-          <Button
-            variant="text"
-            rounded
-            class="w-full !pl-0 !pr-0 action-item"
+        <!-- Primary actions -->
+        <div class="sidebar-actions" :class="{ 'is-collapsed': collapsed }">
+          <button
+            type="button"
+            class="nav-action"
+            :class="{ 'is-collapsed': collapsed }"
+            title="创建新工作空间"
             @click="createNewWorkspace"
           >
-            <div
-              class="w-full flex items-center"
-              :class="{
-                'justify-between': !collapsed,
-                'justify-center': collapsed,
-              }"
-            >
-              <div class="flex justify-center gap-1">
-                <SquarePen :size="18" class="shrink-0" />
-                <Transition name="fade">
-                  <span v-if="renderExpandedContent" class="whitespace-nowrap"
-                    >创建新工作空间</span
-                  >
-                </Transition>
-              </div>
-              <Transition name="fade">
-                <span
-                  class="color-[var(--p-text-color)] key-tip whitespace-nowrap"
-                  v-if="renderExpandedContent"
-                  >Ctrl+Shift+O</span
-                >
-              </Transition>
-            </div>
-          </Button>
+            <SquarePen :size="17" :stroke-width="2" class="nav-action-icon" />
+            <Transition name="fade">
+              <span v-if="renderExpandedContent" class="nav-action-label">
+                新建工作空间
+              </span>
+            </Transition>
+            <Transition name="fade">
+              <kbd v-if="renderExpandedContent" class="key-tip"
+                >Ctrl+Shift+O</kbd
+              >
+            </Transition>
+          </button>
 
-          <Button
-            variant="text"
-            rounded
-            class="w-full !pl-0 !pr-0 action-item"
+          <button
+            type="button"
+            class="nav-action"
+            :class="{
+              'is-collapsed': collapsed,
+              'is-active': showSearch && !collapsed,
+            }"
+            title="搜索工作空间"
             @click="toggleSearch"
           >
-            <div
-              class="w-full flex items-center"
-              :class="{
-                'justify-between': !collapsed,
-                'justify-center': collapsed,
-              }"
-            >
-              <div class="flex justify-center gap-1">
-                <Search :size="18" class="shrink-0" />
-                <Transition name="fade">
-                  <span v-if="renderExpandedContent" class="whitespace-nowrap"
-                    >搜索工作空间</span
-                  >
-                </Transition>
-              </div>
-              <Transition name="fade">
-                <span
-                  class="color-[var(--p-text-color)] key-tip whitespace-nowrap"
-                  v-if="renderExpandedContent"
-                  >Ctrl+Shift+F</span
-                >
-              </Transition>
-            </div>
-          </Button>
+            <Search :size="17" :stroke-width="2" class="nav-action-icon" />
+            <Transition name="fade">
+              <span v-if="renderExpandedContent" class="nav-action-label">
+                搜索工作空间
+              </span>
+            </Transition>
+            <Transition name="fade">
+              <kbd v-if="renderExpandedContent" class="key-tip"
+                >Ctrl+Shift+F</kbd
+              >
+            </Transition>
+          </button>
         </div>
 
-        <!-- Search Input Field -->
-        <div v-if="showSearch && !collapsed" class="px-1 mt-2">
-          <div class="relative w-full flex items-center">
-            <input
-              ref="searchInputRef"
-              v-model="searchQuery"
-              type="text"
-              placeholder="搜索工作空间..."
-              class="w-full px-3 py-1.5 pr-8 text-sm rounded-lg border border-[var(--p-surface-200)] bg-[var(--p-surface-0)] text-[var(--p-text-color)] focus:outline-none focus:border-[var(--p-primary-color)] placeholder-[var(--p-text-muted-color)] transition-colors"
-              @keydown.esc="
-                showSearch = false;
-                searchQuery = '';
-              "
-            />
-            <Button
-              v-if="searchQuery"
-              variant="text"
-              rounded
-              class="absolute right-1 !p-1 w-6 h-6 flex items-center justify-center text-[var(--p-text-muted-color)]"
-              @click="searchQuery = ''"
-            >
-              <span class="text-xs">×</span>
-            </Button>
+        <!-- Search -->
+        <div v-if="showSearch && !collapsed" class="search-wrap">
+          <input
+            ref="searchInputRef"
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索工作空间..."
+            class="search-input"
+            @keydown.esc="
+              showSearch = false;
+              searchQuery = '';
+            "
+          />
+          <button
+            v-if="searchQuery"
+            type="button"
+            class="search-clear"
+            title="清空"
+            aria-label="清空搜索"
+            @click="searchQuery = ''"
+          >
+            <X :size="14" />
+          </button>
+        </div>
+
+        <!-- Workspace list -->
+        <div v-if="!collapsed" class="history-list">
+          <div v-if="filteredWorkspaces.length === 0" class="list-empty">
+            {{ searchQuery ? "无匹配工作空间" : "暂无工作空间" }}
           </div>
-        </div>
-
-        <!-- Main content placeholder -->
-        <div
-          class="flex-1 overflow-x-hidden overflow-y-auto history-list mt-2"
-          v-if="!collapsed"
-        >
-          <div class="flex flex-col gap-0.5 pr-1">
+          <div v-else class="history-items">
             <div
-              class="w-full flex justify-between p-1 items-center relative history-item rounded-lg transition-colors duration-150 cursor-pointer"
-              :class="{
-                'bg-[var(--p-surface-100)]':
-                  String(activeWorkspaceId) === String(item.id),
-                'hover:bg-[var(--p-surface-50)]':
-                  String(activeWorkspaceId) !== String(item.id),
-              }"
               v-for="item in filteredWorkspaces"
               :key="item.id"
+              class="history-item"
+              :class="{
+                'is-active': String(activeWorkspaceId) === String(item.id),
+              }"
               @click="selectWorkspace(item)"
             >
-              <div class="flex-1 flex items-center min-w-0 pl-2 py-1">
-                <span
-                  class="workspace-name-span whitespace-nowrap overflow-hidden text-ellipsis"
-                  :data-id="item.id"
-                  v-tooltip="{
-                    value: item.name,
-                    disabled: !isOverflowMap[item.id],
-                  }"
-                >
-                  {{ item.name }}
-                </span>
-              </div>
+              <span
+                class="workspace-name-span"
+                :data-id="item.id"
+                v-tooltip="{
+                  value: item.name,
+                  disabled: !isOverflowMap[item.id],
+                }"
+              >
+                {{ item.name }}
+              </span>
 
-              <Button
-                variant="text"
-                rounded
-                class="action !p-1 w-7 h-7 flex items-center justify-center shrink-0"
+              <button
+                type="button"
+                class="item-menu-btn"
+                title="更多"
+                aria-label="工作空间菜单"
                 @click.stop="toggleMenu($event, item)"
               >
-                <EllipsisVertical
-                  :size="16"
-                  color="var(--p-text-muted-color)"
-                />
-              </Button>
+                <EllipsisVertical :size="15" :stroke-width="2" />
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- Footer Profile & Settings -->
-        <div class="border-t border-[var(--p-surface-100)] pt-4 mt-auto">
-          <Button
+        <!-- Footer -->
+        <div class="sidebar-footer">
+          <button
             v-if="isLoggedIn && renderExpandedContent"
-            variant="text"
-            class="!justify-between !px-3 !py-2 mb-2 w-full rounded-xl bg-[var(--p-surface-50)] hover:bg-[var(--p-surface-100)]"
+            type="button"
+            class="credits-card"
             title="查看积分与账单"
             @click="openBilling('plans')"
           >
-            <span class="flex items-center gap-2 text-xs font-semibold text-[var(--p-text-muted-color)]">
-              <Coins :size="16" /> 可用积分
+            <span class="credits-label">
+              <Coins :size="15" :stroke-width="2" />
+              可用积分
             </span>
-            <span class="text-xs font-bold text-[var(--p-text-color)]">
-              {{ balanceLoading ? "—" : formatBalance(balance?.availableCredits || 0) }}
+            <span class="credits-value">
+              {{
+                balanceLoading
+                  ? "—"
+                  : formatBalance(balance?.availableCredits || 0)
+              }}
             </span>
-          </Button>
-          <Button
+          </button>
+          <button
             v-else-if="isLoggedIn"
-            variant="text"
-            rounded
-            class="!p-1.5 mb-3 mx-auto w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)]"
+            type="button"
+            class="sidebar-icon-btn footer-icon-solo"
             :title="`可用积分 ${formatBalance(balance?.availableCredits || 0)}`"
             @click="openBilling('plans')"
           >
-            <Coins :size="18" />
-          </Button>
-          <!-- Expanded State -->
-          <div
-            v-if="renderExpandedContent"
-            key="expanded"
-            class="flex items-center justify-between w-full px-1"
-          >
-            <div
-              class="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity min-w-0 flex-1 mr-1"
+            <Coins :size="18" :stroke-width="2" />
+          </button>
+
+          <!-- Expanded footer -->
+          <div v-if="renderExpandedContent" class="footer-row">
+            <button
+              type="button"
+              class="user-chip"
               @click="isLoggedIn ? openProfileModal() : openAuthModal('login')"
             >
-              <div
-                class="w-30px h-30px rounded-full bg-[var(--p-primary-color)] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0 shadow-sm overflow-hidden"
-              >
+              <span class="user-avatar" aria-hidden="true">
                 <img
                   v-if="currentUser?.avatarUrl"
                   :src="currentUser.avatarUrl"
-                  alt="Avatar"
-                  class="w-full h-full object-cover"
+                  alt=""
+                  class="user-avatar-img"
                 />
                 <template v-else>{{ userInitials }}</template>
-              </div>
-              <span
-                class="text-sm font-medium text-[var(--p-text-color)] whitespace-nowrap overflow-hidden text-ellipsis"
-              >
-                {{ displayName }}
               </span>
-            </div>
-            <div class="flex items-center gap-0.5">
-              <Button
+              <span class="user-name">{{ displayName }}</span>
+            </button>
+
+            <div class="footer-actions">
+              <button
                 v-if="!isLoggedIn"
-                variant="text"
-                rounded
-                size="small"
-                class="!px-2 !py-1 text-xs text-[var(--p-primary-color)] font-semibold shrink-0"
+                type="button"
+                class="login-link"
                 @click="openAuthModal('login')"
               >
                 登录
-              </Button>
-              <Button
-                variant="text"
-                rounded
-                class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
+              </button>
+              <button
+                type="button"
+                class="sidebar-icon-btn"
                 :title="isDark ? '切换到亮色模式' : '切换到暗色模式'"
                 @click="toggleTheme"
               >
-                <Sun v-if="isDark" :size="18" />
-                <Moon v-else :size="18" />
-              </Button>
-              <Button
+                <Sun v-if="isDark" :size="17" :stroke-width="2" />
+                <Moon v-else :size="17" :stroke-width="2" />
+              </button>
+              <button
                 v-if="isLoggedIn"
-                variant="text"
-                rounded
-                class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
+                type="button"
+                class="sidebar-icon-btn"
                 title="个人中心"
                 @click="openProfileModal"
               >
-                <Settings :size="18" />
-              </Button>
+                <Settings :size="17" :stroke-width="2" />
+              </button>
             </div>
           </div>
 
-          <!-- Collapsed State -->
-          <div
-            v-else
-            key="collapsed"
-            class="flex flex-col items-center gap-4 w-full"
-          >
-            <Button
-              variant="text"
-              rounded
-              class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
+          <!-- Collapsed footer -->
+          <div v-else class="footer-collapsed">
+            <button
+              type="button"
+              class="sidebar-icon-btn"
               :title="isDark ? '切换到亮色模式' : '切换到暗色模式'"
               @click="toggleTheme"
             >
-              <Sun v-if="isDark" :size="18" />
-              <Moon v-else :size="18" />
-            </Button>
-            <Button
+              <Sun v-if="isDark" :size="17" :stroke-width="2" />
+              <Moon v-else :size="17" :stroke-width="2" />
+            </button>
+            <button
               v-if="isLoggedIn"
-              variant="text"
-              rounded
-              class="!p-1.5 w-8 h-8 flex items-center justify-center text-[var(--p-text-muted-color)] hover:text-[var(--p-text-color)] shrink-0"
+              type="button"
+              class="sidebar-icon-btn"
               title="个人中心"
               @click="openProfileModal"
             >
-              <Settings :size="18" />
-            </Button>
-            <div
-              class="w-30px h-30px rounded-full bg-[var(--p-primary-color)] flex items-center justify-center text-white text-xs font-semibold select-none shrink-0 cursor-pointer shadow-sm overflow-hidden"
+              <Settings :size="17" :stroke-width="2" />
+            </button>
+            <button
+              type="button"
+              class="user-avatar user-avatar-btn"
               :title="displayName"
               @click="isLoggedIn ? openProfileModal() : openAuthModal('login')"
             >
               <img
                 v-if="currentUser?.avatarUrl"
                 :src="currentUser.avatarUrl"
-                alt="Avatar"
-                class="w-full h-full object-cover"
+                alt=""
+                class="user-avatar-img"
               />
               <template v-else>{{ userInitials }}</template>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -345,24 +295,19 @@
       :dismissable="true"
       :pt="{ content: { style: { padding: '4px' } } }"
     >
-      <div class="flex flex-col gap-0.5 min-w-100px">
-        <Button
-          variant="text"
-          class="!justify-start !py-1.5 !px-3 text-sm flex items-center gap-2 w-full hover:bg-[var(--p-surface-100)] rounded-md text-[var(--p-text-color)]"
-          @click="renameWorkspace"
-        >
-          <Pencil :size="14" class="text-[var(--p-text-muted-color)]" />
+      <div class="menu-popover">
+        <button type="button" class="menu-item" @click="renameWorkspace">
+          <Pencil :size="14" class="menu-item-icon" />
           <span>重命名</span>
-        </Button>
-        <Button
-          variant="text"
-          severity="danger"
-          class="!justify-start !py-1.5 !px-3 text-sm flex items-center gap-2 w-full hover:bg-red-50 dark:hover:bg-red-950/20 rounded-md text-red-500"
+        </button>
+        <button
+          type="button"
+          class="menu-item is-danger"
           @click="confirmDelete"
         >
           <Trash2 :size="14" />
           <span>删除</span>
-        </Button>
+        </button>
       </div>
     </Popover>
 
@@ -373,12 +318,10 @@
       header="重命名工作区"
       :style="{ width: '25rem' }"
     >
-      <div class="flex flex-col gap-2 pt-2">
-        <label
-          for="newWorkspaceName"
-          class="text-sm font-semibold text-[var(--p-text-muted-color)]"
-          >请输入新工作空间名称:</label
-        >
+      <div class="rename-dialog-body">
+        <label for="newWorkspaceName" class="rename-label">
+          请输入新工作空间名称
+        </label>
         <InputText
           id="newWorkspaceName"
           v-model="newWorkspaceName"
@@ -399,6 +342,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
+import logoUrl from "@/assets/logo.png";
 import {
   PanelLeftClose,
   PanelRightClose,
@@ -411,6 +355,7 @@ import {
   Sun,
   Moon,
   Coins,
+  X,
 } from "lucide-vue-next";
 import { gsap } from "gsap";
 import vTooltip from "primevue/tooltip";
@@ -431,7 +376,8 @@ const {
   openProfileModal,
 } = useUser();
 const { balance, balanceLoading, openBilling, refreshBalance } = useBilling();
-const formatBalance = (value: number) => new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(value);
+const formatBalance = (value: number) =>
+  new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(value);
 
 const props = defineProps<{
   activeWorkspaceId: string | number | null;
@@ -447,6 +393,7 @@ import {
   updateWorkspace,
   deleteWorkspace,
 } from "@/utils/api";
+
 const confirm = useConfirm();
 const toast = useToast();
 const collapsed = ref(false);
@@ -454,7 +401,6 @@ const containerRef = ref<HTMLElement | null>(null);
 const openShow = ref(false);
 const renderExpandedContent = ref(true);
 
-// Workspaces list
 const workspaces = ref<any[]>([]);
 
 const loadWorkspaces = async () => {
@@ -484,16 +430,13 @@ const selectWorkspace = (item: any) => {
   emit("update:activeWorkspaceId", item.id);
 };
 
-// Menu Popover state
 const menuPopoverRef = ref();
 const selectedWorkspace = ref<any>(null);
 
-// Search state
 const searchQuery = ref("");
 const showSearch = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
 
-// Rename state
 const renameDialogVisible = ref(false);
 const newWorkspaceName = ref("");
 
@@ -656,18 +599,19 @@ watch(collapsed, (isCollapsed) => {
   if (isCollapsed) {
     renderExpandedContent.value = false;
     openShow.value = false;
+    // 68 = 12 + 44 + 12 — room for a readable mark (logo asset is icon+wordmark)
     gsap.to(containerRef.value, {
-      width: 52,
-      paddingLeft: 10,
-      paddingRight: 10,
+      width: 68,
+      paddingLeft: 12,
+      paddingRight: 12,
       duration: 0.35,
       ease: "power2.inOut",
     });
   } else {
     gsap.to(containerRef.value, {
-      width: 288,
-      paddingLeft: 10,
-      paddingRight: 10,
+      width: 280,
+      paddingLeft: 12,
+      paddingRight: 12,
       duration: 0.25,
       ease: "power2.inOut",
       onComplete: () => {
@@ -678,7 +622,6 @@ watch(collapsed, (isCollapsed) => {
   }
 });
 
-// Tooltip logic using PrimeVue v-tooltip for overflowing text
 const isOverflowMap = ref<Record<string, boolean>>({});
 
 const checkAllOverflows = () => {
@@ -703,6 +646,648 @@ watch(
 </script>
 
 <style lang="scss" scoped>
+.sidebar-shell {
+  height: 100%;
+  width: 280px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-panel, var(--p-surface-0));
+  border-right: 1px solid var(--border-color);
+  /* Lift white chrome off the darker canvas plane */
+  box-shadow:
+    1px 0 0 var(--border-subtle),
+    8px 0 24px rgba(16, 24, 40, 0.04);
+  z-index: 2;
+}
+
+:global(.p-dark) .sidebar-shell {
+  box-shadow:
+    1px 0 0 var(--border-subtle),
+    8px 0 24px rgba(0, 0, 0, 0.28);
+}
+
+.sidebar-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Shared collapsed rail size — nav / footer icons */
+$rail-size: 36px;
+/* Logo mark is larger than icons so the multicolored O stays legible */
+$logo-size: 40px;
+$logo-size-collapsed: 44px;
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: $logo-size;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.logo-btn-wrapper {
+  width: $logo-size;
+  height: $logo-size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-mark {
+  width: $logo-size;
+  height: $logo-size;
+  display: block;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+.brand-mark-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.brand-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary, var(--p-text-color));
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.sidebar-icon-btn {
+  width: $rail-size;
+  height: $rail-size;
+  min-width: $rail-size;
+  min-height: $rail-size;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary, var(--p-text-muted-color));
+  cursor: pointer;
+  transition:
+    color var(--dur-fast, 150ms) var(--ease-default, ease),
+    background var(--dur-fast, 150ms) var(--ease-default, ease);
+}
+
+.sidebar-icon-btn:hover {
+  color: var(--text-primary, var(--p-text-color));
+  background: var(--surface-hover, var(--p-surface-100));
+}
+
+/* Collapsed: one vertical center line for logo + actions + footer */
+.sidebar-shell.is-collapsed {
+  .sidebar-header {
+    justify-content: center;
+    min-height: $logo-size-collapsed;
+    margin-bottom: 12px;
+  }
+
+  .sidebar-brand {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .logo-btn-wrapper {
+    width: $logo-size-collapsed;
+    height: $logo-size-collapsed;
+  }
+
+  .brand-mark {
+    width: $logo-size-collapsed;
+    height: $logo-size-collapsed;
+    border-radius: 12px;
+  }
+
+  .sidebar-actions {
+    align-items: center;
+    width: 100%;
+  }
+
+  .sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .footer-icon-solo {
+    margin: 0 0 10px;
+  }
+}
+
+/* ── Actions ────────────────────────────────────────────────────── */
+.sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.sidebar-actions.is-collapsed {
+  align-items: center;
+}
+
+.nav-action {
+  width: 100%;
+  min-height: $rail-size;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary, var(--p-text-color));
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast, 150ms) var(--ease-default, ease),
+    color var(--dur-fast, 150ms) var(--ease-default, ease);
+
+  &.is-collapsed {
+    width: $rail-size;
+    height: $rail-size;
+    min-height: $rail-size;
+    padding: 0;
+    justify-content: center;
+  }
+
+  &.is-active {
+    background: var(--surface-active, var(--p-surface-100));
+    font-weight: 600;
+  }
+
+  &:hover {
+    background: var(--surface-hover, var(--p-surface-50));
+
+    .key-tip {
+      opacity: 1;
+    }
+  }
+
+  &.is-active:hover {
+    background: var(--surface-active, var(--p-surface-100));
+  }
+}
+
+.nav-action-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary, var(--p-text-muted-color));
+}
+
+.nav-action:hover .nav-action-icon,
+.nav-action.is-active .nav-action-icon {
+  color: var(--text-primary, var(--p-text-color));
+}
+
+.nav-action-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.key-tip {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted, var(--p-text-muted-color));
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity var(--dur-fast, 150ms) ease;
+  pointer-events: none;
+}
+
+/* ── Search ─────────────────────────────────────────────────────── */
+.search-wrap {
+  position: relative;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 32px 0 12px;
+  border: 1px solid var(--border-color, var(--p-surface-200));
+  border-radius: 10px;
+  background: var(--surface-sunken, var(--p-surface-50));
+  color: var(--text-primary, var(--p-text-color));
+  font-size: 13px;
+  outline: none;
+  transition:
+    border-color var(--dur-fast, 150ms) ease,
+    box-shadow var(--dur-fast, 150ms) ease;
+
+  &::placeholder {
+    color: var(--text-muted, var(--p-text-muted-color));
+  }
+
+  &:focus {
+    border-color: var(--accent-primary, var(--p-primary-color));
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--accent-primary, #161618) 8%, transparent);
+    background: var(--surface-panel, var(--p-surface-0));
+  }
+}
+
+.search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted, var(--p-text-muted-color));
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-primary, var(--p-text-color));
+    background: var(--surface-hover, var(--p-surface-100));
+  }
+}
+
+/* ── Workspace list ─────────────────────────────────────────────── */
+.history-list {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin-top: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+
+  &:hover {
+    scrollbar-color: var(--p-surface-300, rgba(0, 0, 0, 0.15)) transparent;
+  }
+
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 99px;
+  }
+  &:hover::-webkit-scrollbar-thumb {
+    background: var(--p-surface-300, rgba(0, 0, 0, 0.15));
+  }
+}
+
+.list-empty {
+  padding: 16px 10px;
+  font-size: 12.5px;
+  color: var(--text-muted, var(--p-text-muted-color));
+  text-align: center;
+}
+
+.history-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-right: 2px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 4px 0 10px;
+  border-radius: 10px;
+  /* Default list text is primary-adjacent so the rail doesn't look washed-out */
+  color: color-mix(
+    in srgb,
+    var(--text-primary, #1a1b1e) 72%,
+    var(--text-secondary, #5f646e)
+  );
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast, 150ms) ease,
+    color var(--dur-fast, 150ms) ease;
+
+  &:hover {
+    background: var(--surface-hover, var(--p-surface-50));
+    color: var(--text-primary, var(--p-text-color));
+
+    .item-menu-btn {
+      opacity: 1;
+    }
+  }
+
+  /* Solid black selected — matches canvas bottom toolbar active pill */
+  &.is-active {
+    background: var(--accent-primary, var(--p-primary-color, #18181b));
+    color: var(--text-inverse, #ffffff);
+    font-weight: 600;
+
+    .item-menu-btn {
+      opacity: 1;
+      color: color-mix(in srgb, #fff 72%, transparent);
+
+      &:hover {
+        background: color-mix(in srgb, #fff 14%, transparent);
+        color: #fff;
+      }
+    }
+  }
+
+  &.is-active:hover {
+    background: var(--accent-primary, var(--p-primary-color, #18181b));
+    color: var(--text-inverse, #ffffff);
+  }
+}
+
+.workspace-name-span {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+
+.item-menu-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted, var(--p-text-muted-color));
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity var(--dur-fast, 150ms) ease,
+    background var(--dur-fast, 150ms) ease,
+    color var(--dur-fast, 150ms) ease;
+
+  &:hover {
+    background: var(--surface-active, var(--p-surface-200));
+    color: var(--text-primary, var(--p-text-color));
+  }
+}
+
+/* ── Footer ─────────────────────────────────────────────────────── */
+.sidebar-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.credits-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-color, var(--p-surface-200));
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast, 150ms) ease,
+    border-color var(--dur-fast, 150ms) ease;
+
+  &:hover {
+    background: var(--surface-hover, var(--p-surface-100));
+    border-color: var(--border-strong, var(--p-surface-300));
+  }
+}
+
+.credits-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted, var(--p-text-muted-color));
+}
+
+.credits-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary, var(--p-text-color));
+}
+
+.footer-icon-solo {
+  display: flex;
+  margin: 0 auto 10px;
+}
+
+.footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+  margin-right: 2px;
+  padding: 4px 6px 4px 4px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast, 150ms) ease;
+
+  &:hover {
+    background: var(--surface-hover, var(--p-surface-100));
+  }
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--accent-primary, var(--p-primary-color, #161618));
+  color: var(--text-inverse, #fff);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  overflow: hidden;
+  user-select: none;
+}
+
+.user-avatar.user-avatar-btn {
+  /* Collapsed rail: keep 28px visual size (icons are ~17px in 36px hit boxes) */
+  width: 28px;
+  height: 28px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  box-sizing: border-box;
+  border-radius: 8px;
+  margin: 4px 0;
+}
+
+.user-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.user-name {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, var(--p-text-color));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.login-link {
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary, var(--p-text-color));
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--surface-hover, var(--p-surface-100));
+  }
+}
+
+.footer-collapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+/* ── Popover / dialog ───────────────────────────────────────────── */
+.menu-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary, var(--p-text-color));
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--surface-hover, var(--p-surface-100));
+  }
+
+  &.is-danger {
+    color: var(--accent-error, #ff3b30);
+  }
+
+  &.is-danger:hover {
+    background: color-mix(
+      in srgb,
+      var(--accent-error, #ff3b30) 8%,
+      transparent
+    );
+  }
+}
+
+.menu-item-icon {
+  color: var(--text-muted, var(--p-text-muted-color));
+}
+
+.menu-item.is-danger .menu-item-icon {
+  color: inherit;
+}
+
+.rename-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.rename-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted, var(--p-text-muted-color));
+}
+
+/* ── Transitions ────────────────────────────────────────────────── */
 .fade-enter-active,
 .fade-leave-active {
   transition:
@@ -713,33 +1298,11 @@ watch(
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-  transform: scale(0.9);
+  transform: scale(0.96);
 }
 
-.action-item {
-  .key-tip {
-    opacity: 0;
-  }
-  &:hover {
-    .key-tip {
-      opacity: 1;
-    }
-  }
-}
-
-.history-item {
-  color: var(--p-text-color);
-  font-size: var(--text-base);
-  font-weight: 500;
-
-  .action {
-    opacity: 0;
-  }
-  cursor: pointer;
-  &:hover {
-    .action {
-      opacity: 1;
-    }
-  }
+:global(.p-dark .user-avatar) {
+  background: var(--p-primary-color, #f4f4f6);
+  color: var(--p-primary-contrast-color, #18181b);
 }
 </style>

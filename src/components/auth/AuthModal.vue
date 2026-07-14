@@ -20,7 +20,7 @@
     <template #header>
       <div class="flex items-center gap-2.5">
         <img
-          src="@/assets/logo.jpg"
+          src="@/assets/logo.png"
           alt="OmniCanvas"
           class="w-7 h-7 rounded-lg object-cover shadow-sm"
         />

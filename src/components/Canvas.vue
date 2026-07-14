@@ -1,5 +1,12 @@
 <template>
-  <main class="canvas-container">
+  <main
+    class="canvas-container"
+    :class="{ 'is-file-drag-over': isFileDragOver }"
+    @dragenter="onFileDragEnter"
+    @dragover="onFileDragOver"
+    @dragleave="onFileDragLeave"
+    @drop="onFileDrop"
+  >
     <CanvasLoader :loading="canvasLoading" />
     <CanvasBackground ref="canvasBgRef" :leafer-app="canvasApp" />
     <div
@@ -8,6 +15,15 @@
       style="z-index: 1"
       @contextmenu.prevent
     ></div>
+
+    <!-- External file drop affordance (images / videos) -->
+    <div v-if="isFileDragOver" class="file-drop-overlay" aria-hidden="true">
+      <div class="file-drop-card">
+        <i class="pi pi-cloud-upload file-drop-icon"></i>
+        <div class="file-drop-title">拖放到画布</div>
+        <div class="file-drop-hint">支持图片与视频</div>
+      </div>
+    </div>
     <ElementInfoLabel
       v-if="selectTarget"
       :target="selectTarget"
@@ -245,7 +261,7 @@ import {
   onMounted,
   onUnmounted,
 } from "vue";
-import logoImg from "@/assets/logo.jpg";
+import logoImg from "@/assets/logo.png";
 import { useToast } from "primevue/usetoast";
 import CanvasBackground from "@/components/canvas/CanvasBackground.vue";
 import CanvasLoader from "@/components/canvas/CanvasLoader.vue";
@@ -442,7 +458,106 @@ const handleFileInputChange = (e: Event) => {
   if (target.files && target.files.length > 0) {
     onUploadFile(target.files[0]);
   }
+  // Allow re-selecting the same file
+  target.value = "";
 };
+
+/** True when the OS drag payload includes files (not text/links-only). */
+function hasFilePayload(dt: DataTransfer | null | undefined): boolean {
+  if (!dt) return false;
+  return Array.from(dt.types || []).includes("Files");
+}
+
+/** Convert browser client coords → Leafer world coords on the canvas tree. */
+function clientToWorldPoint(
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } | null {
+  const app = canvasApp.value;
+  const el = canvasRef.value;
+  if (!app || !el) return null;
+
+  const rect = el.getBoundingClientRect();
+  const zoomLayer: any =
+    (app.tree as any)?.zoomLayer ?? (app as any).zoomLayer ?? app.tree;
+  const scaleX = Number(zoomLayer?.scaleX ?? zoomLayer?.scale ?? 1) || 1;
+  const scaleY = Number(zoomLayer?.scaleY ?? zoomLayer?.scale ?? 1) || 1;
+  const panX = Number(zoomLayer?.x ?? 0) || 0;
+  const panY = Number(zoomLayer?.y ?? 0) || 0;
+
+  return {
+    x: (clientX - rect.left - panX) / scaleX,
+    y: (clientY - rect.top - panY) / scaleY,
+  };
+}
+
+const isFileDragOver = ref(false);
+
+function onFileDragEnter(e: DragEvent) {
+  if (!hasFilePayload(e.dataTransfer)) return;
+  e.preventDefault();
+  isFileDragOver.value = true;
+}
+
+function onFileDragOver(e: DragEvent) {
+  if (!hasFilePayload(e.dataTransfer)) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  isFileDragOver.value = true;
+}
+
+function onFileDragLeave(e: DragEvent) {
+  if (!hasFilePayload(e.dataTransfer)) return;
+  e.preventDefault();
+  // Ignore leave events that merely move into a child of the canvas shell
+  const container = e.currentTarget as HTMLElement | null;
+  const related = e.relatedTarget as Node | null;
+  if (container && related && container.contains(related)) return;
+  isFileDragOver.value = false;
+}
+
+async function onFileDrop(e: DragEvent) {
+  e.preventDefault();
+  isFileDragOver.value = false;
+
+  const files = Array.from(e.dataTransfer?.files || []);
+  if (!files.length) return;
+
+  const world = clientToWorldPoint(e.clientX, e.clientY);
+  const mediaFiles = files.filter((f) => isImageFile(f) || isVideoFile(f));
+  const rejected = files.length - mediaFiles.length;
+
+  if (rejected > 0) {
+    toast.add({
+      severity: "warn",
+      summary: "部分文件已跳过",
+      detail: `仅支持图片与视频，已忽略 ${rejected} 个文件`,
+      life: 3000,
+    });
+  }
+
+  if (!mediaFiles.length) {
+    toast.add({
+      severity: "error",
+      summary: "格式不支持",
+      detail: "请拖入图片（PNG/JPG/WEBP…）或视频（MP4/WEBM/GIF…）",
+      life: 3000,
+    });
+    return;
+  }
+
+  // Stagger multi-file drops so they don't stack on the same point
+  const STAGGER = 40;
+  for (let i = 0; i < mediaFiles.length; i++) {
+    const point = world
+      ? { x: world.x + i * STAGGER, y: world.y + i * STAGGER }
+      : null;
+    await onUploadFile(mediaFiles[i], {
+      point,
+      skipZoom: i < mediaFiles.length - 1,
+    });
+  }
+}
 
 const getElementBase64 = async (el: any): Promise<string> => {
   if (typeof el.export === "function") {
@@ -760,9 +875,31 @@ const onSubmitLink = async (url: string) => {
   }
 };
 
-const onUploadFile = async (file: File) => {
-  console.log(file, isImageFile(file));
+type UploadFileOptions = {
+  /** Explicit world-space drop/anchor point (center of media). */
+  point?: { x: number; y: number } | null;
+  /** Skip camera zoom (useful when placing many files in a batch). */
+  skipZoom?: boolean;
+};
+
+const onUploadFile = async (file: File, options: UploadFileOptions = {}) => {
+  const anchorPoint =
+    options.point !== undefined ? options.point : contextMenuPoint.value;
+  const skipZoom = Boolean(options.skipZoom);
+
+  if (!isImageFile(file) && !isVideoFile(file)) {
+    toast.add({
+      severity: "error",
+      summary: "格式不支持",
+      detail: "仅支持图片与视频文件",
+      life: 3000,
+    });
+    return;
+  }
+
   try {
+    canvasLoading.value = true;
+
     if (isImageFile(file)) {
       const res = await uploadImage(file);
       if (res && canvasApp.value && canvasApp.value.tree) {
@@ -798,11 +935,11 @@ const onUploadFile = async (file: File) => {
               margin: 50,
             });
 
-            const targetX = contextMenuPoint.value
-              ? contextMenuPoint.value.x - naturalWidth / 2
+            const targetX = anchorPoint
+              ? anchorPoint.x - naturalWidth / 2
               : coords.x;
-            const targetY = contextMenuPoint.value
-              ? contextMenuPoint.value.y - naturalHeight / 2
+            const targetY = anchorPoint
+              ? anchorPoint.y - naturalHeight / 2
               : coords.y;
 
             const image = new Image({
@@ -818,24 +955,25 @@ const onUploadFile = async (file: File) => {
               recordHistoryDebounced();
 
               // 平滑移动画布到该元素
-              setTimeout(() => {
-                if (canvasApp.value?.tree) {
-                  (canvasApp.value.tree as any).zoom(
-                    image,
-                    100,
-                    undefined,
-                    0.8,
-                  );
-                }
-              }, 100);
+              if (!skipZoom) {
+                setTimeout(() => {
+                  if (canvasApp.value?.tree) {
+                    (canvasApp.value.tree as any).zoom(
+                      image,
+                      100,
+                      undefined,
+                      0.8,
+                    );
+                  }
+                }, 100);
+              }
             }
             resolve();
           };
           img.onerror = reject;
         });
       }
-    }
-    if (isVideoFile(file)) {
+    } else if (isVideoFile(file)) {
       const res = await uploadVideo(file);
       if (res && canvasApp.value && canvasApp.value.tree) {
         const { videoUrl, thumbnailUrl } = res;
@@ -847,8 +985,8 @@ const onUploadFile = async (file: File) => {
 
         await new Promise<void>((resolve, reject) => {
           video.onloadedmetadata = () => {
-            const naturalWidth = video.videoWidth;
-            const naturalHeight = video.videoHeight;
+            const naturalWidth = video.videoWidth || 640;
+            const naturalHeight = video.videoHeight || 360;
 
             // 获取画布上所有元素的边界框
             const existingBounds = Array.from(
@@ -873,11 +1011,11 @@ const onUploadFile = async (file: File) => {
               margin: 50,
             });
 
-            const targetX = contextMenuPoint.value
-              ? contextMenuPoint.value.x - naturalWidth / 2
+            const targetX = anchorPoint
+              ? anchorPoint.x - naturalWidth / 2
               : coords.x;
-            const targetY = contextMenuPoint.value
-              ? contextMenuPoint.value.y - naturalHeight / 2
+            const targetY = anchorPoint
+              ? anchorPoint.y - naturalHeight / 2
               : coords.y;
 
             VideoNode.create({
@@ -895,16 +1033,18 @@ const onUploadFile = async (file: File) => {
                   recordHistoryDebounced();
 
                   // 平滑移动画布到该元素
-                  setTimeout(() => {
-                    if (canvasApp.value?.tree) {
-                      (canvasApp.value.tree as any).zoom(
-                        videoNode,
-                        100,
-                        undefined,
-                        0.8,
-                      );
-                    }
-                  }, 100);
+                  if (!skipZoom) {
+                    setTimeout(() => {
+                      if (canvasApp.value?.tree) {
+                        (canvasApp.value.tree as any).zoom(
+                          videoNode,
+                          100,
+                          undefined,
+                          0.8,
+                        );
+                      }
+                    }, 100);
+                  }
                 }
                 resolve();
               })
@@ -926,6 +1066,8 @@ const onUploadFile = async (file: File) => {
       detail,
       life: 3000,
     });
+  } finally {
+    canvasLoading.value = false;
   }
 };
 
@@ -1181,7 +1323,7 @@ defineExpose({
   --blue-text: var(--p-primary-color);
   --brand-bg: var(--p-primary-100, var(--p-surface-100));
   --brand-text: var(--p-primary-color);
-  --bg-color: var(--p-surface-50);
+  --bg-color: var(--surface-app, var(--p-surface-50));
   --border-color: var(--p-surface-200);
   --text-primary: var(--p-text-color);
   --text-secondary: var(--p-text-muted-color);
@@ -1223,6 +1365,59 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+.canvas-container.is-file-drag-over {
+  outline: 2px dashed
+    color-mix(in srgb, var(--p-primary-color, #18181b) 35%, transparent);
+  outline-offset: -10px;
+}
+
+.file-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--p-surface-0, #fff) 42%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.file-drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 28px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color, var(--p-surface-200));
+  background: var(--surface-panel, var(--p-surface-0));
+  box-shadow: var(--shadow-lg, 0 16px 40px rgba(16, 24, 40, 0.1));
+  color: var(--text-primary, var(--p-text-color));
+}
+
+.file-drop-icon {
+  font-size: 28px;
+  line-height: 1;
+  color: var(--text-secondary, var(--p-text-muted-color));
+  margin-bottom: 4px;
+}
+
+.file-drop-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.file-drop-hint {
+  font-size: 12.5px;
+  color: var(--text-secondary, var(--p-text-muted-color));
+}
+
+:global(.p-dark) .file-drop-overlay {
+  background: color-mix(in srgb, #000 35%, transparent);
 }
 
 .canvas-top-controls {

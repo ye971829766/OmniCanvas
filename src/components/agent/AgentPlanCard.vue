@@ -358,7 +358,7 @@ function getStepLabel(status: PlanVisualStatus) {
 }
 
 .progress-completed {
-  background: var(--accent-success, #34c759);
+  background: var(--accent-primary, var(--p-primary-color, #161618));
 }
 
 .progress-failed {

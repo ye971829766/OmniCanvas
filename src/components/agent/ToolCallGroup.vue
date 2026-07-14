@@ -139,13 +139,14 @@ function truncate(s: string, n: number) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: var(--agent-surface-hover, var(--p-surface-100, #f4f4f5));
-  border: 1px solid var(--agent-border-subtle, var(--p-surface-200, #e4e4e7));
+  /* Stay light on white agent panel — do not use canvas-level surface-100 */
+  background: color-mix(in srgb, var(--p-surface-900, #1a1b1e) 3.5%, var(--p-surface-0, #fff));
+  border: 1px solid color-mix(in srgb, var(--p-surface-900, #1a1b1e) 8%, var(--p-surface-0, #fff));
   padding: 3px 10px;
   border-radius: 99px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--agent-text-secondary, var(--p-text-muted-color, #71717a));
+  color: var(--p-surface-600, #5c616b);
   cursor: pointer;
   user-select: none;
   transition: all 0.18s ease;
@@ -155,14 +156,14 @@ function truncate(s: string, n: number) {
 .is-running .inline-action-btn {
   position: relative;
   overflow: hidden;
-  border-color: rgba(16, 185, 129, 0.35);
+  border-color: color-mix(in srgb, var(--p-surface-900, #1a1b1e) 12%, var(--p-surface-0, #fff));
   background: linear-gradient(
     90deg,
-    var(--agent-surface-hover, var(--p-surface-100, #f4f4f5)) 0%,
-    var(--agent-surface-hover, var(--p-surface-100, #f4f4f5)) 30%,
-    rgba(16, 185, 129, 0.18) 50%,
-    var(--agent-surface-hover, var(--p-surface-100, #f4f4f5)) 70%,
-    var(--agent-surface-hover, var(--p-surface-100, #f4f4f5)) 100%
+    color-mix(in srgb, var(--p-surface-900, #1a1b1e) 3.5%, #fff) 0%,
+    color-mix(in srgb, var(--p-surface-900, #1a1b1e) 3.5%, #fff) 30%,
+    color-mix(in srgb, var(--p-surface-900, #1a1b1e) 7%, #fff) 50%,
+    color-mix(in srgb, var(--p-surface-900, #1a1b1e) 3.5%, #fff) 70%,
+    color-mix(in srgb, var(--p-surface-900, #1a1b1e) 3.5%, #fff) 100%
   );
   background-size: 220% 100%;
   animation: group-shimmer-sweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -176,10 +177,12 @@ function truncate(s: string, n: number) {
 
 .inline-action-btn:hover {
   color: var(--agent-text-primary, var(--p-text-color, #27272a));
+  background: color-mix(in srgb, var(--p-surface-900, #1a1b1e) 5.5%, var(--p-surface-0, #fff));
+  border-color: color-mix(in srgb, var(--p-surface-900, #1a1b1e) 11%, var(--p-surface-0, #fff));
 }
 
 .inline-spin-sparkle {
-  color: var(--accent-success, #15803d);
+  color: var(--accent-primary, var(--p-primary-color));
   display: flex;
   align-items: center;
 }
@@ -248,7 +251,7 @@ function truncate(s: string, n: number) {
 }
 
 .row-header:hover {
-  background: var(--agent-surface-hover, var(--p-surface-100, #f4f4f5));
+  background: color-mix(in srgb, var(--p-surface-900, #1a1b1e) 4%, var(--p-surface-0, #fff));
   color: var(--agent-text-primary, var(--p-text-color, #18181b));
 }
 
@@ -261,11 +264,11 @@ function truncate(s: string, n: number) {
 }
 
 .row-bullet.done {
-  background: var(--accent-success, #15803d);
+  background: var(--accent-success, #34c759);
 }
 
 .row-bullet.failed {
-  background: var(--accent-error, #dc2626);
+  background: var(--accent-error, #ff3b30);
 }
 
 .row-label {

@@ -21,21 +21,24 @@ import Aura from "@primeuix/themes/aura";
  */
 
 // ── Warm-neutral surface ramp (light) ───────────────────────────────────────
-// 0 = white panels · 50 = app canvas · 100 = hover/selected · 200 = hairline
-// border · 900 = primary text · 950 = near-black CTA.
+// Monotonic (darker as index rises). Three planes are mapped in tokens.css:
+//   surface-0   → pure-white chrome panels (sidebar / agent)
+//   surface-50  → app canvas + soft fills (light, airy)
+//   surface-100 → hover/selected soft fills on white
+//   surface-200 → solid hairline borders
 const SURFACE_LIGHT = {
   0: "#ffffff",
-  50: "#f5f6f7",
-  100: "#f2f3f5",
-  200: "#ececee",
-  300: "#e0e1e4",
-  400: "#c4c6ca",
-  500: "#9a9ca1",
-  600: "#86868b",
-  700: "#5f6165",
-  800: "#3a3b3e",
-  900: "#1d1d1f",
-  950: "#161618",
+  50: "#f5f6f8",
+  100: "#eceef2",
+  200: "#dde0e5",
+  300: "#c8ccd3",
+  400: "#a0a5ae",
+  500: "#7b808a",
+  600: "#5f646e",
+  700: "#484c54",
+  800: "#2f3237",
+  900: "#1a1b1e",
+  950: "#111214",
 };
 
 // ── Surface ramp (dark) — proper elevation, not a naive inversion ───────────
@@ -87,7 +90,7 @@ export const NoirPreset = definePreset(Aura, {
         text: {
           color: "{surface.900}", // #1d1d1f primary text
           hoverColor: "{surface.950}",
-          mutedColor: "{surface.600}", // #86868b secondary text
+          mutedColor: "{surface.600}", // secondary text — readable on white chrome
           hoverMutedColor: "{surface.700}",
         },
         content: {

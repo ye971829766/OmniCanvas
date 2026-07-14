@@ -148,7 +148,8 @@
 <script setup lang="ts">
 import { Sparkles, Plus, X } from "lucide-vue-next";
 import ModelSelector from "@/components/ModelSelector.vue";
-import { generateImage, type ImageModelOptionsResponse } from "@/utils/api";
+import { type ImageModelOptionsResponse } from "@/utils/api";
+import { startImageGenBatch } from "@/utils/startImageGenBatch";
 import { ref, watch, type PropType, onUnmounted, computed } from "vue";
 import type {
   ToolbarChangePayload,
@@ -368,46 +369,50 @@ const handleGenerate = async () => {
   errorMessage.value = "";
 
   const targetAny = props.target as any;
+  const count = Math.max(1, Math.floor(Number(n.value) || 1));
+
   targetAny.set({
     prompt: promptText.value,
     model: selectedModel.value,
     size: selectedSize.value,
     quality: selectedQuality.value,
     aspectRatio: selectedAspectRatio.value,
-    n: n.value,
+    n: count,
     errorMessage: "",
     generationStatus: "generating",
   });
 
   emit("change", { key: "generationStatus", value: "generating" });
+  emit("change", { key: "n", value: count, skipHistory: true });
 
   try {
-    const payload: any = {
-      prompt: promptText.value,
-      model: selectedModel.value,
-      size: selectedSize.value,
-      quality: selectedQuality.value,
-      aspectRatio: selectedAspectRatio.value,
-      n: n.value,
-    };
+    const result = await startImageGenBatch({
+      sourceNode: targetAny,
+      params: {
+        prompt: promptText.value,
+        model: selectedModel.value,
+        size: selectedSize.value,
+        quality: selectedQuality.value,
+        aspectRatio: selectedAspectRatio.value,
+        images:
+          referenceImages.value.length > 0
+            ? referenceImages.value
+            : undefined,
+        n: count,
+      },
+      maxCount: imageOptions.value?.maxGenerationCount ?? 16,
+    });
 
-    if (referenceImages.value.length > 0) {
-      payload.images = referenceImages.value;
-    }
-    console.log("[ImageGenTool] payload:", payload);
+    emit("change", {
+      key: "taskId",
+      value: targetAny.taskId,
+      skipHistory: true,
+    });
+    popoverRef.value?.hide();
 
-    const res = await generateImage(payload);
-
-    if (res && res.taskId) {
-      targetAny.set({
-        taskId: res.taskId,
-        generationStatus: "generating",
-      });
-      targetAny.emit("task-start", { bubbles: true });
-      emit("change", { key: "taskId", value: res.taskId });
-      popoverRef.value?.hide();
-    } else {
-      throw new Error("No taskId returned from API");
+    if (result.errors.some(Boolean)) {
+      const failed = result.errors.filter(Boolean).length;
+      errorMessage.value = `${result.successCount} 个任务已启动，${failed} 个失败`;
     }
   } catch (err: any) {
     console.error("[ImageGenTool] failed:", err);

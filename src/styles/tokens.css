@@ -41,11 +41,12 @@
      ═══════════════════════════════════════════════════════════════════ */
 
   /* ── Surfaces ────────────────────────────────────────────────── */
-  --surface-app     : var(--p-surface-50);   /* app canvas / outermost bg    */
-  --surface-panel   : var(--p-surface-0);    /* white floating panels/cards  */
-  --surface-hover   : var(--p-surface-100);  /* hover / selected row         */
-  --surface-active  : var(--p-surface-200);  /* pressed / active             */
-  --surface-sunken  : var(--p-surface-50);   /* inset areas (inputs, wells)  */
+  /* Canvas is a soft step below pure-white panels (not mid-gray) */
+  --surface-app     : var(--p-surface-50);
+  --surface-panel   : var(--p-surface-0);
+  --surface-hover   : var(--p-surface-50);
+  --surface-active  : var(--p-surface-100);
+  --surface-sunken  : var(--p-surface-50);
 
   /* Back-compat numeric aliases (some components read --surface-N directly) */
   --surface-0   : var(--p-surface-0);
@@ -70,19 +71,19 @@
   --accent-error   : #ff3b30;                   /* surfaces                   */
   --accent-brand   : #34c759;                   /* ripples / "thinking" glow  */
 
-  /* ── Borders ─────────────────────────────────────────────────── */
-  --border-color   : var(--p-surface-200);   /* default hairline (#ececee)   */
+  /* ── Borders: solid hairlines (opacity borders create visual haze) ── */
+  --border-color   : var(--p-surface-200);
   --border-subtle  : var(--p-surface-100);
   --border-default : var(--p-surface-200);
   --border-strong  : var(--p-surface-300);
 
-  /* ── Shadows (soft, creative-tool depth) ─────────────────────── */
-  --shadow-sm : 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md : 0 4px 16px rgba(0, 0, 0, 0.06);
-  --shadow-lg : 0 12px 32px rgba(0, 0, 0, 0.10);
+  /* ── Shadows: enough lift to separate white chrome from canvas ── */
+  --shadow-sm : 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-md : 0 4px 14px rgba(16, 24, 40, 0.07), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-lg : 0 16px 40px rgba(16, 24, 40, 0.1), 0 2px 6px rgba(16, 24, 40, 0.04);
 
   /* ── Glassmorphism ───────────────────────────────────────────── */
-  --glass-bg     : color-mix(in srgb, var(--p-surface-0) 85%, transparent);
+  --glass-bg     : color-mix(in srgb, var(--p-surface-0) 88%, transparent);
   --glass-border : var(--p-surface-200);
   --glass-blur   : blur(12px);
 
@@ -90,12 +91,21 @@
   --color-transition-duration : 250ms;
 }
 
-/* Dark-mode shadow softening (colors themselves come from PrimeVue) */
+/* Dark-mode shadow / border (colors themselves come from PrimeVue) */
 .p-dark {
   color-scheme: dark;
+  /* Dark: canvas stays darkest (50), panels elevated (0) — see SURFACE_DARK */
+  --surface-app     : var(--p-surface-50);
+  --surface-hover   : var(--p-surface-100);
+  --surface-active  : var(--p-surface-100);
+  --surface-sunken  : var(--p-surface-50);
+  --border-color   : var(--p-surface-200);
+  --border-subtle  : var(--p-surface-100);
+  --border-default : var(--p-surface-200);
+  --border-strong  : var(--p-surface-300);
   --shadow-sm : 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md : 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg : 0 12px 32px rgba(0, 0, 0, 0.55);
+  --shadow-md : 0 4px 16px rgba(0, 0, 0, 0.38), 0 1px 3px rgba(0, 0, 0, 0.22);
+  --shadow-lg : 0 16px 40px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.28);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

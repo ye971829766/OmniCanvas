@@ -25,11 +25,12 @@ export interface Ripple {
 // ---------------------------------------------------------------------------
 
 const LIGHT = {
-  bgStart: "#ffffff", // Pure white center
-  bgEnd: "#f1f5f9",   // Soft slate 100 edge
-  dot: { r: 100, g: 116, b: 139 }, // Slate 500
-  dotOpacity: 0.22,
-  spacing: 32,        // Classic Figma spacing (32px)
+  // Light airy canvas — white chrome panels still separate via border/shadow
+  bgStart: "#f7f8fa",
+  bgEnd: "#eef0f3",
+  dot: { r: 120, g: 130, b: 148 },
+  dotOpacity: 0.26,
+  spacing: 32,
 } as const;
 
 const DARK = {

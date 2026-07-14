@@ -18,7 +18,7 @@
       >
         <div class="flex items-center gap-3">
           <img
-            src="@/assets/logo.jpg"
+            src="@/assets/logo.png"
             alt="OmniCanvas Logo"
             class="w-9 h-9 rounded-xl object-cover shadow-md"
           />
@@ -52,7 +52,7 @@
       >
         <div class="flex items-center gap-3 mb-6 md:hidden">
           <img
-            src="@/assets/logo.jpg"
+            src="@/assets/logo.png"
             alt="OmniCanvas Logo"
             class="w-8 h-8 rounded-lg object-cover shadow-sm"
           />

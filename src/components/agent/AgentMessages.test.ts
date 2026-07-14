@@ -209,7 +209,7 @@ describe("AgentMessages execution timeline", () => {
     expect(status?.getAttribute("role")).toBe("status");
     expect(status?.querySelector(".thinking-label")?.textContent).toBe("正在思考");
     expect(agentMessagesSource).toContain(
-      "--thinking-ink: var(--agent-text-primary, #18181b)",
+      "--thinking-ink: var(--agent-text-primary, #1d1d1f)",
     );
     expect(agentMessagesSource).toContain("@supports ((-webkit-background-clip: text)");
     expect(agentMessagesSource).toContain("animation: thinking-text-sheen 2.2s linear infinite");

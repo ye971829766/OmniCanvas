@@ -223,8 +223,8 @@ function handleZoomToNode(refId: string) {
         />
       </div>
 
-      <!-- Messages -->
-      <div ref="messagesRef" class="flex-1 min-h-0 flex flex-col">
+      <!-- Messages (slightly sunken well for depth) -->
+      <div ref="messagesRef" class="agent-messages-well">
         <AgentMessages
           ref="scrollRef"
           :messages="messages"
@@ -247,10 +247,9 @@ function handleZoomToNode(refId: string) {
           type="button"
           @click="undoLastRun"
         >
-          <Undo2 :size="14" />
-          撤销本次 AI 修改
+          <Undo2 :size="13" />
+          撤销本次修改
         </button>
-        <!-- Input Wrap -->
         <AgentInput
           v-model="input"
           :running="running"
@@ -276,9 +275,18 @@ function handleZoomToNode(refId: string) {
   background: var(--surface-panel);
   border-left: 1px solid var(--border-color);
   overflow: hidden;
-  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.08);
-  transition: width 0.25s cubic-bezier(0.45, 0, 0.55, 1);
+  /* White card plane floating on darker canvas */
+  box-shadow:
+    -1px 0 0 var(--border-subtle),
+    -12px 0 32px rgba(16, 24, 40, 0.07);
+  transition: width var(--dur-normal, 0.25s) var(--ease-smooth, cubic-bezier(0.45, 0, 0.55, 1));
   will-change: transform, opacity, width;
+}
+
+:global(.p-dark .agent-panel) {
+  box-shadow:
+    -1px 0 0 var(--border-subtle),
+    -12px 0 32px rgba(0, 0, 0, 0.42);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -294,11 +302,21 @@ function handleZoomToNode(refId: string) {
   flex-shrink: 0;
 }
 
+.agent-messages-well {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Keep the whole agent panel as one white plane (avoids gray "fog" band) */
+  background: var(--surface-panel);
+}
+
 .agent-panel-bottom {
   position: relative;
   display: flex;
   flex-direction: column;
   background: var(--surface-panel);
+  border-top: 1px solid var(--border-color);
   z-index: 50;
 }
 
@@ -306,20 +324,26 @@ function handleZoomToNode(refId: string) {
   align-self: flex-end;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin: 8px 12px 0;
-  padding: 6px 10px;
+  gap: 5px;
+  margin: 10px 14px 0;
+  padding: 5px 10px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--surface-panel);
+  border-radius: 8px;
+  background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition:
+    color var(--dur-fast, 150ms) var(--ease-default, ease),
+    background var(--dur-fast, 150ms) var(--ease-default, ease),
+    border-color var(--dur-fast, 150ms) var(--ease-default, ease);
 }
 
 .undo-agent-run:hover {
   color: var(--text-primary);
-  background: var(--p-surface-100);
+  background: var(--surface-hover, var(--p-surface-100));
+  border-color: var(--border-strong, var(--p-surface-300));
 }
 
 .scroll-to-bottom-btn {

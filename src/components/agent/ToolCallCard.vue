@@ -63,12 +63,13 @@ const statusLabel = computed(() => {
 <style scoped>
 .tool-event {
   min-width: 0;
+  min-height: 22px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: var(--agent-text-secondary, var(--p-text-muted-color, #71717a));
-  font-size: 12px;
-  line-height: 1.5;
+  gap: 6px;
+  color: var(--agent-text-secondary, var(--p-text-muted-color));
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .tool-event-icon {
@@ -78,24 +79,35 @@ const statusLabel = computed(() => {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
+  color: var(--agent-text-muted, var(--p-text-muted-color));
+}
+
+.tool-event-status {
+  color: var(--agent-text-muted, var(--p-text-muted-color));
+  font-weight: 500;
 }
 
 .tool-event-label {
   min-width: 0;
-  color: var(--agent-text-primary, var(--p-text-color, #27272a));
-  font-weight: 540;
+  color: var(--agent-text-primary, var(--p-text-color));
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .tool-event.is-running .tool-event-icon {
-  color: var(--accent-primary, var(--p-primary-color, #4f46e5));
+  color: var(--accent-primary, var(--p-primary-color));
+}
+
+.tool-event.is-running .tool-event-status {
+  color: var(--agent-text-secondary, var(--p-text-muted-color));
 }
 
 .tool-event.is-failed,
-.tool-event.is-failed .tool-event-label {
-  color: var(--accent-error, #dc2626);
+.tool-event.is-failed .tool-event-label,
+.tool-event.is-failed .tool-event-status {
+  color: var(--accent-error, #ff3b30);
 }
 
 .spin {

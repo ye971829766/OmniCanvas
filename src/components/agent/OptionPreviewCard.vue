@@ -146,7 +146,7 @@ function downloadMedia(e: MouseEvent) {
 }
 
 .preview-card:focus-visible {
-  outline: 2px solid var(--p-primary-color, #6d28d9);
+  outline: 2px solid var(--p-primary-color, #161618);
   outline-offset: 2px;
 }
 
@@ -259,7 +259,12 @@ function downloadMedia(e: MouseEvent) {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, #7c3aed, transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--p-primary-color, #161618),
+    transparent
+  );
   background-size: 200% 100%;
   animation: mesh-progress-flow 1.8s ease-in-out infinite;
 }

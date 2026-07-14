@@ -123,7 +123,7 @@ watch(activeWorkspaceId, (newId) => {
       />
       <div
         v-else
-        class="flex-1 h-full flex flex-col items-center justify-center bg-[var(--p-surface-50)] text-[var(--p-text-muted-color)]"
+        class="flex-1 h-full flex flex-col items-center justify-center bg-[var(--surface-app)] text-[var(--p-text-muted-color)]"
       >
         <div
           class="flex flex-col items-center gap-4 max-w-sm text-center p-8 rounded-2xl bg-[var(--p-surface-0)] border border-[var(--p-surface-200)] shadow-sm"
@@ -163,7 +163,7 @@ watch(activeWorkspaceId, (newId) => {
 
 <style scoped>
 .board-shell {
-  --sidebar-expanded-width: 288px;
+  --sidebar-expanded-width: 280px;
   --canvas-toolbar-safe-width: 371px;
   --agent-panel-width: clamp(
     320px,

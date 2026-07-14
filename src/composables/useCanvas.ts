@@ -907,21 +907,29 @@ export function useCanvas(
             const isBatch = generatedUrls.length > 1;
             const baseWidth = node.width || 400;
             const fallbackHeight = node.height || 300;
+            // Auto-arranged agent images set preserveGeneratedLayout=false so the
+            // finished node uses original pixels. Frame/ecommerce slots keep the box.
             const layouts = loadedImages.map((img) => {
+              const naturalW = img.naturalWidth;
+              const naturalH = img.naturalHeight;
               if (isBatch) {
                 return {
                   width: baseWidth,
-                  height: img.naturalWidth && img.naturalHeight
-                    ? Math.max(1, Math.round(baseWidth * img.naturalHeight / img.naturalWidth))
-                    : fallbackHeight,
+                  height:
+                    naturalW && naturalH
+                      ? Math.max(
+                          1,
+                          Math.round((baseWidth * naturalH) / naturalW),
+                        )
+                      : fallbackHeight,
                 };
               }
               if (
                 node.preserveGeneratedLayout !== true &&
-                img.naturalWidth &&
-                img.naturalHeight
+                naturalW > 0 &&
+                naturalH > 0
               ) {
-                return { width: img.naturalWidth, height: img.naturalHeight };
+                return { width: naturalW, height: naturalH };
               }
               return { width: baseWidth, height: fallbackHeight };
             });
