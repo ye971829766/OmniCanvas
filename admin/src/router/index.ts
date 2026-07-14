@@ -20,7 +20,7 @@ const routes = [
     meta: {
       key: "dashboard",
       title: "系统概览",
-      description: "企业级网关运行指标、信道延迟及配置统计",
+      description: "用户、积分、支付、用量与配置健康一览",
     },
   },
   {

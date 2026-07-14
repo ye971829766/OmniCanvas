@@ -454,6 +454,20 @@ export async function getBillingPricing(): Promise<{
 }> {
   return (await axios.get(`${API_BASE_URL}/admin/billing/pricing`)).data;
 }
+
+export interface BillingProductAdmin {
+  id: string;
+  sku: string;
+  name: string;
+  credits: number;
+  amountMinor: number;
+  currency: string;
+  status: string;
+}
+
+export async function getBillingProducts(): Promise<BillingProductAdmin[]> {
+  return (await axios.get(`${API_BASE_URL}/admin/billing/products`)).data;
+}
 export async function createBillingPricingRule(
   body: BillingPricingRuleInput & { operation: string },
 ): Promise<BillingPricingRule> {

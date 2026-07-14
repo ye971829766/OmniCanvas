@@ -457,7 +457,11 @@ async function loadMappings() {
 }
 
 async function refreshAllData() {
-  await Promise.all([loadChannels(), loadMappings()]);
+  await Promise.all([
+    loadChannels(),
+    loadMappings(),
+    activeComponentRef.value?.refresh?.(),
+  ]);
   ElMessage.success("数据已刷新");
 }
 
