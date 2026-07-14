@@ -1,9 +1,31 @@
 <template>
   <div style="display: flex; flex-direction: column; gap: 20px">
-    <el-card shadow="none" style="border-radius: 20px; background-color: #ffffff; border: 1px solid #e5e7eb">
+    <el-card
+      shadow="none"
+      style="
+        border-radius: 20px;
+        background-color: #ffffff;
+        border: 1px solid #e5e7eb;
+      "
+    >
       <template #header>
-        <div style="display: flex; justify-content: space-between; align-items: center">
-          <span style="font-size: 16px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <span
+            style="
+              font-size: 16px;
+              font-weight: 700;
+              color: #0f172a;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
             <el-icon style="color: #0f172a"><Cpu /></el-icon>
             Agent 核心参数配置
           </span>
@@ -11,11 +33,17 @@
             <el-button
               type="info"
               plain
-              style="border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; color: #0f172a"
+              style="
+                border-radius: 12px;
+                background: #ffffff;
+                border: 1px solid #e2e8f0;
+                color: #0f172a;
+              "
               @click="resetToDefaultPrompt"
               :disabled="saving || loading"
             >
-              <el-icon style="margin-right: 4px"><Refresh /></el-icon>恢复默认提示词
+              <el-icon style="margin-right: 4px"><Refresh /></el-icon
+              >恢复默认提示词
             </el-button>
             <el-button
               type="primary"
@@ -123,8 +151,11 @@
             </p>
           </el-form-item>
 
-          <!-- Monospace System Prompt -->
-          <el-form-item required style="margin-top: 24px">
+          <!-- Inpaint / local redraw model -->
+          <el-form-item
+            label="局部重绘模型 (inpaintModel)"
+            style="margin-top: 16px"
+          >
             <template #label>
               <span
                 style="
@@ -135,23 +166,38 @@
                   gap: 4px;
                 "
               >
-                系统级提示词 (SYSTEM_PROMPT)
+                局部重绘模型 (inpaintModel)
                 <el-tooltip
-                  content="定义 Agent 的核心职能、画布工具调用协议以及质量规则指令"
+                  content="画布橡皮擦「局部重绘」使用的图片模型。请选择支持图生图 + mask 的模型；留空则使用模型目录中第一个启用的图片模型"
                   placement="top"
                 >
                   <el-icon style="cursor: help"><InfoFilled /></el-icon>
                 </el-tooltip>
               </span>
             </template>
-            <el-input
-              v-model="agentConfig.systemPrompt"
-              type="textarea"
-              :rows="22"
-              placeholder="请输入 SYSTEM_PROMPT..."
-              input-style="font-family: 'Fira Code', 'Courier New', Courier, monospace; font-size: 13px; background-color: #09090b; color: #e4e4e7; border-color: #27272a; line-height: 1.6;"
-            />
+            <el-select
+              v-model="agentConfig.inpaintModel"
+              filterable
+              allow-create
+              clearable
+              default-first-option
+              placeholder="自动（第一个启用的图片模型）"
+              style="width: 100%"
+            >
+              <el-option label="自动（第一个启用的图片模型）" value="" />
+              <el-option
+                v-for="mapping in imageModelMappings"
+                :key="mapping.id"
+                :label="`${mapping.label} (${mapping.id})`"
+                :value="mapping.id"
+              />
+            </el-select>
+            <p style="margin: 6px 0 0 0; font-size: 12px; color: #71717a">
+              对应画布工具栏的局部重绘 / inpaint。需支持参考图与遮罩（mask）。
+            </p>
           </el-form-item>
+
+          <!-- Monospace System Prompt -->
         </el-form>
       </div>
     </el-card>
@@ -220,13 +266,17 @@ const saving = ref(false);
 const rawState = ref<ModelConfigState | null>(null);
 
 const agentConfig = ref({
-  systemPrompt: "",
   chatModel: "",
   visionModel: "",
+  inpaintModel: "",
 });
 
 const chatModelMappings = computed(() => {
   return props.mappings.filter((m) => m.enabled && m.purpose === "chat");
+});
+
+const imageModelMappings = computed(() => {
+  return props.mappings.filter((m) => m.enabled && m.purpose === "image");
 });
 
 async function loadConfig() {
@@ -236,16 +286,15 @@ async function loadConfig() {
     rawState.value = config;
     if (config.agentConfig) {
       agentConfig.value = {
-        systemPrompt: config.agentConfig.systemPrompt || DEFAULT_SYSTEM_PROMPT,
         chatModel: config.agentConfig.chatModel || "",
         visionModel: config.agentConfig.visionModel || "",
+        inpaintModel: config.agentConfig.inpaintModel ?? "",
       };
-      console.log(agentConfig);
     } else {
       agentConfig.value = {
-        systemPrompt: DEFAULT_SYSTEM_PROMPT,
         chatModel: "",
         visionModel: "",
+        inpaintModel: "",
       };
     }
   } catch (err) {
@@ -265,10 +314,6 @@ async function saveConfig() {
     ElMessage.warning("请选择或输入 Agent 视觉自查模型");
     return;
   }
-  if (!agentConfig.value.systemPrompt.trim()) {
-    ElMessage.warning("系统提示词不能为空");
-    return;
-  }
 
   saving.value = true;
   try {
@@ -276,9 +321,9 @@ async function saveConfig() {
     const payload: ModelConfigState = {
       ...currentState,
       agentConfig: {
-        systemPrompt: agentConfig.value.systemPrompt.trim(),
         chatModel: agentConfig.value.chatModel.trim(),
         visionModel: agentConfig.value.visionModel.trim(),
+        inpaintModel: (agentConfig.value.inpaintModel || "").trim(),
       },
     };
     await updateModelConfig(payload);
@@ -304,10 +349,7 @@ function resetToDefaultPrompt() {
       boxType: "confirm",
     },
   )
-    .then(() => {
-      agentConfig.value.systemPrompt = DEFAULT_SYSTEM_PROMPT;
-      ElMessage.success("系统提示词已重置，请点击保存以应用更改");
-    })
+    .then(() => {})
     .catch(() => {});
 }
 

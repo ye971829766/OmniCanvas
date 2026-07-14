@@ -71,8 +71,12 @@ export interface ModelConfigState {
     systemPrompt: string;
     chatModel: string;
     visionModel?: string;
+    /** Image model id for canvas local inpaint / 局部重绘. Empty = first enabled image mapping. */
+    inpaintModel?: string;
   };
 }
+
+export type AgentConfigState = NonNullable<ModelConfigState["agentConfig"]>;
 
 @Injectable()
 export class ModelConfigService implements OnModuleInit {
@@ -166,7 +170,8 @@ export class ModelConfigService implements OnModuleInit {
       agentConfig: {
         systemPrompt: SYSTEM_PROMPT,
         chatModel: "gpt-4o-mini",
-        visionModel: "gpt-4o"
+        visionModel: "gpt-4o",
+        inpaintModel: "",
       }
     };
   }
@@ -177,12 +182,38 @@ export class ModelConfigService implements OnModuleInit {
     return isNaN(num) ? undefined : num;
   }
 
-  private normalizeAgentConfig(raw: any): { systemPrompt: string; chatModel: string; visionModel?: string } {
+  private defaultAgentConfig(): AgentConfigState {
     return {
-      systemPrompt: typeof raw?.systemPrompt === "string" ? raw.systemPrompt : SYSTEM_PROMPT,
-      chatModel: typeof raw?.chatModel === "string" ? raw.chatModel : "gpt-4o-mini",
-      visionModel: typeof raw?.visionModel === "string" ? raw.visionModel : "gpt-4o"
+      systemPrompt: SYSTEM_PROMPT,
+      chatModel: "gpt-4o-mini",
+      visionModel: "gpt-4o",
+      inpaintModel: "",
     };
+  }
+
+  /**
+   * Merge partial agentConfig onto a base so callers that only update mappings
+   * (Models page) do not wipe chat/vision/inpaint model choices.
+   */
+  private mergeAgentConfig(raw: any, base?: AgentConfigState | null): AgentConfigState {
+    const fallback = base ?? this.defaultAgentConfig();
+    const pickString = (value: unknown, fallbackValue: string) =>
+      typeof value === "string" && value.trim() ? value.trim() : fallbackValue;
+    // inpaintModel may intentionally be "" (= auto / first image mapping)
+    const inpaintRaw = raw?.inpaintModel;
+    const inpaintModel =
+      typeof inpaintRaw === "string" ? inpaintRaw.trim() : (fallback.inpaintModel ?? "");
+
+    return {
+      systemPrompt: pickString(raw?.systemPrompt, fallback.systemPrompt),
+      chatModel: pickString(raw?.chatModel, fallback.chatModel),
+      visionModel: pickString(raw?.visionModel, fallback.visionModel || "gpt-4o"),
+      inpaintModel,
+    };
+  }
+
+  private normalizeAgentConfig(raw: any): AgentConfigState {
+    return this.mergeAgentConfig(raw, this.defaultAgentConfig());
   }
 
   private normalizeString(value: unknown): string {
@@ -421,21 +452,25 @@ export class ModelConfigService implements OnModuleInit {
   }
 
   async updateConfig(nextState: any): Promise<ModelConfigState> {
+    // Partial updates (e.g. Models page only sends mappings) must not wipe
+    // agentConfig / other sections — that was resetting chat/vision to gpt-4o daily.
+    const existing = await this.getConfig();
+
     const sanitizedMappings = Array.isArray(nextState?.mappings)
       ? nextState.mappings
           .map((item: any, index: number) => this.normalizeMapping(item, index))
           .filter(Boolean)
-      : [];
+      : existing.mappings;
     const sanitizedConfigs = Array.isArray(nextState?.imageConfigs)
       ? nextState.imageConfigs
           .map((item: any, index: number) => this.normalizeImageConfig(item, index))
           .filter(Boolean)
-      : [];
+      : (existing.imageConfigs ?? []);
     const sanitizedVideoConfigs = Array.isArray(nextState?.videoConfigs)
       ? nextState.videoConfigs
           .map((item: any, index: number) => this.normalizeVideoConfig(item, index))
           .filter(Boolean)
-      : [];
+      : (existing.videoConfigs ?? []);
 
     // Validate unique model IDs and channel + upstreamModel combination
     const idSet = new Set<string>();
@@ -479,23 +514,31 @@ export class ModelConfigService implements OnModuleInit {
 
     try {
       const rawDict = nextState?.dictionaries;
-      const sanitizedDictionaries = {
-        sizes: Array.isArray(rawDict?.sizes)
-          ? rawDict.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
-          : ["1024x1024", "1536x1024", "2048x2048", "auto", "512", "0.5K", "1K", "2K", "4K"],
-        aspectRatios: Array.isArray(rawDict?.aspectRatios)
-          ? rawDict.aspectRatios.map((s: any) => this.normalizeString(s)).filter(Boolean)
-          : ["1:1", "16:9", "9:16", "4:3", "3:4"],
-        qualities: Array.isArray(rawDict?.qualities)
-          ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
-          : ["standard", "hd", "low", "medium", "high", "auto", "512", "0.5K", "1K", "2K", "4K"],
-        videoSizes: Array.isArray(rawDict?.videoSizes)
-          ? rawDict.videoSizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
-          : ["16x9", "9x16", "1x1", "4x3", "3x4", "21x9"]
-      };
-      const sanitizedAgent = this.normalizeAgentConfig(nextState?.agentConfig);
-      
-      const state = {
+      const defaultDict = existing.dictionaries ?? this.getDefaultState().dictionaries!;
+      const sanitizedDictionaries = rawDict
+        ? {
+            sizes: Array.isArray(rawDict?.sizes)
+              ? rawDict.sizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
+              : defaultDict.sizes,
+            aspectRatios: Array.isArray(rawDict?.aspectRatios)
+              ? rawDict.aspectRatios.map((s: any) => this.normalizeString(s)).filter(Boolean)
+              : defaultDict.aspectRatios,
+            qualities: Array.isArray(rawDict?.qualities)
+              ? rawDict.qualities.map((s: any) => this.normalizeString(s)).filter(Boolean)
+              : defaultDict.qualities,
+            videoSizes: Array.isArray(rawDict?.videoSizes)
+              ? rawDict.videoSizes.map((s: any) => this.normalizeString(s)).filter(Boolean)
+              : (defaultDict.videoSizes ?? ["16x9", "9x16", "1x1", "4x3", "3x4", "21x9"]),
+          }
+        : defaultDict;
+
+      // Only rewrite agentConfig when the client explicitly sends it.
+      const sanitizedAgent =
+        nextState?.agentConfig !== undefined && nextState?.agentConfig !== null
+          ? this.mergeAgentConfig(nextState.agentConfig, existing.agentConfig)
+          : this.normalizeAgentConfig(existing.agentConfig);
+
+      const state: ModelConfigState = {
         mappings: sanitizedMappings as ModelMapping[],
         imageConfigs: sanitizedConfigs as ImageConfig[],
         videoConfigs: sanitizedVideoConfigs as VideoConfig[],
@@ -517,8 +560,17 @@ export class ModelConfigService implements OnModuleInit {
         throw err;
       }
       console.error("Failed to update model config in database:", err);
-      return this.getDefaultState();
+      throw new BadRequestException("保存模型配置失败，请重试");
     }
+  }
+
+  /** Resolve model id for canvas inpaint (局部重绘). */
+  async getInpaintModelId(): Promise<string | undefined> {
+    const config = await this.getConfig();
+    const configured = config.agentConfig?.inpaintModel?.trim();
+    if (configured) return configured;
+    const images = await this.getEnabledMappingsByPurpose("image");
+    return images.find((m) => m.enabled)?.id;
   }
 
   async getEnabledMappingsByPurpose(purpose: YunwuApiPurpose): Promise<ModelMapping[]> {

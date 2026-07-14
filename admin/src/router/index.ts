@@ -80,7 +80,7 @@ const routes = [
     meta: {
       key: "agent",
       title: "Agent配置",
-      description: "配置Agent画布操作的系统提示词（SYSTEM_PROMPT）与调用的核心对话/工具调用模型",
+      description: "配置 Agent 提示词、驱动/视觉模型，以及局部重绘所用图片模型",
     },
   },
   {

@@ -1,19 +1,26 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem("omnicanvas_admin_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   const method = String(config.method || "get").toLowerCase();
-  if (["post", "put", "patch", "delete"].includes(method) && !config.headers["Idempotency-Key"]) {
+  if (
+    ["post", "put", "patch", "delete"].includes(method) &&
+    !config.headers["Idempotency-Key"]
+  ) {
     config.headers["Idempotency-Key"] = crypto.randomUUID();
   }
   return config;
 });
 
 export async function loginAdmin(username: string, password: string) {
-  const res = await axios.post(`${API_BASE_URL}/auth/login`, { username, password });
+  const res = await axios.post(`${API_BASE_URL}/auth/login`, {
+    username,
+    password,
+  });
   if (res.data?.user?.role !== "admin") throw new Error("该账号没有管理员权限");
   localStorage.setItem("omnicanvas_admin_token", res.data.token);
   return res.data.user as AdminUser;
@@ -118,9 +125,10 @@ export interface ModelConfigState {
     videoSizes?: string[];
   };
   agentConfig?: {
-    systemPrompt: string;
     chatModel: string;
     visionModel?: string;
+    /** 局部重绘模型；空字符串表示自动使用第一个启用的图片模型 */
+    inpaintModel?: string;
   };
 }
 
@@ -139,13 +147,21 @@ export async function getChannels(): Promise<Channel[]> {
   return res.data;
 }
 
-export async function createChannel(payload: Omit<Channel, "id" | "createdAt">): Promise<Channel> {
+export async function createChannel(
+  payload: Omit<Channel, "id" | "createdAt">,
+): Promise<Channel> {
   const res = await axios.post<Channel>(`${API_BASE_URL}/channels`, payload);
   return res.data;
 }
 
-export async function updateChannel(id: string, payload: Partial<Channel>): Promise<Channel> {
-  const res = await axios.put<Channel>(`${API_BASE_URL}/channels/${id}`, payload);
+export async function updateChannel(
+  id: string,
+  payload: Partial<Channel>,
+): Promise<Channel> {
+  const res = await axios.put<Channel>(
+    `${API_BASE_URL}/channels/${id}`,
+    payload,
+  );
   return res.data;
 }
 
@@ -153,32 +169,49 @@ export async function deleteChannel(id: string): Promise<void> {
   await axios.delete(`${API_BASE_URL}/channels/${id}`);
 }
 
-export async function testChannelConnection(id: string): Promise<{ success: boolean; latency: number; error?: string }> {
-  const res = await axios.post<{ success: boolean; latency: number; error?: string }>(
-    `${API_BASE_URL}/channels/${id}/test`
-  );
+export async function testChannelConnection(
+  id: string,
+): Promise<{ success: boolean; latency: number; error?: string }> {
+  const res = await axios.post<{
+    success: boolean;
+    latency: number;
+    error?: string;
+  }>(`${API_BASE_URL}/channels/${id}/test`);
   return res.data;
 }
 
-export async function pingChannel(id: string): Promise<{ success: boolean; latency: number; error?: string }> {
+export async function pingChannel(
+  id: string,
+): Promise<{ success: boolean; latency: number; error?: string }> {
   return testChannelConnection(id);
 }
 
-export async function discoverChannelModels(idOrBaseUrl: string, apiKey?: string): Promise<string[]> {
+export async function discoverChannelModels(
+  idOrBaseUrl: string,
+  apiKey?: string,
+): Promise<string[]> {
   if (apiKey) {
-    const res = await axios.post<{ success: boolean; models: string[]; error?: string }>(
-      `${API_BASE_URL}/channels/discover-models`,
-      { baseUrl: idOrBaseUrl, apiKey }
-    );
+    const res = await axios.post<{
+      success: boolean;
+      models: string[];
+      error?: string;
+    }>(`${API_BASE_URL}/channels/discover-models`, {
+      baseUrl: idOrBaseUrl,
+      apiKey,
+    });
     return res.data.models || [];
   }
-  const res = await axios.get<{ success: boolean; models: string[]; error?: string }>(
-    `${API_BASE_URL}/channels/${idOrBaseUrl}/discover-models`
-  );
+  const res = await axios.get<{
+    success: boolean;
+    models: string[];
+    error?: string;
+  }>(`${API_BASE_URL}/channels/${idOrBaseUrl}/discover-models`);
   return res.data.models || [];
 }
 
-export async function getAllYunwuModels(type: ModelType): Promise<YunwuModelsResponse> {
+export async function getAllYunwuModels(
+  type: ModelType,
+): Promise<YunwuModelsResponse> {
   const res = await axios.get<YunwuModelsResponse>(
     `${API_BASE_URL}/models/${type}?scope=all`,
   );
@@ -207,17 +240,31 @@ export async function uploadImage(file: File): Promise<{ url: string }> {
   return res.data;
 }
 
-export async function testChat(payload: { model: string; messages: { role: string; content: string }[]; temperature?: number; maxTokens?: number }): Promise<any> {
+export async function testChat(payload: {
+  model: string;
+  messages: { role: string; content: string }[];
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<any> {
   const res = await axios.post(`${API_BASE_URL}/chat`, payload);
   return res.data;
 }
 
-export async function testGenerateImage(payload: { model: string; prompt: string; size?: string; quality?: string; aspectRatio?: string }): Promise<any> {
+export async function testGenerateImage(payload: {
+  model: string;
+  prompt: string;
+  size?: string;
+  quality?: string;
+  aspectRatio?: string;
+}): Promise<any> {
   const res = await axios.post(`${API_BASE_URL}/generate-image`, payload);
   return res.data;
 }
 
-export async function testGenerateVideo(payload: { model: string; prompt: string }): Promise<any> {
+export async function testGenerateVideo(payload: {
+  model: string;
+  prompt: string;
+}): Promise<any> {
   const res = await axios.post(`${API_BASE_URL}/generate-video`, payload);
   return res.data;
 }
@@ -248,15 +295,21 @@ export async function createAdminUser(payload: {
   password: string;
   role?: string;
 }): Promise<AdminUser> {
-  const res = await axios.post<AdminUser>(`${API_BASE_URL}/admin/users`, payload);
+  const res = await axios.post<AdminUser>(
+    `${API_BASE_URL}/admin/users`,
+    payload,
+  );
   return res.data;
 }
 
 export async function updateAdminUser(
   id: string,
-  payload: { nickname?: string; role?: string; password?: string }
+  payload: { nickname?: string; role?: string; password?: string },
 ): Promise<AdminUser> {
-  const res = await axios.put<AdminUser>(`${API_BASE_URL}/admin/users/${id}`, payload);
+  const res = await axios.put<AdminUser>(
+    `${API_BASE_URL}/admin/users/${id}`,
+    payload,
+  );
   return res.data;
 }
 
@@ -289,7 +342,9 @@ export interface SystemTokenStats {
 }
 
 export async function getTokenStats(): Promise<SystemTokenStats> {
-  const res = await axios.get<SystemTokenStats>(`${API_BASE_URL}/admin/token-stats`);
+  const res = await axios.get<SystemTokenStats>(
+    `${API_BASE_URL}/admin/token-stats`,
+  );
   return res.data;
 }
 
@@ -311,7 +366,11 @@ export interface BillingOverview {
     checkoutConfigured: boolean;
     mode: string;
     providers: string[];
-    stripe?: { secretConfigured: boolean; publishableConfigured: boolean; webhookConfigured: boolean };
+    stripe?: {
+      secretConfigured: boolean;
+      publishableConfigured: boolean;
+      webhookConfigured: boolean;
+    };
   };
 }
 
@@ -358,12 +417,30 @@ export async function getBillingOverview(): Promise<BillingOverview> {
 export async function getBillingAccounts(): Promise<BillingAccountAdmin[]> {
   return (await axios.get(`${API_BASE_URL}/admin/billing/accounts`)).data;
 }
-export async function getBillingAdminOrders(status?: string): Promise<{ items: BillingOrderAdmin[]; total: number }> {
-  return (await axios.get(`${API_BASE_URL}/admin/billing/orders`, { params: { status: status || undefined } })).data;
+export async function getBillingAdminOrders(
+  status?: string,
+): Promise<{ items: BillingOrderAdmin[]; total: number }> {
+  return (
+    await axios.get(`${API_BASE_URL}/admin/billing/orders`, {
+      params: { status: status || undefined },
+    })
+  ).data;
 }
-export async function getBillingPricing(): Promise<{ version: any; rules: BillingPricingRule[] }> {
+export async function getBillingPricing(): Promise<{
+  version: any;
+  rules: BillingPricingRule[];
+}> {
   return (await axios.get(`${API_BASE_URL}/admin/billing/pricing`)).data;
 }
-export async function adjustUserCredits(userId: string, amountCredits: number, reason: string) {
-  return (await axios.post(`${API_BASE_URL}/admin/billing/accounts/${userId}/adjust`, { amountCredits, reason })).data;
+export async function adjustUserCredits(
+  userId: string,
+  amountCredits: number,
+  reason: string,
+) {
+  return (
+    await axios.post(
+      `${API_BASE_URL}/admin/billing/accounts/${userId}/adjust`,
+      { amountCredits, reason },
+    )
+  ).data;
 }

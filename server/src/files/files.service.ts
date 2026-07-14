@@ -18,6 +18,7 @@ import type { GenerateImageJsonRequest } from "../types";
 import { deflateSync } from "zlib";
 import { BillingService } from "../billing/billing.service";
 import type { BillingTaskContext } from "../billing/billing.types";
+import { ModelConfigService } from "../model-config/model-config.service";
 
 @Injectable()
 export class FilesService implements OnModuleInit {
@@ -25,6 +26,7 @@ export class FilesService implements OnModuleInit {
     private readonly dbService: DatabaseService,
     @Inject(forwardRef(() => AiServiceValue))
     private readonly aiService: AiService,
+    private readonly modelConfigService: ModelConfigService,
     @Optional() private readonly billingService?: BillingService,
   ) {}
 
@@ -932,11 +934,14 @@ export class FilesService implements OnModuleInit {
         resolvedMaskBase64 = `data:image/png;base64,${generatedMaskBuffer.toString("base64")}`;
       }
 
+      const inpaintModel = await this.modelConfigService.getInpaintModelId();
       const generateBody: GenerateImageJsonRequest = {
         prompt:
           prompt ||
           "seamlessly fill the masked area to match the surrounding image context, removing any unwanted objects or text",
-        model: undefined, // uses fallback/configured image model
+        // Prefer admin-configured inpaint model; otherwise AiService falls back
+        // to the first enabled image mapping / YUNWU_IMAGE_MODEL.
+        model: inpaintModel,
         images: [base64ImageStr],
         mask: resolvedMaskBase64,
         outputFormat: "png",

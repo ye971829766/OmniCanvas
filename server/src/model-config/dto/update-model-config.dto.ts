@@ -28,5 +28,6 @@ export class UpdateModelConfigDto {
     systemPrompt?: string;
     chatModel?: string;
     visionModel?: string;
+    inpaintModel?: string;
   };
 }
