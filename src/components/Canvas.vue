@@ -156,7 +156,7 @@
       </button>
     </div>
 
-    <!-- Custom Context Menu -->
+    <!-- Custom Context Menu — empty / image / video / generic -->
     <div
       v-if="isContextMenuVisible"
       ref="contextMenuRef"
@@ -166,29 +166,8 @@
       @click.stop
       @contextmenu.prevent.stop
     >
-      <template v-if="hasSelection">
-        <div
-          class="custom-context-menu-item"
-          @click="handleItemClick(handleImageToImage)"
-        >
-          <i
-            class="pi pi-image text-primary-500"
-            style="font-size: 18px !important"
-          ></i>
-          <span>图生图</span>
-        </div>
-        <div
-          class="custom-context-menu-item"
-          @click="handleItemClick(handleImageToVideo)"
-        >
-          <i
-            class="pi pi-video text-primary-500"
-            style="font-size: 18px !important"
-          ></i>
-          <span>图生视频</span>
-        </div>
-      </template>
-      <template v-else>
+      <!-- Blank canvas -->
+      <template v-if="contextMenuKind === 'empty'">
         <div
           class="custom-context-menu-item"
           @click="
@@ -236,6 +215,148 @@
             style="font-size: 17px !important"
           ></i>
           <span>从素材库选择</span>
+        </div>
+      </template>
+
+      <!-- Image node -->
+      <template v-else-if="contextMenuKind === 'image'">
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(handleImageToImage)"
+        >
+          <i
+            class="pi pi-image text-primary-500"
+            style="font-size: 18px !important"
+          ></i>
+          <span>图生图</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(handleImageToVideo)"
+        >
+          <i
+            class="pi pi-video text-primary-500"
+            style="font-size: 18px !important"
+          ></i>
+          <span>图生视频</span>
+        </div>
+        <div class="custom-context-menu-sep"></div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => copy())"
+        >
+          <i class="pi pi-copy text-primary-500" style="font-size: 16px !important"></i>
+          <span>复制</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => bringToFront())"
+        >
+          <i class="pi pi-angle-double-up text-primary-500" style="font-size: 16px !important"></i>
+          <span>置于顶层</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => sendToBack())"
+        >
+          <i class="pi pi-angle-double-down text-primary-500" style="font-size: 16px !important"></i>
+          <span>置于底层</span>
+        </div>
+        <div class="custom-context-menu-sep"></div>
+        <div
+          class="custom-context-menu-item is-danger"
+          @click="handleItemClick(() => deleteSelected())"
+        >
+          <i class="pi pi-trash" style="font-size: 16px !important"></i>
+          <span>删除</span>
+        </div>
+      </template>
+
+      <!-- Video node -->
+      <template v-else-if="contextMenuKind === 'video'">
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(handleVideoPlayPause)"
+        >
+          <i
+            :class="
+              contextVideoPlaying
+                ? 'pi pi-pause text-primary-500'
+                : 'pi pi-play text-primary-500'
+            "
+            style="font-size: 16px !important"
+          ></i>
+          <span>{{ contextVideoPlaying ? "暂停" : "播放" }}</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(handleVideoDownload)"
+        >
+          <i class="pi pi-download text-primary-500" style="font-size: 16px !important"></i>
+          <span>下载视频</span>
+        </div>
+        <div class="custom-context-menu-sep"></div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => copy())"
+        >
+          <i class="pi pi-copy text-primary-500" style="font-size: 16px !important"></i>
+          <span>复制</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => bringToFront())"
+        >
+          <i class="pi pi-angle-double-up text-primary-500" style="font-size: 16px !important"></i>
+          <span>置于顶层</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => sendToBack())"
+        >
+          <i class="pi pi-angle-double-down text-primary-500" style="font-size: 16px !important"></i>
+          <span>置于底层</span>
+        </div>
+        <div class="custom-context-menu-sep"></div>
+        <div
+          class="custom-context-menu-item is-danger"
+          @click="handleItemClick(() => deleteSelected())"
+        >
+          <i class="pi pi-trash" style="font-size: 16px !important"></i>
+          <span>删除</span>
+        </div>
+      </template>
+
+      <!-- Other selected elements (shape / text / group / multi) -->
+      <template v-else>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => copy())"
+        >
+          <i class="pi pi-copy text-primary-500" style="font-size: 16px !important"></i>
+          <span>复制</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => bringToFront())"
+        >
+          <i class="pi pi-angle-double-up text-primary-500" style="font-size: 16px !important"></i>
+          <span>置于顶层</span>
+        </div>
+        <div
+          class="custom-context-menu-item"
+          @click="handleItemClick(() => sendToBack())"
+        >
+          <i class="pi pi-angle-double-down text-primary-500" style="font-size: 16px !important"></i>
+          <span>置于底层</span>
+        </div>
+        <div class="custom-context-menu-sep"></div>
+        <div
+          class="custom-context-menu-item is-danger"
+          @click="handleItemClick(() => deleteSelected())"
+        >
+          <i class="pi pi-trash" style="font-size: 16px !important"></i>
+          <span>删除</span>
         </div>
       </template>
     </div>
@@ -325,6 +446,10 @@ const {
   undo,
   addImageGenNode,
   addVideoGenNode,
+  copy,
+  deleteSelected,
+  bringToFront,
+  sendToBack,
 } = useCanvas(
   canvasRef,
   { hue, saturation, lightness, alpha },
@@ -366,10 +491,16 @@ const isContextMenuVisible = ref(false);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 const hasSelection = ref(false);
+/** empty | image | video | generic */
+const contextMenuKind = ref<"empty" | "image" | "video" | "generic">("empty");
+const contextMenuTarget = shallowRef<any>(null);
+const contextVideoPlaying = ref(false);
 
 const closeContextMenu = () => {
   isContextMenuVisible.value = false;
   contextMenuPoint.value = null;
+  contextMenuTarget.value = null;
+  contextVideoPlaying.value = false;
 };
 
 const isInsideContextMenu = (event: Event) => {
@@ -397,6 +528,37 @@ const handleLeaferContextMenu = (e: any) => {
   onLeaferContextMenu(e, e.origin);
 };
 
+const resolveContextHitNode = (e: any, app: any): any | null => {
+  let targetNode: any = e.target;
+  while (targetNode && targetNode !== (app.tree as any)) {
+    const tag = targetNode.tag || targetNode.__tag;
+    if (
+      targetNode.editable ||
+      tag === "VideoNode" ||
+      tag === "Image" ||
+      tag === "ImageGen" ||
+      tag === "VideoGen" ||
+      tag === "Frame" ||
+      tag === "Group" ||
+      tag === "Text" ||
+      tag === "Rect" ||
+      tag === "rect" ||
+      tag === "text" ||
+      tag === "Ellipse" ||
+      tag === "ellipse" ||
+      tag === "Line" ||
+      tag === "line" ||
+      tag === "Pen" ||
+      tag === "Polygon" ||
+      tag === "Star"
+    ) {
+      return targetNode;
+    }
+    targetNode = targetNode.parent;
+  }
+  return null;
+};
+
 const onLeaferContextMenu = (e: any, originalEvent?: MouseEvent) => {
   const app = canvasApp.value;
   if (!app) return;
@@ -415,42 +577,97 @@ const onLeaferContextMenu = (e: any, originalEvent?: MouseEvent) => {
   contextMenuY.value = originalEvent?.clientY ?? e.clientY ?? 0;
   contextMenuPoint.value = { x: e.x, y: e.y };
 
-  // Check selection state according to documentation
-  hasSelection.value = !!(app.editor?.single || app.editor?.multiple);
+  const hitNode = resolveContextHitNode(e, app);
 
-  // If there is selection, let's keep the editor selected element
-  if (hasSelection.value) {
-    let targetNode: any = e.target;
-    while (targetNode && targetNode !== (app.tree as any)) {
-      if (targetNode.editable) {
-        break;
-      }
-      if (
-        targetNode.tag === "ImageGen" ||
-        targetNode.tag === "VideoGen" ||
-        targetNode.tag === "rect" ||
-        targetNode.tag === "text" ||
-        targetNode.tag === "ellipse" ||
-        targetNode.tag === "line"
-      ) {
-        break;
-      }
-      targetNode = targetNode.parent;
-    }
-
-    if (targetNode && targetNode !== (app.tree as any)) {
-      app.editor?.select(targetNode as any);
+  if (hitNode) {
+    // Select the right-clicked node so subsequent actions apply to it
+    app.editor?.select(hitNode as any);
+    hasSelection.value = true;
+    contextMenuTarget.value = hitNode;
+    const tag = hitNode.tag || hitNode.__tag;
+    if (tag === "VideoNode") {
+      contextMenuKind.value = "video";
+      contextVideoPlaying.value =
+        typeof hitNode.isPlaying === "function"
+          ? Boolean(hitNode.isPlaying())
+          : false;
+    } else if (tag === "Image") {
+      contextMenuKind.value = "image";
+      contextVideoPlaying.value = false;
+    } else {
+      contextMenuKind.value = "generic";
+      contextVideoPlaying.value = false;
     }
   } else {
     app.editor?.cancel?.();
+    hasSelection.value = false;
+    contextMenuTarget.value = null;
+    contextMenuKind.value = "empty";
+    contextVideoPlaying.value = false;
   }
 
   isContextMenuVisible.value = true;
 };
 
-const handleItemClick = (action: () => void) => {
+const handleItemClick = (action: () => void | Promise<void>) => {
   closeContextMenu();
-  action();
+  void action();
+};
+
+const handleVideoPlayPause = () => {
+  const node = contextMenuTarget.value;
+  if (!node || (node.tag !== "VideoNode" && node.__tag !== "VideoNode")) return;
+  if (typeof node.playOrPauseFromMenu === "function") {
+    void node.playOrPauseFromMenu();
+  } else if (typeof node.activatePlayer === "function") {
+    void node.activatePlayer();
+  }
+};
+
+const handleVideoDownload = async () => {
+  const node = contextMenuTarget.value;
+  if (!node) return;
+  const videoUrl = node.videoUrl || node.url;
+  if (!videoUrl) {
+    toast.add({
+      severity: "warn",
+      summary: "无法下载",
+      detail: "当前视频没有可下载的源地址",
+      life: 2500,
+    });
+    return;
+  }
+
+  const timestamp = Date.now();
+  let fileName = `video_${timestamp}.mp4`;
+  try {
+    const path = new URL(videoUrl, window.location.origin).pathname;
+    const last = path.split("/").pop() || "";
+    const extMatch = last.match(/\.([a-z0-9]{2,5})$/i);
+    if (extMatch) fileName = `video_${timestamp}.${extMatch[1].toLowerCase()}`;
+  } catch {
+    /* keep default */
+  }
+
+  try {
+    const res = await fetch(videoUrl);
+    if (res.ok) {
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = fileName;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      return;
+    }
+  } catch (err) {
+    console.warn("[ContextMenu] video download fetch failed:", err);
+  }
+  window.open(videoUrl, "_blank", "noopener,noreferrer");
 };
 
 const handleFileInputChange = (e: Event) => {
@@ -1664,6 +1881,38 @@ body {
 
 .custom-context-menu-item:hover i {
   color: var(--p-primary-color) !important;
+}
+
+.custom-context-menu-item.is-danger {
+  color: #dc2626;
+}
+
+.custom-context-menu-item.is-danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+}
+
+.p-dark .custom-context-menu-item.is-danger {
+  color: #f87171;
+}
+
+.p-dark .custom-context-menu-item.is-danger:hover {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+
+.custom-context-menu-item.is-danger:hover i {
+  color: inherit !important;
+}
+
+.custom-context-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.p-dark .custom-context-menu-sep {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 @keyframes contextMenuFadeIn {

@@ -128,6 +128,8 @@ type CanvasNodeSpec = {
   scaleY?: number;
   zIndex?: number;
   url?: string;
+  /** Requested upscale factor; used so canvas display size can grow after HD finishes. */
+  upscaleScale?: number;
 };
 
 
@@ -846,6 +848,9 @@ export function useAgent(
             zIndex: n.zIndex,
             editable: true,
           });
+          if (typeof n.upscaleScale === "number" && n.upscaleScale > 1) {
+            leaferNode.set({ upscaleScale: n.upscaleScale });
+          }
           nodeStates.value[n.refId] = { refId: n.refId, type: "image", status: "done", url: n.url };
           leaferNode.on("property.change", () => {
             if (leaferNode.generationStatus === "generating") {

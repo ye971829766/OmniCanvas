@@ -338,10 +338,32 @@ export function useCanvas(
       ) {
         item.removeVideoLayer();
       }
+      // Exit click-to-play session if any
+      if (typeof item.deactivatePlayer === "function") {
+        item.deactivatePlayer();
+      }
       item.remove();
     });
     app.editor.cancel();
     recordHistory();
+  };
+
+  const bringToFront = () => {
+    const app = canvasApp.value;
+    if (!app?.editor?.list?.length) return;
+    if (typeof (app.editor as any).toTop === "function") {
+      (app.editor as any).toTop();
+      recordHistory();
+    }
+  };
+
+  const sendToBack = () => {
+    const app = canvasApp.value;
+    if (!app?.editor?.list?.length) return;
+    if (typeof (app.editor as any).toBottom === "function") {
+      (app.editor as any).toBottom();
+      recordHistory();
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -1172,6 +1194,12 @@ export function useCanvas(
               delete rawNode._loadingGroup;
             }
 
+            const wasUpscale =
+              rawNode.generationType === "upscale" ||
+              Number(rawNode.upscaleScale) > 1;
+            const requestedScale = Number(rawNode.upscaleScale) || 0;
+            const appliedScale = Number((res as any).appliedScale) || 0;
+
             // Clean up properties
             delete rawNode.generationStatus;
             delete rawNode.taskId;
@@ -1181,8 +1209,45 @@ export function useCanvas(
             // Update URL
             applyImagePaintMode(rawNode, "fit", res.imageUrl);
 
-            // Save history
-            recordHistoryDebounced();
+            // Upscale: match canvas box to result pixels so HD is visibly larger
+            if (wasUpscale) {
+              const scaleFactor =
+                appliedScale > 1
+                  ? appliedScale
+                  : requestedScale > 1
+                    ? requestedScale
+                    : 2;
+
+              const probe = new window.Image();
+              probe.onload = () => {
+                if (probe.naturalWidth > 0 && probe.naturalHeight > 0) {
+                  rawNode.set({
+                    width: probe.naturalWidth,
+                    height: probe.naturalHeight,
+                  });
+                }
+                delete rawNode.upscaleScale;
+                recordHistoryDebounced();
+              };
+              probe.onerror = () => {
+                // Fallback: keep pre-scaled box from UpscaleTool, or multiply once
+                const curW = Number(rawNode.width) || 0;
+                const curH = Number(rawNode.height) || 0;
+                // If tool already set width ≈ source * scale, leave as-is
+                if (!(curW > 0 && curH > 0)) {
+                  rawNode.set({
+                    width: Math.round(400 * scaleFactor),
+                    height: Math.round(300 * scaleFactor),
+                  });
+                }
+                delete rawNode.upscaleScale;
+                recordHistoryDebounced();
+              };
+              probe.src = res.imageUrl;
+            } else {
+              delete rawNode.upscaleScale;
+              recordHistoryDebounced();
+            }
           } else if (res.status === "error") {
             clearInterval(pollInterval);
             delete rawNode._pollingInterval;
@@ -1200,6 +1265,7 @@ export function useCanvas(
             delete rawNode.generationStatus;
             delete rawNode.taskId;
             delete rawNode.generationType;
+            delete rawNode.upscaleScale;
             delete rawNode._pollingTaskId;
 
             window.dispatchEvent(
@@ -1648,5 +1714,9 @@ export function useCanvas(
     undo,
     addImageGenNode,
     addVideoGenNode,
+    copy,
+    deleteSelected,
+    bringToFront,
+    sendToBack,
   };
 }

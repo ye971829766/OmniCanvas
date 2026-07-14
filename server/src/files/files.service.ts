@@ -19,6 +19,10 @@ import { deflateSync } from "zlib";
 import { BillingService } from "../billing/billing.service";
 import type { BillingTaskContext } from "../billing/billing.types";
 import { ModelConfigService } from "../model-config/model-config.service";
+import {
+  baiduUpscaleImage,
+  isBaiduUpscaleConfigured,
+} from "./baidu-image.client";
 
 @Injectable()
 export class FilesService implements OnModuleInit {
@@ -41,6 +45,21 @@ export class FilesService implements OnModuleInit {
   async onModuleInit() {
     await mkdir(this.UPLOAD_DIR, { recursive: true });
     console.log("FFmpeg executable path (FilesService):", ffmpegInstaller.path);
+    const upscaleMode = this.resolveUpscaleProvider();
+    console.log(
+      `[FilesService] Upscale provider: ${upscaleMode}` +
+        (upscaleMode === "baidu"
+          ? " (百度图像无损放大 image_quality_enhance)"
+          : " (local RealESRGAN)"),
+    );
+  }
+
+  /** Prefer Baidu when keys exist; force with UPSCALE_PROVIDER=baidu|local. */
+  private resolveUpscaleProvider(): "baidu" | "local" {
+    const forced = (process.env.UPSCALE_PROVIDER || "").trim().toLowerCase();
+    if (forced === "baidu") return "baidu";
+    if (forced === "local") return "local";
+    return isBaiduUpscaleConfigured() ? "baidu" : "local";
   }
 
   /**
@@ -776,15 +795,86 @@ export class FilesService implements OnModuleInit {
     scale: number,
     originUrl: string,
   ) {
+    try {
+      const provider = this.resolveUpscaleProvider();
+      if (provider === "baidu") {
+        await this.runBaiduUpscaleTask(taskId, imageUrl, scale, originUrl);
+      } else {
+        await this.runLocalRealesrganUpscaleTask(
+          taskId,
+          imageUrl,
+          scale,
+          originUrl,
+        );
+      }
+    } catch (err: any) {
+      console.error(`[runUpscaleTaskInBackground] Task ${taskId} failed:`, err);
+      this.setTaskStatus(taskId, "error", {
+        error: err.message || "超分放大失败，请重试",
+      });
+    }
+  }
+
+  /**
+   * Baidu cloud lossless upscale (image_quality_enhance).
+   * Each API call is fixed 2×; scale=4 runs up to two passes.
+   * @see https://cloud.baidu.com/doc/IMAGEPROCESS/s/ok3bclnkg
+   */
+  private async runBaiduUpscaleTask(
+    taskId: string,
+    imageUrl: string,
+    scale: number,
+    originUrl: string,
+  ) {
+    const response = await this.downloadAsset(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download image: HTTP ${response.status}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const mimeType = response.headers.get("content-type") || "image/png";
+    const inputBase64 = buffer.toString("base64");
+
+    // Baidu limit: width*height ≤ 2000×2000. Surface a clear error early when possible.
+    // (We do not hard-fail if size detection is unavailable.)
+    try {
+      // optional: no sharp dependency; size check is best-effort via Baidu errors
+      void mimeType;
+    } catch {
+      /* ignore */
+    }
+
+    const { base64: outBase64, appliedScale } = await baiduUpscaleImage(
+      inputBase64,
+      scale >= 4 ? 4 : 2,
+    );
+
+    const outputFilename = await this.saveImageFromBase64(outBase64, "png");
+    const localImageUrl = `${originUrl}/files/${outputFilename}`;
+
+    this.setTaskStatus(taskId, "success", {
+      imageUrl: localImageUrl,
+      url: localImageUrl,
+      provider: "baidu",
+      requestedScale: scale,
+      appliedScale,
+    });
+  }
+
+  /** Legacy local RealESRGAN path (Windows vulkan binary). */
+  private async runLocalRealesrganUpscaleTask(
+    taskId: string,
+    imageUrl: string,
+    _scale: number,
+    originUrl: string,
+  ) {
     let absoluteInputPath = "";
     try {
-      // 1. Download image from imageUrl
       const response = await this.downloadAsset(imageUrl);
       if (!response.ok) {
         throw new Error(`Failed to download image: HTTP ${response.status}`);
       }
 
-      // Save image to a temporary file
       const tempId = crypto.randomUUID();
       const ext =
         this.getContentTypeExtension(response.headers.get("content-type")) ||
@@ -795,13 +885,11 @@ export class FilesService implements OnModuleInit {
       const arrayBuffer = await response.arrayBuffer();
       await Bun.write(absoluteInputPath, arrayBuffer);
 
-      // Prepare output filename
       const outputId = crypto.randomUUID();
       const outputFilename = `upscaled_${outputId}.png`;
       const outputPath = join(this.UPLOAD_DIR, outputFilename);
       const absoluteOutputPath = resolve(outputPath);
 
-      // 2. Execute RealESRGAN
       const absoluteExePath = resolve(
         join("realesrgan", "realesrgan-ncnn-vulkan.exe"),
       );
@@ -814,7 +902,7 @@ export class FilesService implements OnModuleInit {
         "-n",
         "realesrgan-x4plus",
         "-s",
-        "4", // Force native scale 4 to avoid jumbled tile/stitching bugs when scale is 2/3
+        "4",
       ];
 
       const proc = Bun.spawn([absoluteExePath, ...args], {
@@ -828,13 +916,11 @@ export class FilesService implements OnModuleInit {
         throw new Error(`RealESRGAN process exited with code ${exitCode}`);
       }
 
-      // Clean up temp input file
       try {
         await Bun.file(absoluteInputPath).delete();
       } catch (_) {}
       absoluteInputPath = "";
 
-      // Verify output file exists
       const outputFile = Bun.file(absoluteOutputPath);
       if (!(await outputFile.exists())) {
         throw new Error("Upscaled output file was not generated");
@@ -845,17 +931,15 @@ export class FilesService implements OnModuleInit {
       this.setTaskStatus(taskId, "success", {
         imageUrl: localImageUrl,
         url: localImageUrl,
+        provider: "local",
       });
     } catch (err: any) {
-      console.error(`[runUpscaleTaskInBackground] Task ${taskId} failed:`, err);
       if (absoluteInputPath) {
         try {
           await Bun.file(absoluteInputPath).delete();
         } catch (_) {}
       }
-      this.setTaskStatus(taskId, "error", {
-        error: err.message || "超分放大失败，请重试",
-      });
+      throw err;
     }
   }
 

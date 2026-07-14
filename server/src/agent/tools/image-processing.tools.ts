@@ -14,6 +14,7 @@ function createProcessingTarget(
   ctx: ToolContext,
   sourceUrl: string,
   operation: string,
+  options?: { scale?: number },
 ): string {
   const sourceNode = getSourceNode(input.source, ctx);
   const replaceOriginal = input.replaceOriginal === true && sourceNode?.refId;
@@ -24,6 +25,14 @@ function createProcessingTarget(
       ctx,
       input.parentId ?? sourceNode?.parentId,
     );
+    const scale =
+      operation === 'upscale'
+        ? Math.max(1, Number(options?.scale) || Number(input.scale) || 2)
+        : 1;
+    const baseW = input.width ?? sourceNode?.width ?? 400;
+    const baseH = input.height ?? sourceNode?.height ?? 400;
+    const width = Math.max(1, Math.round(Number(baseW) * scale));
+    const height = Math.max(1, Math.round(Number(baseH) * scale));
     const node = {
       refId,
       type: 'image' as const,
@@ -31,8 +40,9 @@ function createProcessingTarget(
       url: sourceUrl,
       x: input.x ?? (typeof sourceNode?.x === 'number' ? sourceNode.x + (sourceNode.width || 400) + 24 : undefined),
       y: input.y ?? sourceNode?.y,
-      width: input.width ?? sourceNode?.width ?? 400,
-      height: input.height ?? sourceNode?.height ?? 400,
+      width,
+      height,
+      ...(operation === 'upscale' ? { upscaleScale: scale } : {}),
     };
     ctx.sink.canvas({ op: 'add_node', node: node as any });
     upsertCanvasNode(ctx, refId, node);
@@ -118,12 +128,15 @@ export const upscaleImageTool: AgentTool = {
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     const sourceUrl = await resolveReferenceUrl(input.source, ctx);
     if (!sourceUrl) throw new Error(`Unable to resolve source image: ${input.source}`);
-    const refId = createProcessingTarget(input, ctx, sourceUrl, 'upscale');
+    const scale = input.scale || 4;
+    const refId = createProcessingTarget(input, ctx, sourceUrl, 'upscale', {
+      scale,
+    });
     const billed = await startBilledAgentTask(
       ctx,
       'upscale_image',
-      { source: input.source, scale: input.scale || 4 },
-      (billingContext) => ctx.files.upscaleImage(sourceUrl, input.scale || 4, ctx.origin, billingContext),
+      { source: input.source, scale },
+      (billingContext) => ctx.files.upscaleImage(sourceUrl, scale, ctx.origin, billingContext),
     );
     const result = billed.result;
     startCanvasImageTask(refId, result.taskId, 'upscale', ctx);

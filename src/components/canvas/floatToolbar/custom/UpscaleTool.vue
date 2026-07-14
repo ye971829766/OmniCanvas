@@ -132,27 +132,32 @@ const startUpscale = async (scale: number) => {
       const rawTarget = toRaw(props.target);
       const rawParent = toRaw(parent);
       if (rawTarget && rawParent) {
-        // 2. 创建一个新图片元素，宽度高度缩放角度等与原图完全一致，并在原图右侧 20px 摆放
+        const srcW = Number(rawTarget.width) || 400;
+        const srcH = Number(rawTarget.height) || 300;
+        // Display at scaled canvas size so upscaled results are visually distinct
+        const outW = Math.max(1, Math.round(srcW * scale));
+        const outH = Math.max(1, Math.round(srcH * scale));
+
+        // Place to the right of the source; use scaled width for gap so it doesn't overlap
         const newImage = new Image({
-          x: rawTarget.x + rawTarget.width + 20,
-          y: rawTarget.y,
-          width: rawTarget.width,
-          height: rawTarget.height,
+          x: (Number(rawTarget.x) || 0) + srcW + 24,
+          y: Number(rawTarget.y) || 0,
+          width: outW,
+          height: outH,
           scaleX: rawTarget.scaleX,
           scaleY: rawTarget.scaleY,
           rotation: rawTarget.rotation,
-          url: rawTarget.url, // 初始使用原图链接占位
+          url: rawTarget.url, // placeholder until HD result returns
           editable: true,
         });
 
-        // 3. 在新图节点上挂载任务属性，供 useCanvas 的 initNodeListeners 自动识别并启动动画与轮询
         newImage.set({
           taskId: res.taskId,
           generationStatus: "generating",
           generationType: "upscale",
+          upscaleScale: scale,
         });
 
-        // 4. 将新元素加入画布
         rawParent.add(newImage);
 
         emit("change", {

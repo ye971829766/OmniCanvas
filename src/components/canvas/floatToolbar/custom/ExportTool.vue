@@ -3,7 +3,7 @@
     <button
       type="button"
       class="export-trigger"
-      title="导出与下载"
+      :title="exportTitle"
       :disabled="disabled"
       @click="togglePanel"
     >
@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, type PropType } from "vue";
+import { computed, ref, type PropType } from "vue";
 import { Download } from "lucide-vue-next";
 import Popover from "primevue/popover";
 import type { ToolbarItem, ToolbarTarget } from "../types";
@@ -69,6 +69,12 @@ const popoverPt = {
   root: { class: "toolbar-popover-root" },
   content: { class: "toolbar-popover-content" },
 };
+
+const exportTitle = computed(() => {
+  const tag = (props.target as any)?.tag || (props.target as any)?.__tag;
+  if (tag === "VideoNode") return "下载视频";
+  return "导出与下载";
+});
 
 interface FormatItem {
   ext: "png" | "jpg" | "webp" | "svg";
@@ -109,8 +115,74 @@ const formatList: FormatItem[] = [
   },
 ];
 
+const isVideoNode = (el: any) =>
+  el?.tag === "VideoNode" || el?.__tag === "VideoNode";
+
+const getVideoSourceUrl = (el: any): string =>
+  (typeof el?.videoUrl === "string" && el.videoUrl) ||
+  (typeof el?.url === "string" && el.url) ||
+  "";
+
+/** Infer a download filename from the video URL (prefer real extension). */
+const videoDownloadName = (url: string, el: any): string => {
+  const timestamp = Date.now();
+  const base = el?.name || "video";
+  try {
+    const path = new URL(url, window.location.origin).pathname;
+    const last = path.split("/").pop() || "";
+    const extMatch = last.match(/\.([a-z0-9]{2,5})$/i);
+    if (extMatch) {
+      return `${base}_${timestamp}.${extMatch[1].toLowerCase()}`;
+    }
+  } catch {
+    /* ignore bad URL */
+  }
+  return `${base}_${timestamp}.mp4`;
+};
+
+/**
+ * Video nodes export the source file directly — no image-format picker.
+ */
+const exportVideoDirect = async (el: any) => {
+  const videoUrl = getVideoSourceUrl(el);
+  if (!videoUrl) {
+    console.error("[ExportTool] VideoNode has no videoUrl");
+    return;
+  }
+
+  const fileName = videoDownloadName(videoUrl, el);
+
+  // Prefer same-origin / CORS-enabled download so the file actually saves
+  try {
+    const res = await fetch(videoUrl);
+    if (res.ok) {
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      triggerDownload(blobUrl, fileName);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      return;
+    }
+  } catch (err) {
+    console.warn(
+      "[ExportTool] fetch download failed, falling back to open:",
+      err,
+    );
+  }
+
+  // Cross-origin without CORS: open in a new tab as last resort
+  window.open(videoUrl, "_blank", "noopener,noreferrer");
+};
+
 const togglePanel = (event: Event) => {
   if (props.disabled) return;
+
+  const el = props.target as any;
+  // 视频：点击下载即导出源文件，不弹图像格式菜单
+  if (isVideoNode(el)) {
+    void exportVideoDirect(el);
+    return;
+  }
+
   popoverRef.value?.toggle(event);
 };
 
@@ -118,6 +190,7 @@ const triggerDownload = (url: string, name: string) => {
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
+  a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -277,14 +350,9 @@ const doExport = async (ext: "png" | "jpg" | "webp" | "svg") => {
       ? targetObj.editor || targetObj
       : targetObj;
 
-  // 1. 如果是视频节点直接打开/下载视频文件
-  if (el.tag === "VideoNode") {
-    const videoUrl = el.videoUrl || el.url;
-    if (videoUrl) {
-      window.open(videoUrl, "_blank");
-    } else {
-      console.error("[ExportTool] VideoNode has no videoUrl");
-    }
+  // 1. 视频节点应在 togglePanel 直接导出；此处兜底
+  if (isVideoNode(el)) {
+    await exportVideoDirect(el);
     return;
   }
 
