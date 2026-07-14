@@ -1058,13 +1058,23 @@ ${videoModelInfo || "- None"}
     output: Record<string, any> | undefined,
     ctx: ToolContext,
   ): void {
-    const url = task.state?.imageUrl || task.state?.videoUrl;
+    const imageUrl = task.state?.imageUrl;
+    const videoUrl = task.state?.videoUrl;
+    const thumbnailUrl =
+      typeof task.state?.thumbnailUrl === "string"
+        ? task.state.thumbnailUrl
+        : undefined;
+    const url = imageUrl || videoUrl;
     const successful = task.status === "success";
     const error = task.error || String(task.state?.error || "Generation failed");
 
     if (output) {
       output.status = successful ? "success" : "error";
       if (url) output.url = url;
+      if (videoUrl) output.videoUrl = videoUrl;
+      // Critical for agent chat previews: never leave the UI with only a .mp4 URL
+      // for an <img> tag — always surface the poster/thumbnail when available.
+      if (thumbnailUrl) output.thumbnailUrl = thumbnailUrl;
       if (!successful) output.error = error;
       output.note = successful
         ? "Media generation completed. Continue the remaining canvas task."
@@ -1077,7 +1087,11 @@ ${videoModelInfo || "- None"}
       generationStatus: successful ? "done" : "error",
       ...(url
         ? task.kind === "video"
-          ? { url, videoUrl: url }
+          ? {
+              url: videoUrl || url,
+              videoUrl: videoUrl || url,
+              ...(thumbnailUrl ? { thumbnailUrl } : {}),
+            }
           : { url }
         : {}),
       ...(!successful ? { errorMessage: error } : {}),

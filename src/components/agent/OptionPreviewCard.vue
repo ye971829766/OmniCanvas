@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { Download, Play } from "lucide-vue-next";
 import type { NodeState } from "@/composables/useAgent";
 
@@ -18,31 +18,122 @@ const displayTitle = computed(() => {
   if (stateVal?.prompt) {
     const p = String(stateVal.prompt).trim();
     if (p.length > 0) {
-      // Pick first 16 characters or Chinese title
       return p.length > 18 ? p.slice(0, 18) + "…" : p;
     }
   }
   return "视觉设计方案";
 });
 
+const isVideo = computed(
+  () => props.state?.status === "done" && props.state?.type === "video",
+);
+
+const videoSrc = computed(() => {
+  if (!isVideo.value || !props.state) return "";
+  return props.state.url || "";
+});
+
+/** Poster must be an image URL — never a .mp4 / video URL. */
+const posterSrc = computed(() => {
+  if (!props.state) return "";
+  const thumb = props.state.thumbnailUrl || "";
+  if (thumb && !looksLikeVideoUrl(thumb)) return thumb;
+  return "";
+});
+
+const posterFailed = ref(false);
+const inlinePlaying = ref(false);
+const videoEl = ref<HTMLVideoElement | null>(null);
+
+watch(
+  () => [props.state?.url, props.state?.thumbnailUrl, props.state?.type],
+  () => {
+    posterFailed.value = false;
+    inlinePlaying.value = false;
+  },
+);
+
+function looksLikeVideoUrl(url: string): boolean {
+  if (!url) return false;
+  const lower = url.split("?")[0].toLowerCase();
+  return (
+    lower.endsWith(".mp4") ||
+    lower.endsWith(".webm") ||
+    lower.endsWith(".mov") ||
+    lower.endsWith(".m4v") ||
+    lower.includes("/video") ||
+    lower.includes("video/")
+  );
+}
+
 function downloadMedia(e: MouseEvent) {
   e.stopPropagation();
-  const url = props.state?.url || props.state?.thumbnailUrl;
+  const state = props.state;
+  if (!state) return;
+
+  const url =
+    state.type === "video"
+      ? state.url || state.thumbnailUrl
+      : state.url || state.thumbnailUrl;
   if (!url) return;
+
+  const isVid = state.type === "video" || looksLikeVideoUrl(url);
+  let ext = isVid ? "mp4" : "png";
+  try {
+    const path = new URL(url, window.location.origin).pathname;
+    const match = path.match(/\.([a-z0-9]{2,5})$/i);
+    if (match) ext = match[1].toLowerCase();
+  } catch {
+    /* keep default */
+  }
 
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${displayTitle.value || "design"}_${Date.now()}.png`;
+  a.download = `${displayTitle.value || "media"}_${Date.now()}.${ext}`;
+  a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+async function onPlayClick(e: MouseEvent) {
+  e.stopPropagation();
+  if (!videoSrc.value) {
+    emit("zoom", props.refId);
+    return;
+  }
+  // Prefer inline preview play in the agent panel
+  inlinePlaying.value = true;
+  await Promise.resolve();
+  const el = videoEl.value;
+  if (!el) {
+    emit("zoom", props.refId);
+    return;
+  }
+  try {
+    el.muted = false;
+    el.volume = 1;
+    await el.play();
+  } catch {
+    // Autoplay with sound may fail — still show controls for user to play
+    try {
+      el.muted = true;
+      await el.play();
+    } catch {
+      emit("zoom", props.refId);
+    }
+  }
+}
+
+function onVideoEnded() {
+  inlinePlaying.value = false;
 }
 </script>
 
 <template>
   <div
     class="preview-card"
-    :class="{ compact }"
+    :class="{ compact, 'is-video': isVideo }"
     role="button"
     tabindex="0"
     title="定位到画布"
@@ -70,7 +161,7 @@ function downloadMedia(e: MouseEvent) {
       v-else-if="state.status === 'done' && state.type === 'image'"
       class="preview-done"
     >
-      <img :src="state.url" class="preview-img" />
+      <img :src="state.url" class="preview-img" alt="" />
       <button
         class="action-download-btn"
         type="button"
@@ -84,19 +175,49 @@ function downloadMedia(e: MouseEvent) {
     <!-- ── DONE: video ────────────────────────────────────────── -->
     <div
       v-else-if="state.status === 'done' && state.type === 'video'"
-      class="preview-done"
+      class="preview-done preview-video"
     >
-      <img :src="state.thumbnailUrl || state.url" class="preview-img" />
+      <!-- Inline player after user hits play -->
+      <video
+        v-if="inlinePlaying && videoSrc"
+        ref="videoEl"
+        class="preview-video-el"
+        :src="videoSrc"
+        :poster="posterSrc || undefined"
+        controls
+        playsinline
+        @ended="onVideoEnded"
+        @click.stop
+      />
 
-      <!-- Play button with breathing pulse -->
-      <button
-        class="play-btn"
-        type="button"
-        @click.stop="emit('zoom', refId)"
-        aria-label="定位画布"
-      >
-        <Play :size="16" fill="currentColor" />
-      </button>
+      <!-- Poster / placeholder (never use video URL as <img>) -->
+      <template v-else>
+        <img
+          v-if="posterSrc && !posterFailed"
+          :src="posterSrc"
+          class="preview-img"
+          alt=""
+          @error="posterFailed = true"
+        />
+        <div v-else class="video-poster-fallback" aria-hidden="true">
+          <div class="video-poster-shine" />
+          <span class="video-poster-label">VIDEO</span>
+        </div>
+
+        <button
+          class="play-btn"
+          type="button"
+          aria-label="播放预览"
+          @click="onPlayClick"
+        >
+          <Play :size="16" fill="currentColor" />
+        </button>
+
+        <span class="video-badge">VIDEO</span>
+        <div class="preview-overlay">
+          <span class="preview-tip">点击定位画布 · 播放预览</span>
+        </div>
+      </template>
 
       <button
         class="action-download-btn"
@@ -106,31 +227,11 @@ function downloadMedia(e: MouseEvent) {
       >
         <Download :size="15" />
       </button>
-
-      <span class="video-badge">VIDEO</span>
-      <div class="preview-overlay">
-        <span class="preview-tip">点击定位画布</span>
-      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* ── Title Header ───────────────────────────────────────────────── */
-.card-title-header {
-  padding: 8px 12px 6px;
-  background: var(--p-surface-0, #ffffff);
-  border-bottom: 1px solid var(--p-surface-100, #f4f4f5);
-}
-
-.card-title-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: 0.2px;
-}
-
-
 /* ── Card shell ─────────────────────────────────────────────────── */
 .preview-card {
   position: relative;
@@ -155,14 +256,10 @@ function downloadMedia(e: MouseEvent) {
   aspect-ratio: 1;
 }
 
-/* .preview-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-} */
-
-/* .preview-card:hover .preview-img {
-  transform: scale(1.02);
-} */
+.preview-card.is-video:not(.compact) {
+  /* Stable 16:9 frame so missing posters never collapse into a thin control bar */
+  aspect-ratio: 16 / 9;
+}
 
 /* Glow ring flash on complete */
 .glow-ring {
@@ -203,6 +300,12 @@ function downloadMedia(e: MouseEvent) {
   width: 100%;
   height: 100%;
   min-height: 0;
+}
+
+.is-video:not(.compact) .preview-mesh,
+.is-video:not(.compact) .preview-done {
+  min-height: 0;
+  height: 100%;
 }
 
 .mesh-gradient {
@@ -246,38 +349,6 @@ function downloadMedia(e: MouseEvent) {
   user-select: none;
 }
 
-.mesh-progress {
-  width: 80px;
-  height: 2px;
-  border-radius: 1px;
-  overflow: hidden;
-  background: rgba(0, 0, 0, 0.06);
-  position: relative;
-}
-
-.mesh-progress::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--p-primary-color, #161618),
-    transparent
-  );
-  background-size: 200% 100%;
-  animation: mesh-progress-flow 1.8s ease-in-out infinite;
-}
-
-@keyframes mesh-progress-flow {
-  0% {
-    background-position: 150% 0;
-  }
-  100% {
-    background-position: -150% 0;
-  }
-}
-
 /* ── Error ──────────────────────────────────────────────────────── */
 .preview-error {
   display: flex;
@@ -305,12 +376,64 @@ function downloadMedia(e: MouseEvent) {
   max-height: 280px;
 }
 
+.preview-video {
+  max-height: none;
+  height: 100%;
+  min-height: 160px;
+}
+
 .preview-img {
   width: 100%;
   height: auto;
   max-height: 280px;
   display: block;
   object-fit: contain;
+  background: #0a0a0a;
+}
+
+.preview-video .preview-img {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+}
+
+.preview-video-el {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #000;
+  vertical-align: middle;
+}
+
+.video-poster-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, #18181b 0%, #27272a 50%, #111 100%);
+  overflow: hidden;
+}
+
+.video-poster-shine {
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(
+    circle at 30% 30%,
+    rgba(96, 165, 250, 0.22),
+    transparent 55%
+  );
+}
+
+.video-poster-label {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .compact .preview-done {
@@ -362,8 +485,6 @@ function downloadMedia(e: MouseEvent) {
   height: 27px;
 }
 
-
-
 /* Overlay */
 .preview-overlay {
   position: absolute;
@@ -374,6 +495,7 @@ function downloadMedia(e: MouseEvent) {
   padding: 10px 12px;
   opacity: 0;
   transition: opacity 0.2s ease;
+  pointer-events: none;
 }
 
 .preview-card:hover .preview-overlay {
@@ -392,8 +514,8 @@ function downloadMedia(e: MouseEvent) {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: rgba(24, 24, 27, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.26);
@@ -411,19 +533,19 @@ function downloadMedia(e: MouseEvent) {
 }
 
 .play-btn:hover {
-  background: var(--accent-primary);
+  background: rgba(37, 99, 235, 0.95);
   color: #fff;
-  transform: translate(-50%, -50%) scale(1.1);
+  transform: translate(-50%, -50%) scale(1.08);
   animation: none;
 }
 
 @keyframes play-breathe {
   0%,
   100% {
-    transform: translate(-50%, -50%) scale(0.95);
+    transform: translate(-50%, -50%) scale(0.96);
   }
   50% {
-    transform: translate(-50%, -50%) scale(1.05);
+    transform: translate(-50%, -50%) scale(1.04);
   }
 }
 
@@ -463,10 +585,6 @@ function downloadMedia(e: MouseEvent) {
 
 :global(.p-dark .preview-error) {
   background: #1c1111;
-}
-
-:global(.p-dark .curtain) {
-  background: #18181b;
 }
 
 :global(.p-dark .error-text) {

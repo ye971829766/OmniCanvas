@@ -21,9 +21,47 @@ describe("agent media terminal state", () => {
       type: "image",
       status: "done",
       url: "https://example.com/final.png",
-      thumbnailUrl: undefined,
+      // Image results may reuse the media URL as a poster/thumbnail
+      thumbnailUrl: "https://example.com/final.png",
       error: undefined,
     });
+  });
+
+  it("keeps video poster separate from the video file URL", () => {
+    expect(
+      deriveTerminalMediaNodeState(
+        "generate_video",
+        {
+          refId: "vid-1",
+          status: "success",
+          videoUrl: "https://example.com/clip.mp4",
+          thumbnailUrl: "https://example.com/poster.jpg",
+        },
+        { refId: "vid-1", type: "video", status: "generating" },
+      ),
+    ).toEqual({
+      refId: "vid-1",
+      type: "video",
+      status: "done",
+      url: "https://example.com/clip.mp4",
+      thumbnailUrl: "https://example.com/poster.jpg",
+      error: undefined,
+    });
+  });
+
+  it("does not use a bare video URL as the image poster", () => {
+    const state = deriveTerminalMediaNodeState("generate_video", {
+      refId: "vid-2",
+      status: "success",
+      url: "https://example.com/only.mp4",
+    });
+    expect(state).toMatchObject({
+      refId: "vid-2",
+      type: "video",
+      status: "done",
+      url: "https://example.com/only.mp4",
+    });
+    expect(state?.thumbnailUrl).toBeUndefined();
   });
 
   it("handles wrapped terminal errors", () => {

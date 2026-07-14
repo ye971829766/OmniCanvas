@@ -40,16 +40,26 @@ export function deriveTerminalMediaNodeState(
   if (!refId) return undefined;
 
   const status = String(output?.status || "").toLowerCase();
-  const url = output?.url || output?.imageUrl || output?.videoUrl;
+  const videoUrl = output?.videoUrl || (toolName === "generate_video" ? output?.url : undefined);
+  const imageUrl = output?.imageUrl || (toolName === "generate_video" ? undefined : output?.url);
+  const url =
+    toolName === "generate_video"
+      ? videoUrl || output?.url || previous?.url
+      : imageUrl || output?.url || output?.videoUrl || previous?.url;
   const type = toolName === "generate_video" ? "video" : "image";
   if (url || ["success", "done", "completed"].includes(status)) {
+    const thumbnailUrl =
+      output?.thumbnailUrl ||
+      previous?.thumbnailUrl ||
+      // Never use a video file as an image poster
+      (type === "image" ? url : undefined);
     return {
       ...previous,
       refId,
       type,
       status: "done",
       url: url || previous?.url,
-      thumbnailUrl: output?.thumbnailUrl || previous?.thumbnailUrl,
+      thumbnailUrl,
       error: undefined,
     };
   }
