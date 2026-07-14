@@ -300,11 +300,17 @@ export const generateImageTool: AgentTool = {
       taskId: (res as any).taskId,
     });
 
+    const resolvedModel =
+      (typeof (res as any)?.model === 'string' && (res as any).model) ||
+      (typeof input.model === 'string' && input.model.trim()) ||
+      undefined;
+
     return {
       output: {
         refId,
         taskId: (res as any).taskId,
         status: (res as any).status,
+        model: resolvedModel,
         parentId,
         x,
         y,

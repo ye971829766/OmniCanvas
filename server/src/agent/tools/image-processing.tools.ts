@@ -234,11 +234,17 @@ export const editImageTool: AgentTool = {
     const result = billed.result;
     if (!result.taskId) throw new Error('Image edit did not return a taskId.');
     startCanvasImageTask(refId, result.taskId, 'edit', ctx);
+    const resolvedModel =
+      (typeof (result as any)?.model === 'string' && (result as any).model) ||
+      (typeof input.model === 'string' && input.model.trim()) ||
+      undefined;
+
     return {
       output: {
         refId,
         taskId: result.taskId,
         status: result.status,
+        model: resolvedModel,
         operation: 'edit_image',
         localized: Boolean(mask),
         billingOperationId: billed.billingOperationId,

@@ -8,7 +8,7 @@ import {
   Sparkles,
   Video,
 } from "lucide-vue-next";
-import { getToolLabel } from "./tool-labels";
+import { getToolLabel, getToolModelLabel } from "./tool-labels";
 import type { ToolCallItem } from "@/composables/useAgent";
 
 const props = defineProps<{ tool: ToolCallItem }>();
@@ -21,9 +21,16 @@ const isFailed = computed(
 );
 
 const displayTitle = computed(() => {
-  if (props.tool.name === "generate_image") return "GPT Image 2";
+  if (props.tool.name === "generate_image") {
+    return getToolModelLabel(props.tool, "生成图片");
+  }
+  if (props.tool.name === "edit_image") {
+    return getToolModelLabel(props.tool, "编辑图片");
+  }
   if (props.tool.name === "collect_inspiration") return "图片灵感";
-  if (props.tool.name === "generate_video") return "VideoGen";
+  if (props.tool.name === "generate_video") {
+    return getToolModelLabel(props.tool, "VideoGen");
+  }
   if (
     ["add_text", "set_frame", "add_rect", "add_frame"].includes(
       props.tool.name,

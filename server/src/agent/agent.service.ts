@@ -1075,6 +1075,9 @@ ${videoModelInfo || "- None"}
       // Critical for agent chat previews: never leave the UI with only a .mp4 URL
       // for an <img> tag — always surface the poster/thumbnail when available.
       if (thumbnailUrl) output.thumbnailUrl = thumbnailUrl;
+      if (typeof task.state?.model === "string" && task.state.model) {
+        output.model = task.state.model;
+      }
       if (!successful) output.error = error;
       output.note = successful
         ? "Media generation completed. Continue the remaining canvas task."

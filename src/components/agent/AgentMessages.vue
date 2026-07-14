@@ -31,19 +31,38 @@ const EMPTY_SUGGESTIONS = [
   },
 ] as const;
 
-function getToolActiveNameText(name: string): string {
-  if (name === "generate_image") return "正在执行 GPT Image 2";
-  if (name === "collect_inspiration") return "正在收集图片灵感";
-  if (name === "generate_video") return "正在执行 VideoGen";
+function getToolActiveNameText(tool: ToolCallItem): string {
+  if (tool.name === "generate_image") {
+    const model =
+      (typeof tool.input?.model === "string" && tool.input.model.trim()) ||
+      (typeof tool.output?.model === "string" && tool.output.model.trim()) ||
+      "";
+    return model ? `正在执行 ${model}` : "正在生成图片";
+  }
+  if (tool.name === "edit_image") {
+    const model =
+      (typeof tool.input?.model === "string" && tool.input.model.trim()) ||
+      (typeof tool.output?.model === "string" && tool.output.model.trim()) ||
+      "";
+    return model ? `正在编辑 ${model}` : "正在编辑图片";
+  }
+  if (tool.name === "collect_inspiration") return "正在收集图片灵感";
+  if (tool.name === "generate_video") {
+    const model =
+      (typeof tool.input?.model === "string" && tool.input.model.trim()) ||
+      (typeof tool.output?.model === "string" && tool.output.model.trim()) ||
+      "";
+    return model ? `正在执行 ${model}` : "正在执行 VideoGen";
+  }
   if (
-    name === "add_text" ||
-    name === "set_frame" ||
-    name === "add_rect" ||
-    name === "add_frame"
+    tool.name === "add_text" ||
+    tool.name === "set_frame" ||
+    tool.name === "add_rect" ||
+    tool.name === "add_frame"
   ) {
     return "正在进行排版设计";
   }
-  return getToolActiveLabel(name);
+  return getToolActiveLabel(tool.name);
 }
 
 function getThinkingText(m: ChatMessage): string {
@@ -52,7 +71,7 @@ function getThinkingText(m: ChatMessage): string {
       (tool) => !tool.done && !isInternalAgentTool(tool.name),
     );
     if (activeTool) {
-      return getToolActiveNameText(activeTool.name);
+      return getToolActiveNameText(activeTool);
     }
     if (m.tools.some((tool) => !tool.done && isInternalAgentTool(tool.name))) {
       return "正在完善设计细节";

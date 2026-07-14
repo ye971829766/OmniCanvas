@@ -1518,16 +1518,19 @@ export class AiService implements OnModuleInit {
         }
         const apiKey = channel.apiKey;
         const baseUrl = channel.baseUrl;
-        // Google GenAI SDK expects a host root (e.g. https://yunwu.ai/v1beta),
-        // not the full :generateContent endpoint URL.
-        const nativeBaseUrl = baseUrl
+        // @google/genai always appends apiVersion (default "v1beta") itself:
+        //   requestUrl = `${baseUrl}/${apiVersion}/models/...`
+        // So baseUrl must be the host root only (e.g. https://yunwu.ai).
+        // Putting /v1beta in baseUrl produces /v1beta/v1beta/... which fails.
+        const geminiHostRoot = baseUrl
+          .trim()
           .replace(/\/+$/, "")
-          .replace(/\/v1$/i, "")
-          .replace(/\/v1beta$/i, "");
+          .replace(/\/v1beta1?$/i, "")
+          .replace(/\/v1$/i, "");
         const googleClient = new GoogleGenAI({
           apiKey: apiKey,
           httpOptions: {
-            baseUrl: `${nativeBaseUrl}/v1beta`,
+            baseUrl: geminiHostRoot,
           },
         });
 
@@ -1840,6 +1843,7 @@ export class AiService implements OnModuleInit {
         failedCount,
         partial: failedCount > 0,
         warnings: saveErrors.length > 0 ? saveErrors : undefined,
+        model,
       }, finalBillingMicros);
     } catch (err: any) {
       console.error(
@@ -1862,6 +1866,7 @@ export class AiService implements OnModuleInit {
       }
       this.setTaskStatus(taskId, "error", {
         error: errMsg,
+        model,
       });
     }
   }
@@ -1874,7 +1879,7 @@ export class AiService implements OnModuleInit {
     const preparedBody = await this.prepareImageGenerationRequest(body);
 
     const taskId = crypto.randomUUID();
-    this.setTaskStatus(taskId, "generating", {});
+    this.setTaskStatus(taskId, "generating", { model: preparedBody.model });
     if (billingContext) {
       if (!this.billingService) throw new Error("Billing service is unavailable");
       this.billingService.attachTask(
@@ -1898,6 +1903,7 @@ export class AiService implements OnModuleInit {
       taskId,
       status: "generating",
       requestedCount: preparedBody.n,
+      model: preparedBody.model,
     };
   }
 

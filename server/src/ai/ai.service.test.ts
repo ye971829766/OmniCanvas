@@ -128,14 +128,21 @@ describe("AiService generation task lifecycle", () => {
     }
 
     expect(response.status).toBe("generating");
-    expect(statusUpdates).toEqual([
-      { id: response.taskId, status: "generating", data: {} },
-      {
-        id: response.taskId,
-        status: "error",
-        data: { error: "preflight failed" },
-      },
-    ]);
+    expect(statusUpdates).toHaveLength(2);
+    expect(statusUpdates[0]).toMatchObject({
+      id: response.taskId,
+      status: "generating",
+    });
+    expect(statusUpdates[0]?.data).toEqual(
+      expect.objectContaining(
+        response.model ? { model: response.model } : {},
+      ),
+    );
+    expect(statusUpdates[1]).toEqual({
+      id: response.taskId,
+      status: "error",
+      data: { error: "preflight failed" },
+    });
   });
 });
 
