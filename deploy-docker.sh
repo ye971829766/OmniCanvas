@@ -43,8 +43,17 @@ if [ ! -f "server/.env" ]; then
     fi
 fi
 
-# Build and start containers
-echo -e "${CYAN}[1/3] Building and starting OmniCanvas Docker containers...${NC}"
+# Preflight: Bun lockfiles required for full Bun Docker builds
+for f in bun.lock admin/bun.lock server/bun.lock; do
+  if [ ! -f "$f" ]; then
+    echo -e "${RED}[Error] Missing $f — required for Bun frozen install in Docker.${NC}"
+    echo -e "${YELLOW}Run locally: bun install (and in admin/, server/) then commit bun.lock.${NC}"
+    exit 1
+  fi
+done
+
+# Build and start containers (frontend/admin: oven/bun build → nginx; backend: oven/bun runtime)
+echo -e "${CYAN}[1/3] Building and starting OmniCanvas Docker containers (Bun full chain)...${NC}"
 $DOCKER_COMPOSE up -d --build
 
 echo -e "${CYAN}[2/3] Checking container status...${NC}"

@@ -7,3 +7,7 @@ server/data
 server/files
 server/.env
 .git
+# npm lockfiles unused by Bun Docker builds (optional local artifacts)
+**/package-lock.json
+**/.npm
+**/.cache

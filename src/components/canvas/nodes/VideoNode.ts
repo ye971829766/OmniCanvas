@@ -69,7 +69,9 @@ export class VideoNode extends Box {
   /**
    * 通过加载视频/图片元数据检测原始尺寸
    */
-  private static detectVideoSize(url: string): Promise<{ width: number; height: number } | null> {
+  private static detectVideoSize(
+    url: string,
+  ): Promise<{ width: number; height: number } | null> {
     if (!url) return Promise.resolve(null);
     return new Promise((resolve) => {
       const video = document.createElement("video");
@@ -111,7 +113,7 @@ export class VideoNode extends Box {
   // 进度条拖动相关
   private _isProgressDragging = false;
   private _progressDragRafId: number | null = null;
-  private _pendingSeekTime: number | null = null;
+  public _pendingSeekTime: number | null = null;
   private _latestPointerX = 0;
   private _onDocMouseMove?: (e: MouseEvent) => void;
   private _onDocMouseUp?: () => void;
@@ -292,7 +294,11 @@ export class VideoNode extends Box {
 
   private unbindOutsideClose() {
     if (this._onDocPointerDown) {
-      document.removeEventListener("pointerdown", this._onDocPointerDown, false);
+      document.removeEventListener(
+        "pointerdown",
+        this._onDocPointerDown,
+        false,
+      );
       this._onDocPointerDown = undefined;
     }
   }
@@ -303,7 +309,9 @@ export class VideoNode extends Box {
     this.videoEl.volume = level;
     this.videoEl.muted = !this._userWantsSound || level === 0;
     if (this.volumeSlider && this.volumeSlider.value !== String(level)) {
-      this.volumeSlider.value = String(level === 0 && this._userWantsSound ? 0 : level);
+      this.volumeSlider.value = String(
+        level === 0 && this._userWantsSound ? 0 : level,
+      );
     }
   }
 
@@ -340,7 +348,7 @@ export class VideoNode extends Box {
           { x: bounds.x, y: bounds.y },
           { x: bounds.x + bounds.width, y: bounds.y },
           { x: bounds.x, y: bounds.y + bounds.height },
-          { x: bounds.x + bounds.width, y: bounds.y + bounds.height }
+          { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
         ];
       }
     } catch (e) {
@@ -356,7 +364,7 @@ export class VideoNode extends Box {
       { x, y },
       { x: x + w, y },
       { x, y: y + h },
-      { x: x + w, y: y + h }
+      { x: x + w, y: y + h },
     ];
   }
 
@@ -452,13 +460,13 @@ export class VideoNode extends Box {
     if (this.videoEl) {
       this.videoEl.pause();
       this.videoEl.remove();
-      
+
       const updateTime = (this as any)._updateTime;
       if (updateTime) {
         this.videoEl.removeEventListener("timeupdate", updateTime);
         this.videoEl.removeEventListener("loadedmetadata", updateTime);
       }
-      
+
       this.videoEl = undefined;
     }
 
@@ -469,7 +477,7 @@ export class VideoNode extends Box {
         clearTimeout(hideTimeout);
         (this as any)._controlsHideTimeout = null;
       }
-      
+
       this.controlsContainer.remove();
       this.controlsContainer = undefined;
       this.playBtn = undefined;
@@ -507,18 +515,18 @@ export class VideoNode extends Box {
     }
     this._isProgressDragging = false;
     this._pendingSeekTime = null;
-    
+
     const updateControlsPosition = (this as any)._updateControlsPosition;
     if (updateControlsPosition) {
-        const appInstance = (this as any).app;
-        if (appInstance?.tree) {
-            appInstance.tree.off(MoveEvent.MOVE, updateControlsPosition);
-            appInstance.tree.off(ZoomEvent.ZOOM, updateControlsPosition);
-        }
-        this.off(PropertyEvent.CHANGE, updateControlsPosition);
-        (this as any)._updateControlsPosition = undefined;
+      const appInstance = (this as any).app;
+      if (appInstance?.tree) {
+        appInstance.tree.off(MoveEvent.MOVE, updateControlsPosition);
+        appInstance.tree.off(ZoomEvent.ZOOM, updateControlsPosition);
+      }
+      this.off(PropertyEvent.CHANGE, updateControlsPosition);
+      (this as any)._updateControlsPosition = undefined;
     }
-    
+
     (this as any)._updateTime = undefined;
 
     this.opacity = 1;
@@ -605,7 +613,10 @@ export class VideoNode extends Box {
       if (!this.videoEl || !this.progressContainer || !this.progressBar) return;
       const rect = this.progressContainer.getBoundingClientRect();
       if (rect.width <= 0) return;
-      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const ratio = Math.max(
+        0,
+        Math.min(1, (clientX - rect.left) / rect.width),
+      );
       this.progressBar.style.width = `${ratio * 100}%`;
       const dur = this.videoEl.duration;
       if (!dur || !isFinite(dur)) return;
@@ -724,7 +735,9 @@ export class VideoNode extends Box {
       "padding:0",
       "vertical-align:middle",
     ].join(";");
-    this.volumeSlider.addEventListener("pointerdown", (e) => e.stopPropagation());
+    this.volumeSlider.addEventListener("pointerdown", (e) =>
+      e.stopPropagation(),
+    );
     this.volumeSlider.addEventListener("input", () => {
       if (!this.videoEl || !this.volumeSlider) return;
       const v = Math.max(0, Math.min(1, Number(this.volumeSlider.value) || 0));
@@ -784,9 +797,13 @@ export class VideoNode extends Box {
       e.stopPropagation();
       this.cancelScheduledRemove();
     });
-    this.controlsContainer.addEventListener("wheel", (e) => e.stopPropagation(), {
-      passive: false,
-    });
+    this.controlsContainer.addEventListener(
+      "wheel",
+      (e) => e.stopPropagation(),
+      {
+        passive: false,
+      },
+    );
 
     const updateTime = () => {
       if (!this.videoEl || !this.progressBar || !this.timeDisplay) return;
@@ -857,7 +874,8 @@ export class VideoNode extends Box {
       }
       if (this.volumeSlider) {
         // Hide slider when very narrow; keep mute button only
-        this.volumeSlider.style.display = screenW < 220 ? "none" : "inline-block";
+        this.volumeSlider.style.display =
+          screenW < 220 ? "none" : "inline-block";
       }
       if (this.fullscreenBtn) {
         this.fullscreenBtn.style.display = minimal ? "none" : "inline-block";
@@ -884,12 +902,13 @@ export class VideoNode extends Box {
   private syncVolumeButton() {
     if (!this.volumeBtn) return;
     const muted = this.videoEl
-      ? this.videoEl.muted || this.videoEl.volume === 0 || this._volumeLevel === 0
+      ? this.videoEl.muted ||
+        this.videoEl.volume === 0 ||
+        this._volumeLevel === 0
       : !this._userWantsSound || this._volumeLevel === 0;
     this.volumeBtn.innerHTML = muted ? "🔇" : "🔊";
     if (this.volumeSlider) {
-      const shown =
-        muted && this._volumeLevel > 0 ? 0 : this._volumeLevel;
+      const shown = muted && this._volumeLevel > 0 ? 0 : this._volumeLevel;
       // When muted via button, keep slider at last level but show 0 if fully muted preference
       this.volumeSlider.value = String(
         this.videoEl?.muted ? 0 : this._volumeLevel,
@@ -900,7 +919,11 @@ export class VideoNode extends Box {
 
   private async toggleMute() {
     if (!this.videoEl) return;
-    if (this.videoEl.muted || this.videoEl.volume === 0 || this._volumeLevel === 0) {
+    if (
+      this.videoEl.muted ||
+      this.videoEl.volume === 0 ||
+      this._volumeLevel === 0
+    ) {
       // Unmute
       if (this._volumeLevel <= 0) this._volumeLevel = 1;
       this._userWantsSound = true;

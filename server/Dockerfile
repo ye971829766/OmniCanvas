@@ -4,8 +4,9 @@
 FROM oven/bun:1-alpine AS base
 WORKDIR /app
 
-# Install ffmpeg for media & video generation pipeline
-RUN apk add --no-cache ffmpeg curl
+# Install ffmpeg for media & video generation pipeline (using Tsinghua mirror to speed up in China)
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories && \
+    apk add --no-cache ffmpeg curl
 
 # Copy package manifests
 COPY package.json bun.lock ./
