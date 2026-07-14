@@ -62,13 +62,19 @@ export function useUser() {
     }
   };
 
-  const login = async (credentials: { username: string; password: string }) => {
-    const res = await loginUser(credentials);
+  const applyAuthResponse = (res: { token?: string; user?: UserProfile } | null | undefined) => {
+    if (!res?.token || !res?.user) {
+      throw new Error("登录响应无效，请检查 API 加密配置是否前后端一致");
+    }
     setToken(res.token);
-    console.log("login res:", res);
     currentUser.value = res.user;
     authModalVisible.value = false;
     return res.user;
+  };
+
+  const login = async (credentials: { username: string; password: string }) => {
+    const res = await loginUser(credentials);
+    return applyAuthResponse(res);
   };
 
   const register = async (payload: {
@@ -78,10 +84,7 @@ export function useUser() {
     avatarUrl?: string;
   }) => {
     const res = await registerUser(payload);
-    setToken(res.token);
-    currentUser.value = res.user;
-    authModalVisible.value = false;
-    return res.user;
+    return applyAuthResponse(res);
   };
 
   const logout = () => {
@@ -116,10 +119,7 @@ export function useUser() {
 
   const loginWithGoogle = async (idToken: string) => {
     const res = await loginWithGoogleApi(idToken);
-    setToken(res.token);
-    currentUser.value = res.user;
-    authModalVisible.value = false;
-    return res.user;
+    return applyAuthResponse(res);
   };
 
   return {

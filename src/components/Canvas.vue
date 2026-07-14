@@ -1273,14 +1273,11 @@ const onUploadFile = async (file: File, options: UploadFileOptions = {}) => {
     }
   } catch (error: any) {
     console.error("Failed to upload file:", error);
-    const detail =
-      error?.response?.data?.message ||
-      error?.message ||
-      "上传失败，请确保后端服务器正常运行。";
+    const { userFacingError } = await import("@/utils/userFacingError");
     toast.add({
       severity: "error",
       summary: "上传失败",
-      detail,
+      detail: userFacingError(error, "上传失败，请稍后重试"),
       life: 3000,
     });
   } finally {

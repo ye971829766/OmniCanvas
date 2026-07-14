@@ -25,6 +25,8 @@ async function bootstrap() {
   app.enableCors({
     origin: "*",
     credentials: true,
+    // Browser JS can only read these response headers if exposed
+    exposedHeaders: ["X-API-Crypto", "x-api-crypto"],
   });
 
   // Validate DTOs globally — whitelist strips unknown fields (prevents id/createdAt injection)

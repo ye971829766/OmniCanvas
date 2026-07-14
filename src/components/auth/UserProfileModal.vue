@@ -164,6 +164,7 @@ import { ref, watch, computed } from "vue";
 import { Dialog, InputText, Password, Button } from "primevue";
 import { Key, LogOut, Camera } from "lucide-vue-next";
 import { useToast } from "primevue/usetoast";
+import { userFacingError } from "@/utils/userFacingError";
 import { useUser } from "@/composables/useUser";
 import { uploadImage } from "@/utils/api";
 
@@ -244,7 +245,7 @@ const handleFileSelect = async (e: Event) => {
     toast.add({
       severity: "error",
       summary: "上传失败",
-      detail: err?.response?.data?.message || err?.message || "图片上传失败",
+      detail: userFacingError(err, "图片上传失败"),
       life: 3000,
     });
   } finally {
@@ -277,7 +278,7 @@ const handleSave = async () => {
     toast.add({
       severity: "error",
       summary: "更新失败",
-      detail: err?.response?.data?.message || err?.message || "网络请求失败",
+      detail: userFacingError(err, "保存失败，请稍后重试"),
       life: 3000,
     });
   } finally {

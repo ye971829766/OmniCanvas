@@ -266,6 +266,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { ElMessage } from "element-plus";
+import { confirmAdminAction } from "../utils/adminConfirm";
 import {
   Search,
   Plus,
@@ -508,17 +509,22 @@ async function saveChannel() {
   }
 }
 
-function confirmDeleteChannel(channel: Channel) {
-  handleDelete(channel);
-}
-
-async function handleDelete(channel: Channel) {
+async function confirmDeleteChannel(channel: Channel) {
+  const ok = await confirmAdminAction({
+    title: "二次确认 · 删除渠道",
+    message: `将删除上游渠道「${channel.name}」。绑定该渠道的模型映射将失效。`,
+    requireText: "确认删除",
+    confirmButtonText: "删除渠道",
+    type: "error",
+  });
+  if (!ok) return;
   try {
     await deleteChannel(channel.id);
     ElMessage.success("已删除该渠道");
     emit("refresh-channels");
   } catch (err: any) {
-    ElMessage.error("删除失败: " + (err.message || "未知错误"));
+    ElMessage.error("删除失败，请稍后重试");
+    console.error(err);
   }
 }
 

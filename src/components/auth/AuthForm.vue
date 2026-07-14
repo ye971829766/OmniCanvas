@@ -184,6 +184,7 @@
 import { ref, computed, watch } from "vue";
 import { InputText, Password, Button, Divider, Message } from "primevue";
 import { useToast } from "primevue/usetoast";
+import { userFacingError } from "@/utils/userFacingError";
 import { useUser } from "@/composables/useUser";
 
 const { authModalMode, login, loginWithGoogle, register } = useUser();
@@ -282,10 +283,7 @@ const handleGoogleLogin = () => {
             });
           } catch (err: any) {
             console.error("Google login failed:", err);
-            errorMessage.value =
-              err?.response?.data?.message ||
-              err?.message ||
-              "Google 登录验证失败";
+            errorMessage.value = userFacingError(err, "Google 登录验证失败");
           } finally {
             loading.value = false;
           }
@@ -314,10 +312,7 @@ const handleLogin = async () => {
     });
   } catch (err: any) {
     console.error("Login failed:", err);
-    errorMessage.value =
-      err?.response?.data?.message ||
-      err?.message ||
-      "登录失败，请检查用户名和密码";
+    errorMessage.value = userFacingError(err, "登录失败，请检查用户名和密码");
   } finally {
     loading.value = false;
   }
@@ -348,10 +343,7 @@ const handleRegister = async () => {
     });
   } catch (err: any) {
     console.error("Register failed:", err);
-    errorMessage.value =
-      err?.response?.data?.message ||
-      err?.message ||
-      "注册失败，请更换用户名重试";
+    errorMessage.value = userFacingError(err, "注册失败，请更换用户名重试");
   } finally {
     loading.value = false;
   }

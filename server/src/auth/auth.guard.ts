@@ -28,6 +28,10 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException("Token 已失效或不合法");
     }
 
+    if (this.usersService.isBanned(payload.sub)) {
+      throw new ForbiddenException("账号已被封禁，如有疑问请联系管理员");
+    }
+
     request.user = payload;
     return true;
   }
@@ -40,6 +44,9 @@ export class AdminGuard extends AuthGuard {
     const request = context.switchToHttp().getRequest();
     if (request.user?.role !== "admin" || !this.usersService.hasRole(request.user.sub, "admin")) {
       throw new ForbiddenException("需要管理员权限");
+    }
+    if (this.usersService.isBanned(request.user.sub)) {
+      throw new ForbiddenException("账号已被封禁");
     }
     return true;
   }

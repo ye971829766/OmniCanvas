@@ -1,9 +1,61 @@
-import axios from "axios";
+import axios, { type InternalAxiosRequestConfig } from "axios";
+import {
+  decryptData,
+  encryptData,
+  isClientApiCryptoEnabled,
+} from "./cipher";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-axios.interceptors.request.use((config) => {
+function shouldBypassTunnel(config: InternalAxiosRequestConfig): boolean {
+  const url = String(config.url || "");
+  let path = url;
+  try {
+    path = url.startsWith("http") ? new URL(url).pathname : url.split("?")[0];
+  } catch { /* keep */ }
+  if (config.data instanceof FormData) return true;
+  if (path.includes("/stream")) return true;
+  if (path.startsWith("/files/")) return true;
+  if (path === "/api/rpc" || path.endsWith("/api/rpc")) return true;
+  return false;
+}
+
+function resolvePathAndQuery(config: InternalAxiosRequestConfig): {
+  path: string;
+  query: Record<string, unknown>;
+} {
+  const raw = String(config.url || "/");
+  const query: Record<string, unknown> = {};
+  let path = raw;
+  try {
+    if (raw.startsWith("http")) {
+      const u = new URL(raw);
+      path = u.pathname;
+      u.searchParams.forEach((v, k) => {
+        query[k] = v;
+      });
+    } else {
+      const qIndex = raw.indexOf("?");
+      if (qIndex >= 0) {
+        path = raw.slice(0, qIndex);
+        new URLSearchParams(raw.slice(qIndex + 1)).forEach((v, k) => {
+          query[k] = v;
+        });
+      }
+    }
+  } catch { /* keep */ }
+  const params = config.params as Record<string, unknown> | undefined;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null) query[k] = v;
+    }
+  }
+  if (!path.startsWith("/")) path = `/${path}`;
+  return { path, query };
+}
+
+axios.interceptors.request.use(async (config) => {
   const token = localStorage.getItem("omnicanvas_admin_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   const method = String(config.method || "get").toLowerCase();
@@ -13,8 +65,76 @@ axios.interceptors.request.use((config) => {
   ) {
     config.headers["Idempotency-Key"] = crypto.randomUUID();
   }
+
+  if (!isClientApiCryptoEnabled()) return config;
+
+  config.headers["X-API-Crypto"] = "true";
+
+  if (shouldBypassTunnel(config)) {
+    if (config.data && !(config.data instanceof FormData) && typeof config.data === "object") {
+      try {
+        config.data = { encrypted: await encryptData(JSON.stringify(config.data)) };
+      } catch (err) {
+        console.error("Admin encrypt failed:", err);
+      }
+    }
+    return config;
+  }
+
+  try {
+    const { path, query } = resolvePathAndQuery(config);
+    const envelope = {
+      m: String(config.method || "GET").toUpperCase(),
+      p: path,
+      q: query,
+      b: config.data instanceof FormData ? undefined : config.data ?? undefined,
+      t: Date.now(),
+      n: crypto.randomUUID().replace(/-/g, ""),
+    };
+    config.method = "post";
+    // Keep absolute base for admin (calls use full URL often)
+    config.url = `${API_BASE_URL}/api/rpc`;
+    config.baseURL = undefined;
+    config.params = undefined;
+    config.data = { encrypted: await encryptData(JSON.stringify(envelope)) };
+    config.headers["Content-Type"] = "application/json";
+  } catch (err) {
+    console.error("Admin RPC envelope failed:", err);
+  }
   return config;
 });
+
+async function maybeDecryptAdminPayload(data: unknown) {
+  if (!isClientApiCryptoEnabled()) return data;
+  if (
+    data &&
+    typeof data === "object" &&
+    typeof (data as { encrypted?: unknown }).encrypted === "string" &&
+    Object.keys(data as object).length <= 2
+  ) {
+    return JSON.parse(await decryptData(String((data as { encrypted: string }).encrypted)));
+  }
+  return data;
+}
+
+axios.interceptors.response.use(
+  async (response) => {
+    try {
+      response.data = await maybeDecryptAdminPayload(response.data);
+    } catch (err) {
+      console.error("Admin decrypt failed:", err);
+    }
+    return response;
+  },
+  async (error) => {
+    if (error.response?.data) {
+      try {
+        error.response.data = await maybeDecryptAdminPayload(error.response.data);
+      } catch { /* ignore */ }
+    }
+    return Promise.reject(error);
+  },
+);
 
 export async function loginAdmin(username: string, password: string) {
   const res = await axios.post(`${API_BASE_URL}/auth/login`, {
@@ -291,6 +411,9 @@ export interface AdminUser {
   nickname?: string;
   avatarUrl?: string;
   role: "user" | "admin";
+  status?: "active" | "banned";
+  banReason?: string | null;
+  bannedAt?: string | null;
   createdAt: string;
 }
 
@@ -325,6 +448,24 @@ export async function updateAdminUser(
 
 export async function deleteAdminUser(id: string): Promise<void> {
   await axios.delete(`${API_BASE_URL}/admin/users/${id}`);
+}
+
+export async function banAdminUser(
+  id: string,
+  reason?: string,
+): Promise<AdminUser> {
+  const res = await axios.post<AdminUser>(
+    `${API_BASE_URL}/admin/users/${id}/ban`,
+    { reason },
+  );
+  return res.data;
+}
+
+export async function unbanAdminUser(id: string): Promise<AdminUser> {
+  const res = await axios.post<AdminUser>(
+    `${API_BASE_URL}/admin/users/${id}/unban`,
+  );
+  return res.data;
 }
 
 // --- Admin Token Statistics APIs ---

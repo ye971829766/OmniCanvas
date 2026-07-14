@@ -157,7 +157,12 @@ async function loadAll() {
     transactions.value = transactionPage.items;
     orders.value = orderPage.items;
   } catch (error: any) {
-    toast.add({ severity: "error", summary: "账单加载失败", detail: error?.response?.data?.message, life: 3500 });
+    toast.add({
+      severity: "error",
+      summary: "账单加载失败",
+      detail: error?.userMessage || error?.response?.data?.message || "请稍后重试",
+      life: 3500,
+    });
   } finally {
     loading.value = false;
   }

@@ -217,7 +217,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="用户角色" width="140">
+        <el-table-column label="用户角色" width="120">
           <template #default="{ row }">
             <el-tag :type="row.role === 'admin' ? 'warning' : 'info'">
               {{ row.role === "admin" ? "管理员" : "普通用户" }}
@@ -225,7 +225,19 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="注册时间" width="200">
+        <el-table-column label="账号状态" width="120">
+          <template #default="{ row }">
+            <el-tag
+              :type="row.status === 'banned' ? 'danger' : 'success'"
+              effect="light"
+              round
+            >
+              {{ row.status === "banned" ? "已封禁" : "正常" }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="注册时间" width="170">
           <template #default="{ row }">
             <span style="color: #64748b; font-size: 13px">
               {{ formatDate(row.createdAt) }}
@@ -233,25 +245,38 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="160" align="right">
+        <el-table-column label="操作" width="280" align="right" fixed="right">
           <template #default="{ row }">
-            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px">
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap">
               <el-button size="small" type="primary" plain @click="openEditModal(row)">
-                <el-icon style="margin-right: 2px"><Edit /></el-icon>编辑
+                编辑
               </el-button>
-              <el-popconfirm
-                title="确定要删除该用户账号吗？"
-                confirm-button-text="删除"
-                cancel-button-text="取消"
-                confirm-button-type="danger"
-                @confirm="handleDelete(row.id)"
+              <el-button
+                v-if="row.status !== 'banned' && row.role !== 'admin'"
+                size="small"
+                type="warning"
+                plain
+                @click="handleBan(row)"
               >
-                <template #reference>
-                  <el-button size="small" type="danger" plain>
-                    <el-icon style="margin-right: 2px"><Delete /></el-icon>删除
-                  </el-button>
-                </template>
-              </el-popconfirm>
+                封禁
+              </el-button>
+              <el-button
+                v-if="row.status === 'banned'"
+                size="small"
+                type="success"
+                plain
+                @click="handleUnban(row)"
+              >
+                解封
+              </el-button>
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                @click="handleDelete(row)"
+              >
+                删除
+              </el-button>
             </div>
           </template>
         </el-table-column>
@@ -351,7 +376,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   User,
   UserFilled,
@@ -366,8 +391,11 @@ import {
   createAdminUser,
   updateAdminUser,
   deleteAdminUser,
+  banAdminUser,
+  unbanAdminUser,
   type AdminUser,
 } from "../utils/api";
+import { confirmAdminAction } from "../utils/adminConfirm";
 
 const users = ref<AdminUser[]>([]);
 const loading = ref(false);
@@ -500,9 +528,66 @@ async function handleUpdate() {
   }
 }
 
-async function handleDelete(id: string) {
+async function handleBan(user: AdminUser) {
   try {
-    await deleteAdminUser(id);
+    const { value: reason } = await ElMessageBox.prompt(
+      `确定封禁用户 @${user.username}？封禁后将无法登录。`,
+      "封禁账号",
+      {
+        confirmButtonText: "继续",
+        cancelButtonText: "取消",
+        type: "warning",
+        inputPlaceholder: "封禁原因（将展示给用户）",
+        inputValue: "违反平台使用规范",
+      },
+    );
+    const ok = await confirmAdminAction({
+      title: "二次确认 · 封禁",
+      message: `即将封禁 @${user.username}。此操作立即生效。`,
+      requireText: "确认封禁",
+      confirmButtonText: "封禁",
+      type: "error",
+    });
+    if (!ok) return;
+    await banAdminUser(user.id, reason || "违反平台使用规范");
+    ElMessage.success("已封禁该用户");
+    await fetchUsers();
+  } catch (err: any) {
+    if (err === "cancel" || err === "close") return;
+    console.error("Ban user failed:", err);
+    ElMessage.error(err?.response?.data?.message || "封禁失败");
+  }
+}
+
+async function handleUnban(user: AdminUser) {
+  const ok = await confirmAdminAction({
+    title: "解除封禁",
+    message: `确认解封 @${user.username}？解封后可立即登录。`,
+    confirmButtonText: "确认解封",
+    type: "warning",
+  });
+  if (!ok) return;
+  try {
+    await unbanAdminUser(user.id);
+    ElMessage.success("已解除封禁");
+    await fetchUsers();
+  } catch (err: any) {
+    console.error("Unban user failed:", err);
+    ElMessage.error(err?.response?.data?.message || "解封失败");
+  }
+}
+
+async function handleDelete(user: AdminUser) {
+  const ok = await confirmAdminAction({
+    title: "二次确认 · 删除用户",
+    message: `将永久删除 @${user.username}，数据不可恢复。`,
+    requireText: "确认删除",
+    confirmButtonText: "删除",
+    type: "error",
+  });
+  if (!ok) return;
+  try {
+    await deleteAdminUser(user.id);
     ElMessage.success("已删除该用户");
     await fetchUsers();
   } catch (err: any) {

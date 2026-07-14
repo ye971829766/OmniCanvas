@@ -96,14 +96,51 @@ export class UsersService {
   }
 
   toPublicInfo(user: User): UserPublicInfo {
+    const status = (user.status as User["status"]) || "active";
     return {
       id: user.id,
       username: user.username,
       nickname: user.nickname,
       avatarUrl: user.avatarUrl,
       role: user.role,
+      status,
+      banReason: status === "banned" ? (user.banReason || null) : null,
+      bannedAt: status === "banned" ? (user.bannedAt || null) : null,
       createdAt: user.createdAt,
     };
+  }
+
+  isBanned(userId: string): boolean {
+    const row = this.db
+      .query("SELECT status FROM users WHERE id = ?")
+      .get(userId) as { status?: string } | null;
+    return row?.status === "banned";
+  }
+
+  assertNotBanned(user: Pick<User, "id" | "status" | "banReason"> | null | undefined) {
+    if (!user) return;
+    const status = user.status || this.getStatus(user.id);
+    if (status === "banned") {
+      const reason = user.banReason || this.getBanReason(user.id);
+      throw new HttpException(
+        reason ? `账号已被封禁：${reason}` : "账号已被封禁，如有疑问请联系管理员",
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  private getStatus(userId: string): string {
+    const row = this.db
+      .query("SELECT status FROM users WHERE id = ?")
+      .get(userId) as { status?: string } | null;
+    return row?.status || "active";
+  }
+
+  private getBanReason(userId: string): string | null {
+    const row = this.db
+      .query("SELECT banReason FROM users WHERE id = ?")
+      .get(userId) as { banReason?: string } | null;
+    return row?.banReason || null;
   }
 
   // --- Dynamic Schema Safe User Insertion ---
@@ -137,8 +174,12 @@ export class UsersService {
       else if (name === "createdAt") rowObj[`$createdAt`] = userData.createdAt;
       else if (name === "updatedAt") rowObj[`$updatedAt`] = userData.updatedAt;
       else if (name === "email") rowObj[`$email`] = userData.email || userData.username;
-      else if (name === "status") rowObj[`$status`] = 1; // Default active status for legacy schema
-      else {
+      else if (name === "status") {
+        // Prefer text account status; some legacy DBs used integer 1=active
+        rowObj[`$status`] = "active";
+      } else if (name === "banReason" || name === "bannedAt") {
+        rowObj[`$${name}`] = null;
+      } else {
         rowObj[`$${name}`] = col.dflt_value !== null ? col.dflt_value : "";
       }
     }
@@ -210,6 +251,8 @@ export class UsersService {
     if (!row || !this.verifyPassword(dto.password, row.passwordHash)) {
       throw new HttpException("用户名或密码不正确", HttpStatus.UNAUTHORIZED);
     }
+
+    this.assertNotBanned(row);
 
     const token = this.createToken(row);
     return {
@@ -329,6 +372,8 @@ export class UsersService {
         };
       }
 
+      this.assertNotBanned(user);
+
       const token = this.createToken(user);
       return {
         user: this.toPublicInfo(user),
@@ -338,7 +383,7 @@ export class UsersService {
       console.error("Google ID token verification failed:", err);
       if (err instanceof HttpException) throw err;
       throw new HttpException(
-        err?.message || "Google 身份验证效验失败",
+        "Google 身份验证失败，请稍后重试",
         HttpStatus.UNAUTHORIZED
       );
     }
@@ -464,5 +509,54 @@ export class UsersService {
 
     this.db.prepare("DELETE FROM users WHERE id = $id").run({ $id: id });
     return { success: true };
+  }
+
+  async adminSetBanStatus(
+    id: string,
+    banned: boolean,
+    reason?: string,
+    actorUserId?: string,
+  ): Promise<UserPublicInfo> {
+    const row = this.db
+      .query("SELECT * FROM users WHERE id = $id")
+      .get({ $id: id }) as User | null;
+
+    if (!row) {
+      throw new HttpException("用户不存在", HttpStatus.NOT_FOUND);
+    }
+    if (row.role === "admin" && banned) {
+      throw new HttpException("不能封禁管理员账号", HttpStatus.BAD_REQUEST);
+    }
+    if (actorUserId && actorUserId === id && banned) {
+      throw new HttpException("不能封禁当前登录账号", HttpStatus.BAD_REQUEST);
+    }
+
+    const now = new Date().toISOString();
+    const status = banned ? "banned" : "active";
+    const banReason = banned ? (reason || "").trim() || "违反平台使用规范" : null;
+    const bannedAt = banned ? now : null;
+
+    this.db.prepare(`
+      UPDATE users
+      SET status = $status,
+          banReason = $banReason,
+          bannedAt = $bannedAt,
+          updatedAt = $updatedAt
+      WHERE id = $id
+    `).run({
+      $id: id,
+      $status: status,
+      $banReason: banReason,
+      $bannedAt: bannedAt,
+      $updatedAt: now,
+    });
+
+    return this.toPublicInfo({
+      ...row,
+      status,
+      banReason,
+      bannedAt,
+      updatedAt: now,
+    });
   }
 }

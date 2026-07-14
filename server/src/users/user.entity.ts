@@ -1,3 +1,5 @@
+export type UserAccountStatus = "active" | "banned";
+
 export interface User {
   id: string;
   username: string;
@@ -5,6 +7,9 @@ export interface User {
   passwordHash: string;
   avatarUrl?: string;
   role: "user" | "admin";
+  status?: UserAccountStatus;
+  banReason?: string | null;
+  bannedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -15,6 +20,9 @@ export interface UserPublicInfo {
   nickname: string;
   avatarUrl?: string;
   role: "user" | "admin";
+  status?: UserAccountStatus;
+  banReason?: string | null;
+  bannedAt?: string | null;
   createdAt: string;
 }
 

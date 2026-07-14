@@ -1,8 +1,5 @@
 /**
- * Browser AES-256-GCM helpers (must match server/src/utils/api-crypto.ts layout).
- *
- * The passphrase is derived into an AES key. When shipped to the browser it is
- * extractable — use HTTPS + RPC tunnel + auth; do not treat this as a vault.
+ * Admin AES-256-GCM helpers — keep in sync with src/utils/cipher.ts and server api-crypto.
  */
 
 function resolvePassphrase(): string {
@@ -42,17 +39,14 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-/** Base64(IV 12 + ciphertext+tag) */
 export async function encryptData(plaintext: string): Promise<string> {
   const key = await getCryptoKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const enc = new TextEncoder();
   const encrypted = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     key,
-    enc.encode(plaintext),
+    new TextEncoder().encode(plaintext),
   );
-
   const combined = new Uint8Array(iv.length + encrypted.byteLength);
   combined.set(iv, 0);
   combined.set(new Uint8Array(encrypted), iv.length);
@@ -62,10 +56,7 @@ export async function encryptData(plaintext: string): Promise<string> {
 export async function decryptData(ciphertextBase64: string): Promise<string> {
   const key = await getCryptoKey();
   const combined = base64ToBytes(ciphertextBase64);
-  if (combined.length < 28) {
-    throw new Error("Invalid ciphertext: combined data too short");
-  }
-
+  if (combined.length < 28) throw new Error("Invalid ciphertext");
   const iv = combined.slice(0, 12);
   const data = combined.slice(12);
   const decrypted = await crypto.subtle.decrypt(

@@ -75,7 +75,7 @@ export class DatabaseService implements OnModuleInit {
       )
     `);
 
-    // Migration: Ensure email, nickname, avatarUrl, role columns exist in users table
+    // Migration: Ensure email, nickname, avatarUrl, role, ban columns exist in users table
     try {
       const userColumns = this.dbInstance.query("PRAGMA table_info(users)").all() as any[];
       const colNames = userColumns.map((col) => col.name);
@@ -90,6 +90,16 @@ export class DatabaseService implements OnModuleInit {
       }
       if (!colNames.includes("role")) {
         this.dbInstance.run("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+      }
+      // Account status: active | banned
+      if (!colNames.includes("status")) {
+        this.dbInstance.run("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+      }
+      if (!colNames.includes("banReason")) {
+        this.dbInstance.run("ALTER TABLE users ADD COLUMN banReason TEXT");
+      }
+      if (!colNames.includes("bannedAt")) {
+        this.dbInstance.run("ALTER TABLE users ADD COLUMN bannedAt TEXT");
       }
     } catch (err) {
       console.warn("Failed to check or alter users table columns:", err);

@@ -719,6 +719,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { confirmAdminAction } from "../utils/adminConfirm";
 import {
   Coin,
   Money,
@@ -1244,15 +1245,14 @@ async function applyAllSuggested() {
     ElMessage.warning("没有可批量套用的默认规则");
     return;
   }
-  try {
-    await ElMessageBox.confirm(
-      `将按目标毛利率 ${targetMarginPct.value}% 更新 ${rows.length} 条默认规则，是否继续？`,
-      "批量套用目标价",
-      { type: "warning" },
-    );
-  } catch {
-    return;
-  }
+  const ok = await confirmAdminAction({
+    title: "二次确认 · 批量改价",
+    message: `将按目标毛利率 ${targetMarginPct.value}% 更新 ${rows.length} 条默认规则，立即影响新预扣。`,
+    requireText: "确认改价",
+    confirmButtonText: "批量套用",
+    type: "warning",
+  });
+  if (!ok) return;
   bulkApplying.value = true;
   try {
     for (const row of rows) {
@@ -1351,13 +1351,21 @@ async function submitAdjust() {
     ElMessage.warning("请填写非零积分和调账原因");
     return;
   }
+  const account = selectedAccount.value;
+  const amount = adjustAmount.value;
+  const reason = adjustReason.value.trim();
+  const ok = await confirmAdminAction({
+    title: "二次确认 · 积分调账",
+    message: `将为 @${account.username} ${amount > 0 ? "发放" : "扣减"} ${Math.abs(amount)} 积分。\n原因：${reason}`,
+    requireText: "确认调账",
+    confirmButtonText: "执行调账",
+    type: amount < 0 ? "error" : "warning",
+  });
+  if (!ok) return;
+
   adjusting.value = true;
   try {
-    await adjustUserCredits(
-      selectedAccount.value.userId,
-      adjustAmount.value,
-      adjustReason.value.trim(),
-    );
+    await adjustUserCredits(account.userId, amount, reason);
     ElMessage.success("调账已写入不可变账本");
     adjustVisible.value = false;
     await loadAll();

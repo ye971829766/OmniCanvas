@@ -83,4 +83,25 @@ export class UsersController {
   async adminDeleteUser(@Param("id") id: string) {
     return this.usersService.adminDeleteUser(id);
   }
+
+  @UseGuards(AdminGuard)
+  @Post("admin/users/:id/ban")
+  async adminBanUser(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.usersService.adminSetBanStatus(
+      id,
+      true,
+      body?.reason,
+      String(req.user?.sub || ""),
+    );
+  }
+
+  @UseGuards(AdminGuard)
+  @Post("admin/users/:id/unban")
+  async adminUnbanUser(@Param("id") id: string) {
+    return this.usersService.adminSetBanStatus(id, false);
+  }
 }
