@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  base: "/admin/",
   // Share monorepo root .env (VITE_API_CRYPTO, VITE_API_BASE_URL, secrets)
   envDir: path.resolve(__dirname, ".."),
   server: {

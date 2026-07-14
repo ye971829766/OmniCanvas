@@ -32,7 +32,7 @@ docker compose ps
 Write-Host "====================================================" -ForegroundColor Green
 Write-Host " 🎉 OmniCanvas Successfully Deployed with Docker!   " -ForegroundColor Green
 Write-Host "====================================================" -ForegroundColor Green
-Write-Host " 🌐 Frontend Canvas App : http://localhost" -ForegroundColor Cyan
-Write-Host " 🛠️ Admin Dashboard     : http://localhost/admin" -ForegroundColor Cyan
-Write-Host " ⚙️ Backend API Engine  : http://localhost:3000" -ForegroundColor Cyan
+Write-Host " 🌐 Frontend Canvas App : http://localhost:18080" -ForegroundColor Cyan
+Write-Host " 🛠️ Admin Dashboard     : http://localhost:18080/admin" -ForegroundColor Cyan
+Write-Host " ⚙️ Backend API Proxy   : http://localhost:18080/api" -ForegroundColor Cyan
 Write-Host "====================================================" -ForegroundColor Green

@@ -4,6 +4,7 @@
 
 # Stage 1: Build Frontend User App
 FROM node:20-alpine AS frontend-builder
+ENV VITE_API_BASE_URL=/api
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -12,6 +13,7 @@ RUN npm run build
 
 # Stage 2: Build Admin Dashboard
 FROM node:20-alpine AS admin-builder
+ENV VITE_API_BASE_URL=/api
 WORKDIR /app/admin
 COPY admin/package.json ./
 RUN npm install
