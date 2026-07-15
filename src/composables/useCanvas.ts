@@ -988,7 +988,23 @@ export function useCanvas(
                 return imageNode;
               });
               node.emit("generation-complete", {});
+              const finishedRefId = createdNodes[0]?.refId || node.refId;
+              const finishedUrl = generatedUrls[0];
               node.remove();
+              // Notify agent chat gallery so previews do not stay black when the
+              // backend settle event and the client poll finish out of order.
+              if (finishedRefId && finishedUrl) {
+                window.dispatchEvent(
+                  new CustomEvent("omnicanvas:media-ready", {
+                    detail: {
+                      refId: finishedRefId,
+                      kind: "image",
+                      url: finishedUrl,
+                      taskId,
+                    },
+                  }),
+                );
+              }
               if (app.editor) {
                 setTimeout(() => {
                   const firstNode = createdNodes[0];
@@ -1024,6 +1040,22 @@ export function useCanvas(
                 "生成失败，请稍后重试",
               ),
             });
+            if (node.refId) {
+              window.dispatchEvent(
+                new CustomEvent("omnicanvas:media-ready", {
+                  detail: {
+                    refId: node.refId,
+                    kind: "image",
+                    url: "",
+                    taskId,
+                    error: userFacingGenerationError(
+                      res.error,
+                      "生成失败，请稍后重试",
+                    ),
+                  },
+                }),
+              );
+            }
             // Error is a generation status change, not an element-level change — skip history
           }
         } catch (err: any) {

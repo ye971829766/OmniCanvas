@@ -4,18 +4,14 @@ import { streamText } from "ai";
 import { buildAgentSdkTools } from "./sdk-tools";
 
 describe("agent AI SDK tools", () => {
-  test("registers ecommerce parameters through inputSchema", () => {
-    const tools = buildAgentSdkTools(["plan_ecommerce_suite"]);
-    const tool = tools.plan_ecommerce_suite as any;
+  test("registers generate_image parameters through inputSchema", () => {
+    const tools = buildAgentSdkTools(["generate_image"]);
+    const tool = tools.generate_image as any;
 
-    expect(tool.inputSchema.jsonSchema.properties.platforms.type).toBe("array");
-    expect(tool.inputSchema.jsonSchema.properties.sourceAssetId.type).toBe(
-      "string",
-    );
-    expect(tool.inputSchema.jsonSchema.required).toEqual([
-      "platforms",
-      "sourceAssetId",
-    ]);
+    expect(tool.inputSchema.jsonSchema.properties.prompt.type).toBe("string");
+    expect(tool.inputSchema.jsonSchema.required).toEqual(["prompt"]);
+    expect(tool.inputSchema.jsonSchema.properties.platform).toBeUndefined();
+    expect(tool.inputSchema.jsonSchema.properties.deliverable).toBeUndefined();
     expect(tool.parameters).toBeUndefined();
   });
 
@@ -43,17 +39,15 @@ describe("agent AI SDK tools", () => {
 
     const result = streamText({
       model: provider.chat("test"),
-      messages: [{ role: "user", content: "plan an Amazon image suite" }],
-      tools: buildAgentSdkTools(["plan_ecommerce_suite"]),
+      messages: [{ role: "user", content: "generate a product listing image" }],
+      tools: buildAgentSdkTools(["generate_image"]),
     });
     await result.text;
 
     const schema = requestBody.tools[0].function.parameters;
-    expect(schema.properties.platforms.items.enum).toEqual([
-      "amazon",
-      "taobao",
-      "jd",
-    ]);
-    expect(schema.required).toEqual(["platforms", "sourceAssetId"]);
+    expect(schema.properties.prompt.type).toBe("string");
+    expect(schema.properties.platform).toBeUndefined();
+    expect(schema.properties.deliverable).toBeUndefined();
+    expect(schema.required).toEqual(["prompt"]);
   });
 });

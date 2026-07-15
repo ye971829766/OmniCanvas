@@ -4,6 +4,7 @@ import type {
   NodeState,
   ToolCallItem,
 } from "@/composables/useAgent";
+import { resolveMediaDisplayUrl } from "@/utils/agentMediaState";
 import OptionPreviewCard from "./OptionPreviewCard.vue";
 
 const MEDIA_TOOL_NAMES = new Set([
@@ -45,16 +46,32 @@ const mediaItems = computed(() => {
       return [];
     }
 
-    const persistedUrl = output?.url || output?.imageUrl || output?.videoUrl;
+    const rawPersistedUrl = output?.url || output?.imageUrl || output?.videoUrl;
+    const persistedUrl = resolveMediaDisplayUrl(rawPersistedUrl) || rawPersistedUrl;
+    const liveState = props.nodeStates[refId];
+    const liveUrl =
+      resolveMediaDisplayUrl(liveState?.url) || liveState?.url || undefined;
     const persistedState: (NodeState & { prompt?: string }) | undefined = persistedUrl
       ? {
           refId,
           type: tool.name === "generate_video" ? "video" : "image",
           status: "done",
           url: persistedUrl,
-          thumbnailUrl: output?.thumbnailUrl,
+          thumbnailUrl:
+            resolveMediaDisplayUrl(output?.thumbnailUrl) || output?.thumbnailUrl,
           prompt: tool.input?.prompt,
         }
+      : liveUrl && liveState?.status === "done"
+        ? {
+            refId,
+            type: tool.name === "generate_video" ? "video" : "image",
+            status: "done",
+            url: liveUrl,
+            thumbnailUrl:
+              resolveMediaDisplayUrl(liveState.thumbnailUrl) ||
+              liveState.thumbnailUrl,
+            prompt: tool.input?.prompt,
+          }
       : output?.status === "error"
         ? {
             refId,
@@ -63,11 +80,13 @@ const mediaItems = computed(() => {
             error: output?.error,
             prompt: tool.input?.prompt,
           }
-        : output?.status === "generating"
+        : output?.status === "generating" || output?.status === "success"
           ? {
               refId,
               type: tool.name === "generate_video" ? "video" : "image",
-              status: "generating",
+              // success without URL is still waiting for media_ready / poll
+              status: persistedUrl || liveUrl ? "done" : "generating",
+              url: persistedUrl || liveUrl,
               prompt: tool.input?.prompt,
             }
           : undefined;

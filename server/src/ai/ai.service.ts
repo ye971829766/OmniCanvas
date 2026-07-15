@@ -156,7 +156,21 @@ export class AiService implements OnModuleInit {
       );
     }
 
-    return { ...body, prompt, model, n: count };
+    const requestedSize = typeof body?.size === "string" ? body.size.trim() : "";
+    const requestedQuality = typeof body?.quality === "string" ? body.quality.trim() : "";
+    const size = requestedSize || options.defaults?.size;
+    const quality = requestedQuality || options.defaults?.quality;
+
+    // Direct UI and agent calls now share the same configured defaults. This
+    // prevents an omitted agent option from taking a different provider path.
+    return {
+      ...body,
+      prompt,
+      model,
+      n: count,
+      ...(size ? { size } : {}),
+      ...(quality ? { quality } : {}),
+    };
   }
 
   async prepareVideoGenerationRequest(
@@ -2452,7 +2466,10 @@ export class AiService implements OnModuleInit {
     return { bytes, mimeType, filename };
   }
 
-  private async resolveImageUploadSource(source: string): Promise<{
+  private async resolveImageUploadSource(
+    source: string,
+    options: { hardenedRemoteFetch?: boolean } = {},
+  ): Promise<{
     blob: Blob;
     dataUrl: string;
     filename: string;
@@ -2533,7 +2550,20 @@ export class AiService implements OnModuleInit {
 
     // Remote public URL (e.g. re-host WebP CDN link as JPEG for model safety).
     if (source.startsWith("http://") || source.startsWith("https://")) {
-      const response = await fetch(source);
+      const response = await fetch(
+        source,
+        options.hardenedRemoteFetch
+          ? {
+              redirect: "follow",
+              signal: AbortSignal.timeout(15_000),
+              headers: {
+                Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                "User-Agent":
+                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+              },
+            }
+          : undefined,
+      );
       if (!response.ok) {
         throw new Error(`Failed to download image: HTTP ${response.status}`);
       }
@@ -2543,7 +2573,15 @@ export class AiService implements OnModuleInit {
       if (!mimeType.startsWith("image/")) {
         throw new Error(`Remote asset is not an image: ${mimeType}`);
       }
+      const contentLength = Number(response.headers.get("content-length") || 0);
+      const maxBytes = 20 * 1024 * 1024;
+      if (contentLength > maxBytes) {
+        throw new Error("Remote image exceeds the 20MB model-context limit");
+      }
       const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.byteLength === 0 || bytes.byteLength > maxBytes) {
+        throw new Error("Remote image is empty or exceeds the 20MB model-context limit");
+      }
       return build(bytes, mimeType, this.getImageFilename(source, mimeType));
     }
 
@@ -2553,13 +2591,16 @@ export class AiService implements OnModuleInit {
     return this.resolveImageUploadSource(formattedBase64);
   }
 
-  async uploadImageToHost(source: string): Promise<string> {
+  async uploadImageToHost(
+    source: string,
+    options: { forceRehost?: boolean } = {},
+  ): Promise<string> {
     if (!source || typeof source !== "string") return source;
     if (source.startsWith("[")) return source;
 
     // Already a public non-WebP URL the remote model can fetch — keep as-is.
     // WebP public URLs are re-hosted as JPEG because many chat models reject WebP.
-    if (this.isModelSafeImageUrl(source)) return source;
+    if (!options.forceRehost && this.isModelSafeImageUrl(source)) return source;
 
     const cachedUrl = this.imageHostUrlCache.get(source);
     if (cachedUrl && this.isModelSafeImageUrl(cachedUrl)) return cachedUrl;
@@ -2571,7 +2612,9 @@ export class AiService implements OnModuleInit {
     let fallback = source;
 
     try {
-      const image = await this.resolveImageUploadSource(source);
+      const image = await this.resolveImageUploadSource(source, {
+        hardenedRemoteFetch: options.forceRehost === true,
+      });
       fallback = image.dataUrl;
       const uploadUrl = new URL(url);
       const isScdn =
@@ -2647,7 +2690,11 @@ export class AiService implements OnModuleInit {
         "[uploadImageToHost] failed, falling back to inline image data:",
         err.message,
       );
-      return fallback;
+      // A force-rehost caller is explicitly protecting a remote model from an
+      // unreliable external URL. Never hand that same URL back after a failed
+      // prefetch; return inline bytes (which ensurePublicImageUrl will omit) or
+      // an empty value when the download itself failed.
+      return options.forceRehost && fallback === source ? "" : fallback;
     }
   }
 
@@ -2656,17 +2703,37 @@ export class AiService implements OnModuleInit {
    * http(s) URL for remote multimodal chat models.
    * Returns null when publishing fails (never returns data:/localhost/WebP URLs).
    */
-  async ensurePublicImageUrl(source: string): Promise<string | null> {
+  isTrustedImageHostUrl(source: string): boolean {
+    if (!this.isModelSafeImageUrl(source)) return false;
+    try {
+      const hostname = new URL(source).hostname.toLowerCase();
+      const configured = (
+        process.env.IMAGE_HOST_CDN_DOMAIN || "cloudflareimg.cdn.sn"
+      ).toLowerCase();
+      return hostname === configured;
+    } catch {
+      return false;
+    }
+  }
+
+  async ensurePublicImageUrl(
+    source: string,
+    options: { forceRehost?: boolean } = {},
+  ): Promise<string | null> {
     if (!source || typeof source !== "string") return null;
     if (source.startsWith("[")) return null;
-    if (this.isModelSafeImageUrl(source)) return source.trim();
+    if (!options.forceRehost && this.isModelSafeImageUrl(source)) {
+      return source.trim();
+    }
 
-    const hosted = await this.uploadImageToHost(source);
+    const hosted = await this.uploadImageToHost(source, options);
     if (this.isModelSafeImageUrl(hosted)) return hosted;
 
     // Host returned WebP — try one forced re-encode pass from the hosted bytes.
     if (this.isPubliclyReachableImageUrl(hosted) && this.isWebpImageSource(hosted)) {
-      const rehosted = await this.uploadImageToHost(hosted);
+      const rehosted = await this.uploadImageToHost(hosted, {
+        forceRehost: true,
+      });
       if (this.isModelSafeImageUrl(rehosted)) {
         this.imageHostUrlCache.set(source, rehosted);
         return rehosted;

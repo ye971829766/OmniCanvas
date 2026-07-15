@@ -5,7 +5,15 @@ import { AiService } from "../ai/ai.service";
 import { EventSink } from "./event-sink";
 import type { ToolContext, ToolResult } from "./tool.interface";
 import { TOOL_MAP } from "./tool.registry";
-import { compactAgentSystemPrompt } from "./system-prompt";
+import {
+  buildFinalImageSystemPrompt,
+  compactAgentSystemPrompt,
+} from "./system-prompt";
+import {
+  applyFinalImageRequestPolicy,
+  applyFinalImageSeriesLayout,
+  shouldResearchFinalImageRequest,
+} from "./image-request-policy";
 import { AgentMemory } from "./agent.memory";
 import { ModelConfigService } from "../model-config/model-config.service";
 import { BillingService } from "../billing/billing.service";
@@ -74,6 +82,13 @@ const GENERATION_TOOL_NAMES = new Set([
   "edit_image",
 ]);
 
+const IMAGE_GENERATION_START_TOOLS = new Set([
+  "generate_image",
+  "edit_image",
+]);
+
+const WEB_RESEARCH_TOOLS = new Set(["web_search", "web_extract"]);
+
 const GENERATED_MEDIA_DEPENDENT_TOOLS = new Set([
   "verify_design",
   "export_node_image",
@@ -137,6 +152,10 @@ export class AgentService {
   // ── Timeout configuration ─────────────────────────────────────────────────
   private readonly LLM_TIMEOUT_MS = 90_000;
   private readonly TOOL_TIMEOUT_MS = 75_000;
+  private readonly MAX_CONCURRENT_IMAGE_GENERATIONS = Math.max(
+    1,
+    Number(process.env.AGENT_MAX_CONCURRENT_IMAGES) || 2,
+  );
   private readonly GENERATION_TIMEOUT_MS = Math.max(
     30_000,
     Number(process.env.AGENT_GENERATION_TIMEOUT_MS) || 15 * 60_000,
@@ -332,6 +351,65 @@ export class AgentService {
   // MODE 2: REACT LOOP (modify existing design)
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * Persisted research messages may contain expiring or hotlink-protected
+   * image URLs. Re-publish every untrusted historical URL before it reaches a
+   * remote multimodal model; omit only the broken image, never the whole turn.
+   */
+  private async prepareHistoricalImageMessages(
+    history: ModelMessage[],
+    sessionId: string,
+  ): Promise<ModelMessage[]> {
+    let omittedTotal = 0;
+    const normalized = await Promise.all(history.map(async (message) => {
+      if (!Array.isArray((message as any).content)) return message;
+      let omittedInMessage = 0;
+      const parts = await Promise.all((message as any).content.map(async (part: any) => {
+        if (part?.type === "text" && typeof part.text === "string") {
+          return {
+            ...part,
+            text: part.text.replace(
+              "Balanced visual references from separate design-research queries. Derive distinct abstract creative territories only. Do not copy any image's set, props, camera setup, layout, or campaign, and never use these images as product references or refImages/source.",
+              "Visual references from separate design-research queries. Synthesize an original creative strategy across them; concrete art direction is allowed. Do not copy any one image's set, props, camera setup, layout, or campaign, and never use these images as product references or refImages/source.",
+            ),
+          };
+        }
+        if (part?.type !== "image" || typeof part.image !== "string") {
+          return part;
+        }
+        const source = part.image;
+        try {
+          const trusted = this.ai.isTrustedImageHostUrl(source);
+          const published = await this.ai.ensurePublicImageUrl(source, {
+            forceRehost: !trusted,
+          });
+          if (published) return { ...part, image: published };
+        } catch (err: any) {
+          this.logger.warn(
+            `[session=${sessionId}] failed to republish historical image: ${err?.message || err}`,
+          );
+        }
+        omittedInMessage++;
+        omittedTotal++;
+        return null;
+      }));
+      const content = parts.filter(Boolean);
+      if (omittedInMessage > 0) {
+        content.push({
+          type: "text",
+          text: `[${omittedInMessage} unavailable historical research image(s) omitted; continue from the remaining research text and images.]`,
+        });
+      }
+      return { ...message, content } as ModelMessage;
+    }));
+    if (omittedTotal > 0) {
+      this.logger.warn(
+        `[session=${sessionId}] omitted ${omittedTotal} unavailable historical multimodal image(s)`,
+      );
+    }
+    return normalized;
+  }
+
   private async reactLoop(
     sessionId: string,
     userInput: string,
@@ -346,6 +424,7 @@ export class AgentService {
   ): Promise<void> {
     const config = await this.modelConfigService.getConfig();
     let systemPrompt = compactAgentSystemPrompt(config.agentConfig?.systemPrompt);
+    let modelInstructions = "";
     const chatModel = config.agentConfig?.chatModel || this.chatModel;
     usage.model = chatModel;
 
@@ -356,7 +435,7 @@ export class AgentService {
         const imageModelInfo = imageModelsList.map(m => `- ID: "${m.id}", Name: "${m.label || m.id}"`).join("\n");
         const videoModelInfo = videoModelsList.map(m => `- ID: "${m.id}", Name: "${m.label || m.id}"`).join("\n");
 
-        const modelInstructions = `
+        modelInstructions = `
 <available_models>
 When the user mentions a specific model (e.g., "@ModelName" or "@ID") in their prompt, you must choose that model and pass its exact ID string to the "model" parameter of your tool call (e.g., generate_image or generate_video). Do not invent model IDs not listed below.
 
@@ -367,7 +446,6 @@ Available Video Generation Models:
 ${videoModelInfo || "- None"}
 </available_models>
 `;
-        systemPrompt += "\n\n" + modelInstructions;
       } catch (e) {
         this.logger.error("Failed to load models list for system prompt", e);
       }
@@ -375,7 +453,10 @@ ${videoModelInfo || "- None"}
 
     const { modelInstance } = await this.buildClient(chatModel);
 
-    const history = this.memory.get(sessionId);
+    const history = await this.prepareHistoricalImageMessages(
+      this.memory.get(sessionId) as ModelMessage[],
+      sessionId,
+    );
     const screenshot = this.memory.consumeScreenshot(sessionId);
     const normalizedAssets = normalizeAgentAssets(incomingAssets);
     const currentAssets: AgentAsset[] = [];
@@ -432,17 +513,21 @@ ${videoModelInfo || "- None"}
       hasAssets: hasAssetSource || currentAssets.length > 0,
       hasCanvasImages: canvasHasImages,
     });
-    systemPrompt += `\n\n<active_tools>\n${[...selectedToolNames].join(", ")}\n</active_tools>\n<frame_policy>Frames are optional. Use the root canvas or a Group by default. Create a frame only for a bounded, clipped, exportable, auto-layout, or multi-deliverable composition. If set_frame/add_frame is not listed above, do not create or assume agent_frame.</frame_policy>\nOnly call tools listed above. Issue independent tool calls together in the same response. For nested batches, assign explicit refId values to new frames/groups/nodes and reuse them as parentId. Wait for a result only when a later call depends on generated output.`;
-    if (imageModelBitmapRequest) {
-      const preferredSource =
-        currentTurnAsset?.id ||
-        defaultImageReferenceIds[0] ||
-        implicitImageReference?.refId ||
-        sessionAssets[sessionAssets.length - 1]?.id;
-      systemPrompt += `\n\n<current_product_photo_bitmap_request>\nThe user wants a finished bitmap from the image generation model based on their uploaded/selected photo. Prefer edit_image with source="${preferredSource || "the attached assetId"}". You may use generate_image with refImages: ["${preferredSource || "assetId"}"] as a fallback. Do NOT use add_text, add_rect, add_image, frames, or other canvas assembly tools to rebuild a poster. Preserve product identity; change only what the user asked for (e.g. background / scene).\n</current_product_photo_bitmap_request>`;
-    } else if (isDirectImageRequest(userInput)) {
-      systemPrompt += `\n\n<current_final_image_request>\nSend this final image request directly to generate_image without planning, decomposition, or verification. Use your judgment to write a concise generation prompt that faithfully conveys the user's intent. Preserve the user's wording when it is already sufficient; otherwise make only the changes needed for the image model to understand the request. Do not invent product facts, creative directions, layouts, copy, or constraints that the user did not imply. If the user explicitly requests multiple separate outputs, make direct generation calls without inventing an intermediate plan.\n</current_final_image_request>`;
-    }
+    const imageResearchRequired =
+      directImageRequest && shouldResearchFinalImageRequest(userInput);
+    const preferredSource =
+      currentTurnAsset?.id ||
+      defaultImageReferenceIds[0] ||
+      implicitImageReference?.refId ||
+      sessionAssets[sessionAssets.length - 1]?.id;
+    systemPrompt = directImageRequest
+      ? buildFinalImageSystemPrompt({
+          userInput,
+          activeTools: selectedToolNames,
+          preferredSourceId: preferredSource,
+        })
+      : `${systemPrompt}\n\n<active_tools>\n${[...selectedToolNames].join(", ")}\n</active_tools>\n<frame_policy>Frames are optional. Use the root canvas or a Group by default. Create a frame only for a bounded, clipped, exportable, auto-layout, or multi-deliverable composition. If set_frame/add_frame is not listed above, do not create or assume agent_frame.</frame_policy>\nOnly call tools listed above. Issue independent tool calls together in the same response. For nested batches, assign explicit refId values to new frames/groups/nodes and reuse them as parentId. Wait for a result only when a later call depends on generated output.`;
+    if (modelInstructions) systemPrompt += `\n\n${modelInstructions}`;
     if (implicitImageReference) {
       const selectionDefault = implicitImageReference.reason === "selected"
         ? ` This is the user's single explicit image selection. For an unrelated fresh generation, pass refImages: [] explicitly; otherwise an omitted refImages field inherits this selection.`
@@ -580,6 +665,7 @@ ${videoModelInfo || "- None"}
     const sdkTools = buildAgentSdkTools(selectedToolNames);
     const invalidToolCallGuard = new InvalidToolCallGuard();
     let selectedImageWasInspected = false;
+    let imageResearchAttempted = !imageResearchRequired;
 
     try {
     for (let step = 0; step < this.MAX_STEPS; step++) {
@@ -603,6 +689,7 @@ ${videoModelInfo || "- None"}
       );
       let text = "";
       const toolCalls: any[] = [];
+      let deferImageCallsForResearch = false;
       let llmBillingOperationId: string | undefined;
       try {
         const maxOutputTokens = 4_096;
@@ -699,8 +786,22 @@ ${videoModelInfo || "- None"}
             },
           );
           call.name = normalizedCall.toolName;
-          call.input = normalizedCall.input;
+          const finalInput = directImageRequest
+            ? applyFinalImageRequestPolicy(
+                normalizedCall.toolName,
+                normalizedCall.input,
+                userInput,
+              )
+            : normalizedCall.input;
+          call.input = finalInput;
         }
+        if (directImageRequest) {
+          applyFinalImageSeriesLayout(toolCalls, userInput);
+        }
+        deferImageCallsForResearch =
+          imageResearchRequired &&
+          (!imageResearchAttempted ||
+            toolCalls.some((call) => WEB_RESEARCH_TOOLS.has(call.name)));
 
         // Track and settle actual usage, releasing the conservative preauth gap.
         const currentUsage = await result.usage;
@@ -763,6 +864,12 @@ ${videoModelInfo || "- None"}
       const stepVisualObservations: any[] = [];
       const pendingGenerationTasks: PendingGenerationTask[] = [];
       const generationOutputs = new Map<string, Record<string, any>>();
+      const expectedGenerationTaskCount = toolCalls.filter((call) =>
+        GENERATION_TOOL_NAMES.has(call.name) &&
+        !(deferImageCallsForResearch && IMAGE_GENERATION_START_TOOLS.has(call.name)) &&
+        !this.validateToolInput(call.name, call.input),
+      ).length;
+      let settledGenerationTaskCount = 0;
       let validToolCalls = 0;
       for (const call of toolCalls) {
         usage.toolCalls++;
@@ -793,6 +900,54 @@ ${videoModelInfo || "- None"}
         }
         validToolCalls++;
 
+        // A prompt authored in the same model response as web research cannot
+        // be grounded in those unseen results. Return a tool result instead of
+        // spending an image call, then let the next model step read the text
+        // and visual references before it writes the production prompt.
+        if (
+          deferImageCallsForResearch &&
+          IMAGE_GENERATION_START_TOOLS.has(call.name)
+        ) {
+          messages.push({
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: call.id,
+                toolName: call.name,
+                output: {
+                  type: "text" as const,
+                  value:
+                    "Image generation deferred. Complete web_search in a prior step, read its text and visual references, then make a new image call grounded in that evidence.",
+                },
+              },
+            ],
+          });
+          continue;
+        }
+
+        // Image providers commonly throttle large bursts. Submit at most a
+        // small batch, wait for it to settle, then start the next calls. This
+        // also gives the gallery real incremental progress instead of 0/N for
+        // a minute followed by several "service busy" failures.
+        if (
+          IMAGE_GENERATION_START_TOOLS.has(call.name) &&
+          pendingGenerationTasks.filter((task) => task.kind === "image").length >=
+            this.MAX_CONCURRENT_IMAGE_GENERATIONS
+        ) {
+          settledGenerationTaskCount += await this.settlePendingGenerations(
+            pendingGenerationTasks,
+            generationOutputs,
+            ctx,
+            sink,
+            abortSignal,
+            {
+              completedBefore: settledGenerationTaskCount,
+              total: expectedGenerationTaskCount,
+            },
+          );
+        }
+
         if (
           pendingGenerationTasks.length > 0 &&
           this.requiresGeneratedMedia(
@@ -801,12 +956,16 @@ ${videoModelInfo || "- None"}
             pendingGenerationTasks,
           )
         ) {
-          await this.settlePendingGenerations(
+          settledGenerationTaskCount += await this.settlePendingGenerations(
             pendingGenerationTasks,
             generationOutputs,
             ctx,
             sink,
             abortSignal,
+            {
+              completedBefore: settledGenerationTaskCount,
+              total: expectedGenerationTaskCount,
+            },
           );
         }
 
@@ -921,6 +1080,30 @@ ${videoModelInfo || "- None"}
           selectedImageWasInspected = true;
         }
 
+        if (call.name === "web_search") {
+          // One failed search is still an attempt: the system prompt tells the
+          // model to proceed with internal art direction rather than loop.
+          imageResearchAttempted = true;
+        }
+        if (WEB_RESEARCH_TOOLS.has(call.name)) {
+          let addedFromThisResearchCall = 0;
+          for (const item of Array.isArray(content?.images)
+            ? content.images
+            : []) {
+            if (
+              stepVisualObservations.length >= 6 ||
+              addedFromThisResearchCall >= 3
+            ) break;
+            if (typeof item?.url === "string" && /^https?:\/\//i.test(item.url)) {
+              stepVisualObservations.push({
+                image: item.url,
+                source: "web_research",
+              });
+              addedFromThisResearchCall++;
+            }
+          }
+        }
+
         messages.push({
           role: "tool",
           content: [
@@ -938,12 +1121,16 @@ ${videoModelInfo || "- None"}
       }
 
       if (pendingGenerationTasks.length > 0) {
-        await this.settlePendingGenerations(
+        settledGenerationTaskCount += await this.settlePendingGenerations(
           pendingGenerationTasks,
           generationOutputs,
           ctx,
           sink,
           abortSignal,
+          {
+            completedBefore: settledGenerationTaskCount,
+            total: expectedGenerationTaskCount,
+          },
         );
       }
 
@@ -959,9 +1146,32 @@ ${videoModelInfo || "- None"}
       // Append visual observations if any
       if (stepVisualObservations.length > 0) {
         const combinedParts: any[] = [];
+        if (stepVisualObservations.some((obs) => obs.source === "web_research")) {
+          combinedParts.push({
+            type: "text",
+            text:
+              "Visual references from separate design-research queries. Synthesize an original creative strategy across them; concrete art direction is allowed. Do not copy any one image's set, props, camera setup, layout, or campaign, and never use these images as product references or refImages/source.",
+          });
+        }
+        const publishedObservations = await Promise.all(
+          stepVisualObservations.map(async (obs) => {
+            try {
+              return await this.ai.ensurePublicImageUrl(obs.image, {
+                // Search-engine image URLs often require cookies, redirect to
+                // WebP, expire, or reject provider-side hotlink downloads.
+                // Fetch and publish stable JPEG bytes before the next model call.
+                forceRehost: obs.source === "web_research",
+              });
+            } catch (err: any) {
+              this.logger.warn(
+                `[session=${sessionId}] omitted research image: ${err?.message || err}`,
+              );
+              return null;
+            }
+          }),
+        );
         let omitted = 0;
-        for (const obs of stepVisualObservations) {
-          const uploadedUrl = await this.ai.ensurePublicImageUrl(obs.image);
+        for (const uploadedUrl of publishedObservations) {
           if (uploadedUrl) combinedParts.push({ type: "image", image: uploadedUrl });
           else omitted++;
         }
@@ -1154,18 +1364,24 @@ ${videoModelInfo || "- None"}
     ctx: ToolContext,
     sink: EventSink,
     abortSignal?: AbortSignal,
-  ): Promise<void> {
+    progress?: { completedBefore: number; total: number },
+  ): Promise<number> {
     const tasks = pending.splice(0, pending.length);
-    if (tasks.length === 0) return;
+    if (tasks.length === 0) return 0;
     const timeoutMs = tasks.some((task) => task.kind === "video")
       ? this.VIDEO_GENERATION_TIMEOUT_MS
       : this.GENERATION_TIMEOUT_MS;
+    const completedBefore = Math.max(0, progress?.completedBefore ?? 0);
+    const total = Math.max(
+      completedBefore + tasks.length,
+      progress?.total ?? tasks.length,
+    );
 
     sink.emit({
       type: "progress",
       tool: "generate_media",
-      message: `Waiting for ${tasks.length} media generation task(s) to finish...`,
-      percent: 0,
+      message: `Media generation progress: ${completedBefore}/${total}`,
+      percent: Math.round((completedBefore / total) * 100),
     });
 
     const settled = await waitForGenerationTasks(tasks, {
@@ -1174,11 +1390,15 @@ ${videoModelInfo || "- None"}
       timeoutMs,
       pollIntervalMs: this.GENERATION_POLL_MS,
       onProgress: (completed, total) => {
+        const overallCompleted = completedBefore + completed;
         sink.emit({
           type: "progress",
           tool: "generate_media",
-          message: `Media generation progress: ${completed}/${total}`,
-          percent: Math.round((completed / total) * 100),
+          message: `Media generation progress: ${overallCompleted}/${Math.max(progress?.total ?? 0, completedBefore + total)}`,
+          percent: Math.round(
+            (overallCompleted /
+              Math.max(progress?.total ?? 0, completedBefore + total)) * 100,
+          ),
         });
       },
     });
@@ -1206,6 +1426,7 @@ ${videoModelInfo || "- None"}
         `${timedOut.length} media generation task(s) did not finish within ${Math.round(timeoutMs / 1000)} seconds`,
       );
     }
+    return settled.length;
   }
 
   private applySettledGeneration(
@@ -1254,6 +1475,30 @@ ${videoModelInfo || "- None"}
         : {}),
       ...(!successful ? { errorMessage: error } : {}),
     });
+
+    // Push the finished media URL to the frontend explicitly so the chat
+    // gallery does not stay black when the client poll races the settle path.
+    if (typeof ctx.sink?.canvas === "function") {
+      if (successful && url) {
+        ctx.sink.canvas({
+          op: "media_ready",
+          refId: task.refId,
+          kind: task.kind,
+          url: videoUrl || url,
+          ...(thumbnailUrl ? { thumbnailUrl } : {}),
+          taskId: task.taskId,
+        });
+      } else if (!successful) {
+        ctx.sink.canvas({
+          op: "media_ready",
+          refId: task.refId,
+          kind: task.kind,
+          url: "",
+          taskId: task.taskId,
+          error,
+        });
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1542,31 +1787,9 @@ ${videoModelInfo || "- None"}
     sink.emit({ type: "final", text: summary });
   }
 
-  private normalizeToolInput(toolName: string, input: any): any {
+  private normalizeToolInput(_toolName: string, input: any): any {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       return input;
-    }
-
-    if (toolName === "plan_ecommerce_suite") {
-      input.sourceAssetId ??=
-        input.assetId ?? input.sourceAsset ?? input.referenceAssetId;
-      input.platforms ??= input.platform;
-
-      if (typeof input.platforms === "string") {
-        input.platforms = input.platforms
-          .split(/[,/|\s]+/)
-          .map((platform: string) => platform.trim())
-          .filter(Boolean);
-      }
-      if (typeof input.sellingPoints === "string") {
-        input.sellingPoints = input.sellingPoints
-          .split(/[\r\n;；]+/)
-          .map((point: string) => point.trim())
-          .filter(Boolean);
-      }
-      if (typeof input.imagesPerPlatform === "string" && /^\d+$/.test(input.imagesPerPlatform.trim())) {
-        input.imagesPerPlatform = Number(input.imagesPerPlatform);
-      }
     }
 
     return input;

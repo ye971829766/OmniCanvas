@@ -1,3 +1,5 @@
+import { shouldResearchFinalImageRequest } from "./image-request-policy";
+
 export interface AgentToolSelectionInput {
   userInput: string;
   canvasNodeCount: number;
@@ -9,6 +11,8 @@ export interface EcommerceRequestIntent {
   isEcommerce: boolean;
   isEditable: boolean;
   isImageEdit: boolean;
+  /** Multi-deliverable listing suite (主图+详情页 / 套图 / multi listing images). */
+  isSuite: boolean;
   isDirectFinalImage: boolean;
 }
 
@@ -47,6 +51,20 @@ function matches(input: string, pattern: RegExp): boolean {
   return pattern.test(input);
 }
 
+/** Multi-shot marketplace suite, not a single one-off listing image. */
+export function isEcommerceSuiteRequest(userInput: string): boolean {
+  const input = userInput.toLowerCase();
+  const isEcommerce = matches(
+    input,
+    /\b(?:amazon|taobao|tmall|jd|listing|ecommerce|a\+)\b|\u7535\u5546|\u6dd8\u5b9d|\u5929\u732b|\u4eac\u4e1c|\u4e3b\u56fe|\u8be6\u60c5\u9875|\u5957\u56fe/,
+  );
+  if (!isEcommerce) return false;
+  return matches(
+    input,
+    /\b(?:suite|listing images?|gallery images?|product images? suite|multi[- ]?(?:image|shot) listing)\b|\u5957\u56fe|\u4e00\u5957|\u5168\u5957|\u591a\u5f20|\u591a\u89d2|\u4e3b\u56fe\s*[+＋和与及、,，]\s*\u8be6\u60c5|\u8be6\u60c5\s*[+＋和与及、,，]\s*\u4e3b\u56fe|\u4e3b\u56fe.{0,12}\u8be6\u60c5\u9875|\u8be6\u60c5\u9875.{0,12}\u4e3b\u56fe|\b(?:main|hero).{0,24}(?:detail|lifestyle|infographic|selling)|(?:detail|lifestyle).{0,24}(?:main|hero)|\b(?:5|6|7|8)\s*(?:images?|shots?|pics?)\b|[5-8]\u5f20/,
+  );
+}
+
 export function classifyEcommerceRequest(userInput: string): EcommerceRequestIntent {
   const input = userInput.toLowerCase();
   const isEcommerce = matches(
@@ -61,10 +79,13 @@ export function classifyEcommerceRequest(userInput: string): EcommerceRequestInt
     input,
     /\b(?:edit|modify|retouch|replace|remove|change)\b|\u4fee\u6539|\u7f16\u8f91|\u4fee\u56fe|\u66ff\u6362|\u5220\u9664|\u53bb\u6389|\u6539\u6210/,
   );
+  const isSuite = isEcommerceSuiteRequest(userInput);
   return {
     isEcommerce,
     isEditable,
     isImageEdit,
+    isSuite,
+    // All non-editable ecommerce bitmap work uses the direct image path.
     isDirectFinalImage:
       isEcommerce && !isEditable && !isImageEdit,
   };
@@ -103,6 +124,8 @@ export function isImageModelBitmapRequest(
   const ecommerceIntent = classifyEcommerceRequest(userInput);
   // Explicit layered / editable source-file requests stay on canvas tools.
   if (ecommerceIntent.isEditable) return false;
+  // Ecommerce suites are finished bitmaps via generate_image (no canvas assembly).
+  if (ecommerceIntent.isSuite) return true;
   if (
     matches(
       userInput,
@@ -168,6 +191,7 @@ export function selectAgentToolNames({
     hasCanvasImages,
   });
   const focusedImageModel = directImageRequest || imageModelBitmap;
+  const imageResearchRequired = shouldResearchFinalImageRequest(userInput);
 
   const explicitSize = matches(
     input,
@@ -195,6 +219,7 @@ export function selectAgentToolNames({
   }
 
   const ecommerce = ecommerceIntent.isEcommerce;
+
   if (focusedImageModel) {
     ECOMMERCE_EDITABLE_COMPOSITION_TOOLS.forEach((name) => selected.delete(name));
     selected.delete("update_node");
@@ -252,9 +277,14 @@ export function selectAgentToolNames({
     selected.add("verify_design");
   }
 
-  // Pure text→image (no source photo): only generate_image.
-  if (directImageRequest && !imageModelBitmap) {
+  // A request to generate a final image always needs one tool. References are
+  // passed to generate_image; exposing edit/canvas tools only adds ambiguity.
+  if (directImageRequest) {
     const directTools = new Set(["generate_image"]);
+    if (imageResearchRequired) {
+      directTools.add("web_search");
+      directTools.add("web_extract");
+    }
     for (const reviewTool of [
       "review_and_adjust",
       "verify_design",
@@ -270,6 +300,10 @@ export function selectAgentToolNames({
   // Do not expose canvas poster assembly (add_text / add_rect / frames).
   if (imageModelBitmap) {
     const bitmapTools = new Set(["generate_image", "edit_image"]);
+    if (imageResearchRequired) {
+      bitmapTools.add("web_search");
+      bitmapTools.add("web_extract");
+    }
     if (matches(input, /\b(?:remove background|background removal)\b|\u62a0\u56fe|\u53bb\u80cc\u666f/)) {
       bitmapTools.add("remove_background");
     }

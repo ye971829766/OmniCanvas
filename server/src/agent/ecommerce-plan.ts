@@ -140,10 +140,6 @@ export function reservePlannedEcommercePlacement(
 
   const plan = ctx.memory.getPlan(ctx.sessionId);
   const map = getCanvasNodeMap(ctx);
-  const explicitlyTargeted = placements.find((placement) =>
-    placement.platform === input.platform &&
-    placement.deliverable === input.deliverable,
-  );
   const hasActiveDeliverable = plan?.steps.some((step: any) =>
     step.platform && step.deliverable && step.status !== 'completed',
   );
@@ -162,11 +158,36 @@ export function reservePlannedEcommercePlacement(
     load.set(key, (load.get(key) ?? 0) + 1);
   }
 
-  const selected = explicitlyTargeted ?? placements.reduce((best, placement) =>
-    (load.get(placementKey(placement)) ?? 0) < (load.get(placementKey(best)) ?? 0)
-      ? placement
-      : best,
+  const pickLeastLoaded = (candidates: PlannedEcommercePlacement[]) =>
+    candidates.reduce((best, placement) =>
+      (load.get(placementKey(placement)) ?? 0) < (load.get(placementKey(best)) ?? 0)
+        ? placement
+        : best,
+    );
+
+  // Agents often stamp every call as deliverable:"main". Prefer a still-empty
+  // plan role so selling_point / scenario / detail scaffolding actually runs.
+  const unfilled = placements.filter(
+    (placement) => (load.get(placementKey(placement)) ?? 0) === 0,
   );
+  const explicit =
+    typeof input.platform === 'string' && typeof input.deliverable === 'string'
+      ? placements.find(
+          (placement) =>
+            placement.platform === input.platform &&
+            placement.deliverable === input.deliverable,
+        )
+      : undefined;
+  const explicitLoad = explicit ? (load.get(placementKey(explicit)) ?? 0) : Infinity;
+  const selected =
+    // Honor an explicit empty role first.
+    (explicit && explicitLoad === 0 ? explicit : undefined) ||
+    // Otherwise fill the next empty role in plan order.
+    (unfilled.length > 0 ? unfilled[0] : undefined) ||
+    // Explicit role only if nothing better is empty.
+    explicit ||
+    pickLeastLoaded(placements);
+
   const key = placementKey(selected);
   reservations.set(key, (reservations.get(key) ?? 0) + 1);
   return selected;
@@ -198,11 +219,24 @@ export function getGenerationAspectRatio(width: number, height: number): string 
   )[0];
 }
 
+/**
+ * Provider generation size for a planned ecommerce slot.
+ * Platform listing boxes (e.g. Taobao 1000²) stay as canvas layout sizes, but
+ * the image model is asked for a higher-res render so quality is not capped
+ * at mobile thumbnail dimensions.
+ */
 export function getGptImageGenerationSize(width: number, height: number): string {
-  const align = (value: number) => Math.max(16, Math.round(value / 16) * 16);
+  const minLongEdge = 1536;
+  const longEdge = Math.max(width, height);
+  const scale = longEdge > 0 && longEdge < minLongEdge ? minLongEdge / longEdge : 1;
+  const align = (value: number) => Math.max(16, Math.round((value * scale) / 16) * 16);
   return `${align(width)}x${align(height)}`;
 }
 
+/**
+ * Suite prompt scaffolds are retired. Always pass the agent-authored prompt
+ * through unchanged so the image model is not constrained by system templates.
+ */
 export function buildEcommerceImagePrompt(
   basePrompt: string,
   _placement: PlannedEcommercePlacement,

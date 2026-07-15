@@ -16,6 +16,11 @@ const MEDIA_TOOL_NAMES = new Set([
   "upscale_image",
 ]);
 
+const API_BASE_URL =
+  (typeof import.meta !== "undefined" &&
+    (import.meta as any).env?.VITE_API_BASE_URL) ||
+  "http://localhost:3000";
+
 function unwrapToolOutput(value: any): any {
   if (
     value &&
@@ -26,6 +31,32 @@ function unwrapToolOutput(value: any): any {
     return value.value;
   }
   return value;
+}
+
+/**
+ * Normalize media URLs so chat <img> tags load against the API host.
+ * Handles relative /files/... paths and absolute file URLs that used a
+ * different host than VITE_API_BASE_URL (localhost vs 127.0.0.1, etc.).
+ */
+export function resolveMediaDisplayUrl(url?: string | null): string {
+  if (!url || typeof url !== "string") return "";
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return trimmed;
+  if (trimmed.startsWith("/files/") || trimmed.startsWith("files/")) {
+    const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+    return `${String(API_BASE_URL).replace(/\/$/, "")}${path}`;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.pathname.startsWith("/files/")) {
+      const base = new URL(String(API_BASE_URL), "http://localhost:3000");
+      return `${base.origin}${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    /* keep raw */
+  }
+  return trimmed;
 }
 
 /** Convert an authoritative terminal media tool result into live canvas/chat state. */
@@ -42,23 +73,32 @@ export function deriveTerminalMediaNodeState(
   const status = String(output?.status || "").toLowerCase();
   const videoUrl = output?.videoUrl || (toolName === "generate_video" ? output?.url : undefined);
   const imageUrl = output?.imageUrl || (toolName === "generate_video" ? undefined : output?.url);
-  const url =
+  const rawUrl =
     toolName === "generate_video"
       ? videoUrl || output?.url || previous?.url
       : imageUrl || output?.url || output?.videoUrl || previous?.url;
+  const url = resolveMediaDisplayUrl(rawUrl || "") || rawUrl || undefined;
   const type = toolName === "generate_video" ? "video" : "image";
-  if (url || ["success", "done", "completed"].includes(status)) {
+  const hasTerminalSuccess = ["success", "done", "completed"].includes(status);
+  const hasExplicitMediaUrl = Boolean(
+    output?.url || output?.imageUrl || output?.videoUrl,
+  );
+
+  // Require a renderable URL before marking done. Status-only "success" without
+  // pixels produces black broken thumbnails in the agent gallery.
+  if (url && (hasTerminalSuccess || hasExplicitMediaUrl)) {
     const thumbnailUrl =
-      output?.thumbnailUrl ||
-      previous?.thumbnailUrl ||
-      // Never use a video file as an image poster
-      (type === "image" ? url : undefined);
+      resolveMediaDisplayUrl(
+        output?.thumbnailUrl ||
+          previous?.thumbnailUrl ||
+          (type === "image" ? url : undefined),
+      ) || undefined;
     return {
       ...previous,
       refId,
       type,
       status: "done",
-      url: url || previous?.url,
+      url,
       thumbnailUrl,
       error: undefined,
     };
@@ -78,4 +118,24 @@ export function deriveTerminalMediaNodeState(
   }
 
   return undefined;
+}
+
+/** Build a finished media state from a known refId + URL (canvas poll path). */
+export function mediaReadyNodeState(
+  refId: string,
+  kind: "image" | "video",
+  url: string,
+  thumbnailUrl?: string,
+): AgentMediaNodeState {
+  const resolved = resolveMediaDisplayUrl(url) || url;
+  return {
+    refId,
+    type: kind,
+    status: "done",
+    url: resolved,
+    thumbnailUrl:
+      resolveMediaDisplayUrl(thumbnailUrl || (kind === "image" ? resolved : "")) ||
+      undefined,
+    error: undefined,
+  };
 }

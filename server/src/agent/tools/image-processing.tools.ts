@@ -2,7 +2,7 @@ import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
 import { startBilledAgentTask } from '../../billing/billing-task';
 import type { CanvasImageGenerationType } from '../agent.protocol';
 import { resolveCanvasContainerParentId, upsertCanvasNode } from '../canvas-state';
-import { promotePlannedEcommerceSource } from '../ecommerce-plan';
+import { applyFinalImageRequestPolicy } from '../image-request-policy';
 import { resolveReferenceToBase64, resolveReferenceUrl } from './image-reference';
 
 function getSourceNode(source: string, ctx: ToolContext): any | undefined {
@@ -121,8 +121,7 @@ export const removeBackgroundTool: AgentTool = {
     );
     const result = billed.result;
     startCanvasImageTask(refId, result.taskId, 'removeBg', ctx);
-    const canonicalSource = promotePlannedEcommerceSource(input.source, refId, ctx);
-    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'remove_background', canonicalSource, billingOperationId: billed.billingOperationId } };
+    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'remove_background', billingOperationId: billed.billingOperationId } };
   },
 };
 
@@ -153,8 +152,7 @@ export const upscaleImageTool: AgentTool = {
     );
     const result = billed.result;
     startCanvasImageTask(refId, result.taskId, 'upscale', ctx);
-    const canonicalSource = promotePlannedEcommerceSource(input.source, refId, ctx);
-    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'upscale_image', canonicalSource, billingOperationId: billed.billingOperationId } };
+    return { output: { refId, taskId: result.taskId, status: result.status, operation: 'upscale_image', billingOperationId: billed.billingOperationId } };
   },
 };
 
@@ -206,12 +204,17 @@ export const editImageTool: AgentTool = {
     'Edit an existing uploaded photo or canvas image with the image generation model (not canvas shapes/text). ' +
     'Preferred for promotional shots, cool/new backgrounds, scene changes, retouching, and any "edit this photo" request. ' +
     'Use for adding, removing, or replacing pictured subjects, or changing product detail, background, lighting, material, or color while preserving identity. ' +
-    'Pass source as the exact assetId or canvas refId. Do not rebuild posters with add_text/add_rect when this tool applies.',
+    'Pass source as the exact assetId or canvas refId. Preserve concrete visual prompts and optimize only high-level task briefs. ' +
+    'Do not rebuild posters with add_text/add_rect when this tool applies.',
   parameters: {
     type: 'object',
     properties: {
       source: { type: 'string', description: 'assetId, canvas refId, or image URL' },
-      prompt: { type: 'string', description: 'Precise edit instruction. State what must remain unchanged.' },
+      prompt: {
+        type: 'string',
+        description:
+          'Complete edit prompt. Concrete user requests stay unchanged; for a high-level task, author all useful art direction without a fixed length or template. Do not invent factual product attributes.',
+      },
       maskRef: { type: 'string', description: 'Optional PNG mask assetId, canvas refId, URL, or data URL for localized edits.' },
       model: { type: 'string' },
       size: { type: 'string' },
@@ -221,6 +224,9 @@ export const editImageTool: AgentTool = {
     required: ['source', 'prompt'],
   },
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
+    if (ctx.directImageRequest === true) {
+      input = applyFinalImageRequestPolicy('edit_image', input, ctx.userInput);
+    }
     const resolvedSourceUrl = await resolveReferenceUrl(input.source, ctx);
     const sourceBase64 = await resolveReferenceToBase64(input.source, ctx);
     const sourceUrl = resolvedSourceUrl || sourceBase64;

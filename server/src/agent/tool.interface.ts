@@ -26,7 +26,7 @@ export interface ToolContext {
   assets: AgentAsset[];
   /** abort signal for the current agent turn */
   abortSignal?: AbortSignal;
-  /** current user brief, used for prompt fidelity and factual grounding */
+  /** current user brief, used for request policy and factual grounding */
   userInput?: string;
   /** true when this turn is a direct final-image request rather than a canvas composition */
   directImageRequest?: boolean;

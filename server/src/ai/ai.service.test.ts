@@ -173,6 +173,47 @@ describe("AiService.uploadImageToHost", () => {
     const form = uploadCall!.init!.body as FormData;
     expect(form.get("outputFormat")).toBe("jpg");
   });
+
+  test("force-rehosts an ordinary public research URL before multimodal use", async () => {
+    const calls: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+    const externalUrl = "https://www.tiktok.com/api/img/?itemId=123";
+    globalThis.fetch = mock(async (input, init) => {
+      calls.push({ input, init });
+      if (String(input) === externalUrl) {
+        return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      return Response.json({
+        success: true,
+        url: "https://cloudflareimg.cdn.sn/i/research.jpg",
+      });
+    }) as unknown as typeof fetch;
+
+    const service = createService();
+    const result = await service.ensurePublicImageUrl(externalUrl, {
+      forceRehost: true,
+    });
+
+    expect(result).toBe("https://cloudflareimg.cdn.sn/i/research.jpg");
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.init?.redirect).toBe("follow");
+    expect(new Headers(calls[0]?.init?.headers).get("accept")).toContain("image/");
+    expect((calls[1]?.init?.body as FormData).get("outputFormat")).toBe("jpg");
+  });
+
+  test("omits a research image when backend prefetch fails instead of returning the broken URL", async () => {
+    const externalUrl = "https://www.tiktok.com/api/img/?itemId=expired";
+    globalThis.fetch = mock(async () => new Response("forbidden", {
+      status: 403,
+      headers: { "content-type": "text/plain" },
+    })) as unknown as typeof fetch;
+
+    await expect(createService().ensurePublicImageUrl(externalUrl, {
+      forceRehost: true,
+    })).resolves.toBeNull();
+  });
 });
 
 describe("AiService generation task lifecycle", () => {
@@ -214,7 +255,7 @@ describe("AiService generation task lifecycle", () => {
     expect(statusUpdates[1]).toEqual({
       id: response.taskId,
       status: "error",
-      data: { error: "preflight failed" },
+      data: { error: "生成失败，请稍后重试" },
     });
   });
 });
@@ -230,6 +271,36 @@ describe("AiService GPT Image 2 request defaults", () => {
     expect(service.resolveImageRequestQuality("gpt-image-2", "hd")).toBe("high");
     expect(service.resolveImageRequestQuality("gpt-image-2", "low")).toBe("low");
     expect(service.resolveImageRequestSize("gpt-image-2", "2000x2000", options)).toBe("2000x2000");
+  });
+
+  test("normalizes direct-generator and agent requests to the same model, quality, size, and reference bytes", async () => {
+    const service = createService() as any;
+    service.getImageModelOptions = mock(async () => ({
+      maxGenerationCount: 16,
+      maxReferenceImages: 1,
+      defaults: { size: "auto", quality: "high" },
+    }));
+    const reference = "data:image/png;base64,AQID";
+    const common = {
+      prompt: "生成这双鞋的淘宝套图 主图+详情页",
+      model: "gpt-image-2",
+      images: [reference],
+    };
+
+    const directRequest = await service.prepareImageGenerationRequest({
+      ...common,
+      size: "auto",
+      quality: "high",
+    });
+    const agentRequest = await service.prepareImageGenerationRequest(common);
+
+    expect(agentRequest).toEqual(directRequest);
+    expect(agentRequest).toMatchObject({
+      model: "gpt-image-2",
+      size: "auto",
+      quality: "high",
+      images: [reference],
+    });
   });
 });
 
@@ -267,7 +338,7 @@ describe("AiService image count validation", () => {
     service.getImageModelOptions = mock(async () => ({
       maxGenerationCount: 1,
       maxReferenceImages: 1,
-      defaults: { size: "1024x1024" },
+      defaults: { size: "auto", quality: "auto" },
       qualities: ["standard"],
     }));
 
@@ -276,6 +347,8 @@ describe("AiService image count validation", () => {
     ).resolves.toMatchObject({
       model: "configured-paint-model",
       n: 1,
+      size: "auto",
+      quality: "auto",
     });
   });
 });

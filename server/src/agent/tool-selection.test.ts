@@ -99,10 +99,36 @@ describe("agent tool selection", () => {
     expect(tools.size).toBeLessThan(20);
   });
 
-  test("sends single and multi-image ecommerce requests directly to image generation", () => {
+  test("adds bounded web research to an underspecified ecommerce image request", () => {
+    const tools = selectAgentToolNames({
+      userInput: "帮我生成这双鞋的淘宝详情页",
+      canvasNodeCount: 0,
+      hasAssets: true,
+    });
+
+    expect(tools.has("generate_image")).toBe(true);
+    expect(tools.has("plan_ecommerce_suite")).toBe(false);
+    expect(tools.has("plan_design")).toBe(false);
+    expect(tools.has("add_frame")).toBe(false);
+    expect(tools.has("set_frame")).toBe(false);
+    expect(tools.has("remove_background")).toBe(false);
+    expect(tools.has("upscale_image")).toBe(false);
+    expect(tools.has("add_text")).toBe(false);
+    expect(tools.has("add_rect")).toBe(false);
+    expect(tools.has("add_group")).toBe(false);
+    expect(tools.has("verify_design")).toBe(false);
+    expect(tools.has("review_and_adjust")).toBe(false);
+    expect([...tools]).toEqual([
+      "generate_image",
+      "web_search",
+      "web_extract",
+    ]);
+  });
+
+  test("skips automatic research for a production-ready image prompt or explicit opt-out", () => {
     for (const userInput of [
-      "帮我生成这双鞋的淘宝详情页",
-      "Create six Amazon listing images from this product asset",
+      "用这双鞋做一张暗黑科技风淘宝主图，黑色背景、蓝色霓虹侧光，产品居中，不要文字",
+      "不要联网，帮我生成适合的电商主图，风格统一",
     ]) {
       const tools = selectAgentToolNames({
         userInput,
@@ -111,18 +137,28 @@ describe("agent tool selection", () => {
       });
 
       expect(tools.has("generate_image")).toBe(true);
+      expect(tools.has("web_search")).toBe(false);
+      expect(tools.has("web_extract")).toBe(false);
+    }
+  });
+
+  test("routes ecommerce suites directly to image generation without plan_ecommerce_suite", () => {
+    for (const userInput of [
+      "生成一套淘宝电商图，主图+详情页",
+      "Create six Amazon listing images from this product asset",
+    ]) {
+      const tools = selectAgentToolNames({
+        userInput,
+        canvasNodeCount: 0,
+        hasAssets: true,
+      });
+
       expect(tools.has("plan_ecommerce_suite")).toBe(false);
-      expect(tools.has("plan_design")).toBe(false);
-      expect(tools.has("add_frame")).toBe(false);
-      expect(tools.has("set_frame")).toBe(false);
-      expect(tools.has("remove_background")).toBe(false);
-      expect(tools.has("upscale_image")).toBe(false);
+      expect(tools.has("generate_image")).toBe(true);
       expect(tools.has("add_text")).toBe(false);
       expect(tools.has("add_rect")).toBe(false);
-      expect(tools.has("add_group")).toBe(false);
+      expect(tools.has("add_frame")).toBe(false);
       expect(tools.has("verify_design")).toBe(false);
-      expect(tools.has("review_and_adjust")).toBe(false);
-      expect([...tools]).toEqual(["generate_image"]);
     }
   });
 

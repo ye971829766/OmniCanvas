@@ -25,30 +25,23 @@ function placement(overrides: Partial<PlannedEcommercePlacement> = {}): PlannedE
 }
 
 describe('ecommerce image prompt', () => {
-  test('does not wrap or expand the agent-authored prompt', () => {
-    const agentPrompt = 'Create a concise Taobao detail page based on the referenced shoe.';
+  test('passes the agent-authored prompt through without system suite scaffolds', () => {
+    const agentPrompt =
+      '青花盖碗淘宝主图：暖金光影，大号中文标题，手机可读卖点层级，保留产品釉色与亭台纹样';
     const prompt = buildEcommerceImagePrompt(
       agentPrompt,
       placement({
-        productName: '城市跑鞋',
-        sellingPoints: ['透气织物鞋面'],
+        productName: '山水雅韵盖碗',
+        sellingPoints: ['白瓷青花'],
         language: 'zh-CN',
       }),
     );
 
     expect(prompt).toBe(agentPrompt);
-    expect(prompt).not.toContain('premium');
+    expect(prompt).not.toContain('premium benefit visual');
     expect(prompt).not.toContain('Composition:');
-    expect(prompt).not.toContain('Quality bar:');
-  });
-
-  test('does not add safeguards or inferred details to a sparse brief', () => {
-    const prompt = buildEcommerceImagePrompt(
-      'Create a premium layout',
-      placement({ sourceWidth: 224, sourceHeight: 224 }),
-    );
-
-    expect(prompt).toBe('Create a premium layout');
+    expect(prompt).not.toContain('Quality bar');
+    expect(prompt).not.toContain('Identity lock');
   });
 });
 

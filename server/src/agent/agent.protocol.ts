@@ -81,6 +81,16 @@ export type CanvasOp =
       taskId: string;
       generationType?: CanvasImageGenerationType;
     }
+  | {
+      /** Terminal media result so chat gallery + canvas stay in sync without a second poll race. */
+      op: 'media_ready';
+      refId: string;
+      kind: 'image' | 'video';
+      url: string;
+      thumbnailUrl?: string;
+      taskId?: string;
+      error?: string;
+    }
   | { op: 'focus_node'; refId: string }
   | { op: 'export_node'; refId: string; requestId: string };
 

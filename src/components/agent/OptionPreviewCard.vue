@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { Download, Play } from "lucide-vue-next";
 import type { NodeState } from "@/composables/useAgent";
+import { resolveMediaDisplayUrl } from "@/utils/agentMediaState";
 
 const props = defineProps<{
   refId: string;
@@ -28,20 +29,28 @@ const isVideo = computed(
   () => props.state?.status === "done" && props.state?.type === "video",
 );
 
+const imageSrc = computed(() => {
+  if (!props.state || props.state.type !== "image") return "";
+  return resolveMediaDisplayUrl(props.state.url) || props.state.url || "";
+});
+
 const videoSrc = computed(() => {
   if (!isVideo.value || !props.state) return "";
-  return props.state.url || "";
+  return resolveMediaDisplayUrl(props.state.url) || props.state.url || "";
 });
 
 /** Poster must be an image URL — never a .mp4 / video URL. */
 const posterSrc = computed(() => {
   if (!props.state) return "";
   const thumb = props.state.thumbnailUrl || "";
-  if (thumb && !looksLikeVideoUrl(thumb)) return thumb;
+  if (thumb && !looksLikeVideoUrl(thumb)) {
+    return resolveMediaDisplayUrl(thumb) || thumb;
+  }
   return "";
 });
 
 const posterFailed = ref(false);
+const imageFailed = ref(false);
 const inlinePlaying = ref(false);
 const videoEl = ref<HTMLVideoElement | null>(null);
 
@@ -49,6 +58,7 @@ watch(
   () => [props.state?.url, props.state?.thumbnailUrl, props.state?.type],
   () => {
     posterFailed.value = false;
+    imageFailed.value = false;
     inlinePlaying.value = false;
   },
 );
@@ -71,14 +81,15 @@ function downloadMedia(e: MouseEvent) {
   const state = props.state;
   if (!state) return;
 
-  const url =
+  const raw =
     state.type === "video"
       ? state.url || state.thumbnailUrl
       : state.url || state.thumbnailUrl;
+  const url = resolveMediaDisplayUrl(raw) || raw;
   if (!url) return;
 
   // Open media in a new tab so the user can save/share without navigating away
-  // from the chat. Absolute-ize relative /files/... URLs against the app origin.
+  // from the chat. Absolute-ize relative /files/... URLs against the API host.
   let href = url;
   try {
     href = new URL(url, window.location.origin).href;
@@ -150,11 +161,36 @@ function onVideoEnded() {
 
     <!-- ── DONE: image ────────────────────────────────────────── -->
     <div
-      v-else-if="state.status === 'done' && state.type === 'image'"
+      v-else-if="state.status === 'done' && state.type === 'image' && imageSrc && !imageFailed"
       class="preview-done"
     >
-      <img :src="state.url" class="preview-img" alt="" />
+      <img
+        :src="imageSrc"
+        class="preview-img"
+        alt=""
+        loading="lazy"
+        @error="imageFailed = true"
+      />
       <button
+        class="action-download-btn"
+        type="button"
+        aria-label="在新标签页打开图片"
+        title="在新标签页打开"
+        @click.stop="downloadMedia"
+      >
+        <Download :size="15" />
+      </button>
+    </div>
+
+    <!-- ── DONE but image URL missing / failed to load ─────────── -->
+    <div
+      v-else-if="state.status === 'done' && state.type === 'image'"
+      class="preview-error"
+    >
+      <span class="error-icon">⚠</span>
+      <span class="error-text">{{ imageFailed ? "预览加载失败" : "图片地址缺失" }}</span>
+      <button
+        v-if="imageSrc"
         class="action-download-btn"
         type="button"
         aria-label="在新标签页打开图片"
@@ -434,9 +470,17 @@ function onVideoEnded() {
   max-height: none;
 }
 
+.compact .preview-done {
+  position: relative;
+}
+
 .compact .preview-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   height: 100%;
   max-height: none;
+  object-fit: cover;
 }
 
 .action-download-btn {

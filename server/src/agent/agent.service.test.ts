@@ -14,23 +14,6 @@ function createService(): AgentService {
 }
 
 describe("AgentService event lifecycle", () => {
-  test("normalizes weaker ecommerce tool-call shapes before validation", () => {
-    const service = createService() as any;
-    const input = service.normalizeToolInput("plan_ecommerce_suite", {
-      platform: "taobao",
-      assetId: "asset-product",
-      sellingPoints: "透气鞋面；轻量鞋身",
-      imagesPerPlatform: "6",
-    });
-
-    expect(input).toMatchObject({
-      sourceAssetId: "asset-product",
-      platforms: ["taobao"],
-      sellingPoints: ["透气鞋面", "轻量鞋身"],
-      imagesPerPlatform: 6,
-    });
-  });
-
   test("emits the provider error before closing the stream", async () => {
     const service = createService() as any;
     service.logger.error = () => undefined;
@@ -52,6 +35,49 @@ describe("AgentService event lifecycle", () => {
 
     expect(events.map((event) => event.type)).toEqual(["error", "done"]);
     expect(events[0]?.message).toBe("unknown certificate verification error");
+  });
+
+  test("rehosts untrusted historical multimodal URLs and isolates a broken image", async () => {
+    const service = createService() as any;
+    const publishCalls: any[] = [];
+    service.logger.warn = () => undefined;
+    service.ai = {
+      isTrustedImageHostUrl: (source: string) =>
+        source.includes("cloudflareimg.cdn.sn"),
+      ensurePublicImageUrl: async (source: string, options: any) => {
+        publishCalls.push({ source, options });
+        if (source.includes("expired")) return null;
+        if (options?.forceRehost) {
+          return "https://cloudflareimg.cdn.sn/i/rehosted.jpg";
+        }
+        return source;
+      },
+    };
+
+    const result = await service.prepareHistoricalImageMessages([{
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "Balanced visual references from separate design-research queries. Derive distinct abstract creative territories only. Do not copy any image's set, props, camera setup, layout, or campaign, and never use these images as product references or refImages/source.",
+        },
+        { type: "image", image: "https://www.tiktok.com/api/img/?itemId=good" },
+        { type: "image", image: "https://www.tiktok.com/api/img/?itemId=expired" },
+        { type: "image", image: "https://cloudflareimg.cdn.sn/i/product.jpg" },
+      ],
+    }], "session-history-images");
+
+    const serialized = JSON.stringify(result);
+    expect(serialized).toContain("https://cloudflareimg.cdn.sn/i/rehosted.jpg");
+    expect(serialized).toContain("https://cloudflareimg.cdn.sn/i/product.jpg");
+    expect(serialized).not.toContain("itemId=expired");
+    expect(serialized).toContain("unavailable historical research image");
+    expect(serialized).toContain("concrete art direction is allowed");
+    expect(serialized).not.toContain("abstract creative territories only");
+    expect(publishCalls).toContainEqual({
+      source: "https://www.tiktok.com/api/img/?itemId=good",
+      options: { forceRehost: true },
+    });
   });
 
   test("emits an error tool result and persists the matching plan step as failed", async () => {
@@ -143,6 +169,287 @@ describe("AgentService event lifecycle", () => {
       expect(savedStatuses).toEqual(["in_progress", "failed"]);
     } finally {
       tool.execute = originalExecute;
+    }
+  });
+
+  test("passes independently authored production prompts through a researched multi-image brief", async () => {
+    const userRequest = "帮我生成适合的电商主图，生成 5 张，风格要统一";
+    const optimizedPrompt =
+      "为白色厚底运动鞋创作品牌 campaign 主视觉：夸张低机位透视、深靛蓝空间光场、电光青边缘光与动态切片排版，让产品成为压倒性视觉主体；保持参考鞋款结构与配色，不虚构参数。";
+    const session = { messages: [], lastAccess: Date.now() };
+    const memory = Object.create(AgentMemory.prototype) as any;
+    memory.getSession = () => session;
+    memory.get = () => [];
+    memory.consumeScreenshot = () => null;
+    memory.registerAssets = () => [];
+    memory.compactForModel = (messages: any[]) => messages;
+    memory.set = () => undefined;
+    memory.saveSession = () => undefined;
+
+    let requestCount = 0;
+    let firstRequestBody: any;
+    const requestBodies: any[] = [];
+    const generationTrace: string[] = [];
+    const publishedImageRequests: Array<{ source: string; forceRehost: boolean }> = [];
+    const ai = {
+      resolveChannelAndModel: async () => ({
+        channel: { apiKey: "test-key", baseUrl: "http://example.invalid/v1" },
+        upstreamModel: "test-model",
+      }),
+      fetchProvider: async (_url: unknown, init: any) => {
+        requestCount++;
+        const requestBody = JSON.parse(String(init?.body || "{}"));
+        requestBodies.push(requestBody);
+        if (requestCount === 1) firstRequestBody = requestBody;
+        const chunks = requestCount === 1
+          ? [
+              `data: ${JSON.stringify({
+                id: "chatcmpl-research",
+                object: "chat.completion.chunk",
+                created: 1,
+                model: "test-model",
+                choices: [{
+                  index: 0,
+                  delta: {
+                    role: "assistant",
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "call-research",
+                        type: "function",
+                        function: {
+                          name: "web_search",
+                          arguments: JSON.stringify({
+                            query: "2026 鞋类淘宝主图设计趋势 优秀案例",
+                            search_depth: "advanced",
+                            include_images: true,
+                            search_scope: "visual_design",
+                          }),
+                        },
+                      },
+                      {
+                        index: 1,
+                        id: "call-too-early",
+                        type: "function",
+                        function: {
+                          name: "generate_image",
+                          arguments: JSON.stringify({ prompt: userRequest }),
+                        },
+                      },
+                    ],
+                  },
+                  finish_reason: null,
+                }],
+              })}`,
+              'data: {"id":"chatcmpl-research","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
+              "data: [DONE]",
+              "",
+            ]
+          : requestCount === 2
+            ? [
+                `data: ${JSON.stringify({
+                  id: "chatcmpl-image",
+                  object: "chat.completion.chunk",
+                  created: 1,
+                  model: "test-model",
+                  choices: [{
+                    index: 0,
+                    delta: {
+                      role: "assistant",
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call-image-1",
+                          type: "function",
+                          function: {
+                            name: "generate_image",
+                            arguments: JSON.stringify({
+                              prompt: optimizedPrompt,
+                              platform: "taobao",
+                              quality: "hd",
+                            }),
+                          },
+                        },
+                        {
+                          index: 1,
+                          id: "call-image-2",
+                          type: "function",
+                          function: {
+                            name: "generate_image",
+                            arguments: JSON.stringify({
+                              prompt: "纯白背景，产品正面棚拍",
+                              size: "1024x1024",
+                            }),
+                          },
+                        },
+                        {
+                          index: 2,
+                          id: "call-image-3",
+                          type: "function",
+                          function: {
+                            name: "generate_image",
+                            arguments: JSON.stringify({ prompt: userRequest }),
+                          },
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                  }],
+                })}`,
+                'data: {"id":"chatcmpl-image","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
+                "data: [DONE]",
+                "",
+              ]
+            : [
+              'data: {"id":"chatcmpl-final","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"Done."},"finish_reason":null}]}',
+              'data: {"id":"chatcmpl-final","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+              "data: [DONE]",
+              "",
+            ];
+        return new Response(chunks.join("\n\n"), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      },
+      getTaskStatus: (taskId: string) => {
+        generationTrace.push(`settled:${taskId}`);
+        return {
+          status: "success",
+          imageUrl: `https://example.com/${taskId}.png`,
+        };
+      },
+      ensurePublicImageUrl: async (source: string, options?: { forceRehost?: boolean }) => {
+        publishedImageRequests.push({
+          source,
+          forceRehost: options?.forceRehost === true,
+        });
+        return options?.forceRehost
+          ? "https://cloudflareimg.cdn.sn/i/research.jpg"
+          : source;
+      },
+    };
+    const service = new AgentService(
+      ai as any,
+      memory,
+      { getConfig: async () => ({ agentConfig: { chatModel: "test-model" } }) } as any,
+      { recordTokenUsage: () => undefined } as any,
+      {} as any,
+    ) as any;
+    service.logger.warn = () => undefined;
+    service.logger.error = () => undefined;
+    service.logger.debug = () => undefined;
+    service.logger.log = () => undefined;
+
+    const tool = TOOL_MAP.get("generate_image")!;
+    const researchTool = TOOL_MAP.get("web_search")!;
+    const originalExecute = tool.execute;
+    const originalResearchExecute = researchTool.execute;
+    const receivedInputs: any[] = [];
+    const receivedResearchInputs: any[] = [];
+    researchTool.execute = async (input: any) => {
+      receivedResearchInputs.push(input);
+      return {
+        output: {
+          answer:
+            "近期鞋类电商案例反复使用大比例产品、暖灰留白、克制排版和材质微距。",
+          results: [{
+            title: "鞋类电商视觉趋势",
+            url: "https://example.com/trends",
+            snippet: "侧光强化网面与鞋底层次，详情页用远景到微距建立节奏。",
+          }],
+          images: [{
+            url: "https://example.com/reference.jpg",
+            description: "暖灰背景中的鞋类大比例侧面英雄图，使用柔和方向性侧光。",
+          }],
+        },
+      };
+    };
+    tool.execute = async (input: any) => {
+      receivedInputs.push(input);
+      const sequence = receivedInputs.length;
+      generationTrace.push(`started:task-${sequence}`);
+      return {
+        output: {
+          refId: `img_${sequence}`,
+          taskId: `task-${sequence}`,
+          status: "generating",
+        },
+      };
+    };
+
+    try {
+      const events: any[] = [];
+      for await (const event of service.run(
+        "session-image-policy",
+        userRequest,
+        "http://localhost",
+        undefined,
+        [{
+          refId: "image_selected",
+          tag: "Image",
+          selected: true,
+          url: "https://example.com/product.png",
+        }],
+      ).stream()) events.push(event);
+
+      const calls = events.filter(
+        (event) => event.type === "tool_call" && event.tool === "generate_image",
+      );
+      expect(calls).toHaveLength(3);
+      expect(receivedResearchInputs).toHaveLength(1);
+      expect(receivedResearchInputs[0]).toMatchObject({
+        search_depth: "advanced",
+        include_images: true,
+        search_scope: "visual_design",
+      });
+      expect(events.some(
+        (event) => event.type === "tool_call" && event.id === "call-too-early",
+      )).toBe(false);
+      expect(JSON.stringify(requestBodies[1]?.messages)).toContain(
+        "https://cloudflareimg.cdn.sn/i/research.jpg",
+      );
+      expect(publishedImageRequests).toContainEqual({
+        source: "https://example.com/reference.jpg",
+        forceRehost: true,
+      });
+      expect(calls.map((call) => call.input)).toEqual([
+        {
+          prompt: optimizedPrompt,
+          platform: "taobao",
+          quality: "hd",
+          refImages: ["image_selected"],
+        },
+        {
+          prompt: "纯白背景，产品正面棚拍",
+          size: "1024x1024",
+          refImages: ["image_selected"],
+        },
+        {
+          prompt: userRequest,
+          refImages: ["image_selected"],
+        },
+      ]);
+      expect(receivedInputs).toEqual(calls.map((call) => call.input));
+      expect(generationTrace.indexOf("settled:task-1")).toBeLessThan(
+        generationTrace.indexOf("started:task-3"),
+      );
+      expect(events.filter((event) => event.type === "progress").map((event) => event.message)).toContain(
+        "Media generation progress: 3/3",
+      );
+      const systemText = firstRequestBody.messages?.find((message: any) => message.role === "system")?.content;
+      expect(systemText.length).toBeLessThan(5_000);
+      expect(systemText).toContain("<active_tools>generate_image, web_search, web_extract</active_tools>");
+      expect(systemText).toContain("<prompt_mode>optimize</prompt_mode>");
+      expect(systemText).toContain("<research_mode>required</research_mode>");
+      expect(systemText).toContain("Chinese ecommerce listing design");
+      expect(firstRequestBody.tools.map((item: any) => item.function.name)).toEqual([
+        "generate_image",
+        "web_search",
+        "web_extract",
+      ]);
+    } finally {
+      tool.execute = originalExecute;
+      researchTool.execute = originalResearchExecute;
     }
   });
 
@@ -401,9 +708,14 @@ describe("AgentService event lifecycle", () => {
       status: "generating",
     };
     const events: any[] = [];
+    const sink = {
+      emit: (event: any) => events.push(event),
+      canvas: (op: any) => events.push({ type: "canvas_op", op }),
+    };
     const ctx = {
       canvasState: [],
       newRefId: (prefix: string) => `${prefix}-1`,
+      sink,
     } as any;
     const pending: any[] = [];
     const outputs = new Map<string, Record<string, any>>();
@@ -419,13 +731,23 @@ describe("AgentService event lifecycle", () => {
       pending,
       outputs,
       ctx,
-      { emit: (event: any) => events.push(event) },
+      sink,
     );
 
     expect(output).toMatchObject({
       status: "success",
       url: "https://example.com/final.png",
     });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "canvas_op",
+        op: expect.objectContaining({
+          op: "media_ready",
+          refId: "image-live",
+          url: "https://example.com/final.png",
+        }),
+      }),
+    );
     expect(events).toContainEqual({
       type: "tool_result",
       id: "call-live",

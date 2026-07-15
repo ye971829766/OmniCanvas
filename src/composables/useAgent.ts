@@ -26,6 +26,8 @@ import { serializeCanvasForAgent } from "@/utils/agentCanvasContext";
 import { createFitImage } from "@/utils/leaferImage";
 import {
   deriveTerminalMediaNodeState,
+  mediaReadyNodeState,
+  resolveMediaDisplayUrl,
 } from "@/utils/agentMediaState";
 import { resolveAgentCanvasParent } from "@/utils/agentCanvasParent";
 import type { CanvasImageGenerationType } from "@/utils/imageTask";
@@ -145,6 +147,15 @@ type CanvasOp =
       kind: "image" | "video";
       taskId: string;
       generationType?: CanvasImageGenerationType;
+    }
+  | {
+      op: "media_ready";
+      refId: string;
+      kind: "image" | "video";
+      url: string;
+      thumbnailUrl?: string;
+      taskId?: string;
+      error?: string;
     }
   | { op: "focus_node"; refId: string }
   | { op: "export_node"; refId: string; requestId: string };
@@ -474,17 +485,22 @@ export function useAgent(
         refId,
         type: "image",
         status: "done",
-        url: node.url,
+        url: resolveMediaDisplayUrl(node.url) || node.url,
       };
     } else if (tag === "VideoNode") {
       nodeStates.value[refId] = {
         refId,
         type: "video",
         status: "done",
-        url: node.videoUrl,
-        thumbnailUrl: node.thumbnailUrl,
+        url: resolveMediaDisplayUrl(node.videoUrl) || node.videoUrl,
+        thumbnailUrl:
+          resolveMediaDisplayUrl(node.thumbnailUrl) || node.thumbnailUrl,
       };
     } else if (tag === "ImageGen") {
+      // Never clobber a finished chat preview if the placeholder is still in map.
+      if (nodeStates.value[refId]?.status === "done" && nodeStates.value[refId]?.url) {
+        return;
+      }
       nodeStates.value[refId] = {
         refId,
         type: "image",
@@ -492,6 +508,9 @@ export function useAgent(
         error: node.errorMessage,
       };
     } else if (tag === "VideoGen") {
+      if (nodeStates.value[refId]?.status === "done" && nodeStates.value[refId]?.url) {
+        return;
+      }
       nodeStates.value[refId] = {
         refId,
         type: "video",
@@ -500,6 +519,146 @@ export function useAgent(
       };
     }
   };
+
+  /** Patch live tool chips so history-less gallery reads the finished URL. */
+  const patchToolOutputsWithMedia = (
+    refId: string,
+    patch: { url?: string; thumbnailUrl?: string; status?: string; error?: string },
+  ) => {
+    for (const message of messages.value) {
+      if (message.role !== "assistant") continue;
+      for (const tool of message.tools || []) {
+        const out = tool.output as any;
+        if (!out || typeof out !== "object") continue;
+        const value =
+          (out.type === "json" || out.type === "text") && "value" in out
+            ? out.value
+            : out;
+        if (value?.refId !== refId) continue;
+        if (patch.url) value.url = patch.url;
+        if (patch.thumbnailUrl) value.thumbnailUrl = patch.thumbnailUrl;
+        if (patch.status) value.status = patch.status;
+        if (patch.error) value.error = patch.error;
+        // Force a new object so Vue recomputes GeneratedMediaGallery.
+        tool.output = { ...value };
+        tool.done = true;
+      }
+      for (const block of message.blocks || []) {
+        if (block.type !== "tools") continue;
+        for (const tool of block.tools) {
+          const out = tool.output as any;
+          if (!out || typeof out !== "object") continue;
+          if (out.refId !== refId) continue;
+          if (patch.url) out.url = patch.url;
+          if (patch.thumbnailUrl) out.thumbnailUrl = patch.thumbnailUrl;
+          if (patch.status) out.status = patch.status;
+          if (patch.error) out.error = patch.error;
+          tool.output = { ...out };
+          tool.done = true;
+        }
+      }
+    }
+  };
+
+  const applyMediaReadyToCanvas = (
+    refId: string,
+    kind: "image" | "video",
+    url: string,
+    thumbnailUrl?: string,
+  ) => {
+    const app = canvasApp.value;
+    if (!app?.tree || !url) return;
+    const existing = nodeMap.get(refId);
+    const tag = existing?.tag || existing?.__tag;
+    // Already a finished Image / VideoNode — just refresh URL.
+    if (tag === "Image" && kind === "image") {
+      existing.set?.({ url });
+      trackNode(existing);
+      return;
+    }
+    if ((tag === "VideoNode" || tag === "Video") && kind === "video") {
+      existing.set?.({ videoUrl: url, thumbnailUrl });
+      trackNode(existing);
+      return;
+    }
+    // Replace ImageGen / VideoGen placeholder with the finished media node.
+    if (tag === "ImageGen" || tag === "VideoGen" || !existing) {
+      const parent = existing?.parent || app.tree;
+      const index = existing?.parent
+        ? existing.parent.children.indexOf(existing)
+        : parent.children.length;
+      const x = Number(existing?.x) || 0;
+      const y = Number(existing?.y) || 0;
+      const width = Number(existing?.width) || (kind === "video" ? 480 : 1024);
+      const height = Number(existing?.height) || (kind === "video" ? 270 : 1024);
+      const preserveLayout = existing?.preserveGeneratedLayout === true;
+      if (kind === "image") {
+        const imageNode = createFitImage({
+          x,
+          y,
+          width: preserveLayout ? width : width,
+          height: preserveLayout ? height : height,
+          url,
+          editable: true,
+        });
+        imageNode.refId = refId;
+        if (existing) {
+          parent.addAt(imageNode, Math.max(0, index));
+          existing.remove?.();
+        } else {
+          parent.add(imageNode);
+        }
+        trackNode(imageNode);
+      }
+      // Video replacement stays on the poll path for now (needs VideoNode class).
+    }
+  };
+
+  const applyMediaReady = (
+    refId: string,
+    kind: "image" | "video",
+    url: string,
+    thumbnailUrl?: string,
+    taskId?: string,
+    error?: string,
+  ) => {
+    if (taskId) settledGenerationTaskIds.add(taskId);
+    if (error && !url) {
+      nodeStates.value[refId] = {
+        refId,
+        type: kind,
+        status: "error",
+        error,
+      };
+      patchToolOutputsWithMedia(refId, { status: "error", error });
+      return;
+    }
+    if (!url) return;
+    const state = mediaReadyNodeState(refId, kind, url, thumbnailUrl);
+    nodeStates.value[refId] = state;
+    patchToolOutputsWithMedia(refId, {
+      url: state.url,
+      thumbnailUrl: state.thumbnailUrl,
+      status: "success",
+    });
+    applyMediaReadyToCanvas(refId, kind, state.url!, state.thumbnailUrl);
+  };
+
+  const onCanvasMediaReady = (event: Event) => {
+    const detail = (event as CustomEvent).detail || {};
+    if (typeof detail.refId !== "string" || !detail.refId) return;
+    applyMediaReady(
+      detail.refId,
+      detail.kind === "video" ? "video" : "image",
+      String(detail.url || ""),
+      typeof detail.thumbnailUrl === "string" ? detail.thumbnailUrl : undefined,
+      typeof detail.taskId === "string" ? detail.taskId : undefined,
+      typeof detail.error === "string" ? detail.error : undefined,
+    );
+  };
+  if (typeof window !== "undefined") {
+    window.addEventListener("omnicanvas:media-ready", onCanvasMediaReady);
+  }
 
   const scanTreeAndPopulateNodeMap = (node: any) => {
     trackNode(node);
@@ -588,7 +747,12 @@ export function useAgent(
     { immediate: true },
   );
 
-  onBeforeUnmount(detachCanvasListeners);
+  onBeforeUnmount(() => {
+    detachCanvasListeners();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("omnicanvas:media-ready", onCanvasMediaReady);
+    }
+  });
 
   const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -909,7 +1073,14 @@ export function useAgent(
         // The agent backend already kicked off generation and owns the taskId.
         // Attach it to the placeholder node and fire `task-start` so useCanvas
         // picks up its EXISTING polling pipeline (poll -> swap to Image/VideoNode).
-        if (settledGenerationTaskIds.has(op.taskId)) break;
+        if (settledGenerationTaskIds.has(op.taskId)) {
+          // Backend settled first — keep chat/canvas in sync from any known URL.
+          const existing = nodeStates.value[op.refId];
+          if (existing?.status === "done" && existing.url) {
+            applyMediaReadyToCanvas(op.refId, op.kind, existing.url, existing.thumbnailUrl);
+          }
+          break;
+        }
         const node = nodeMap.get(op.refId);
         if (node) {
           node.set({
@@ -919,9 +1090,7 @@ export function useAgent(
           });
           node.emit("task-start", { bubbles: true });
         }
-        if (nodeStates.value[op.refId]) {
-          nodeStates.value[op.refId].status = "generating";
-        } else {
+        if (nodeStates.value[op.refId]?.status !== "done") {
           nodeStates.value[op.refId] = {
             refId: op.refId,
             type: op.kind,
@@ -930,6 +1099,18 @@ export function useAgent(
         }
         // Persist taskId before the user can refresh and lose in-flight work.
         recordHistory?.(true);
+        break;
+      }
+
+      case "media_ready": {
+        applyMediaReady(
+          op.refId,
+          op.kind,
+          op.url,
+          op.thumbnailUrl,
+          op.taskId,
+          op.error,
+        );
         break;
       }
 
@@ -1152,9 +1333,31 @@ export function useAgent(
         }
         const rawOutput = unwrapToolOutput(ev.output);
         const refId = typeof rawOutput?.refId === "string" ? rawOutput.refId : "";
+        // Normalize file URLs on the tool payload so gallery <img> tags resolve.
+        if (rawOutput && typeof rawOutput === "object") {
+          if (typeof rawOutput.url === "string") {
+            rawOutput.url = resolveMediaDisplayUrl(rawOutput.url) || rawOutput.url;
+          }
+          if (typeof rawOutput.imageUrl === "string") {
+            rawOutput.imageUrl =
+              resolveMediaDisplayUrl(rawOutput.imageUrl) || rawOutput.imageUrl;
+          }
+          if (typeof rawOutput.thumbnailUrl === "string") {
+            rawOutput.thumbnailUrl =
+              resolveMediaDisplayUrl(rawOutput.thumbnailUrl) ||
+              rawOutput.thumbnailUrl;
+          }
+          if (chip) chip.output = { ...rawOutput };
+          for (const blk of blocks) {
+            if (blk.type === "tools") {
+              const item = blk.tools.find((t) => t.id === ev.id);
+              if (item) item.output = { ...rawOutput };
+            }
+          }
+        }
         const terminalState = deriveTerminalMediaNodeState(
           ev.tool,
-          ev.output,
+          rawOutput,
           refId ? nodeStates.value[refId] : undefined,
         );
         if (terminalState) {
@@ -1162,6 +1365,14 @@ export function useAgent(
             settledGenerationTaskIds.add(rawOutput.taskId);
           }
           nodeStates.value[terminalState.refId] = terminalState;
+          if (terminalState.status === "done" && terminalState.url) {
+            applyMediaReadyToCanvas(
+              terminalState.refId,
+              terminalState.type === "video" ? "video" : "image",
+              terminalState.url,
+              terminalState.thumbnailUrl,
+            );
+          }
         }
         break;
       }

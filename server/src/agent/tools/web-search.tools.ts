@@ -10,6 +10,7 @@ interface TavilySearchResult {
   url: string;
   content: string;
   score: number;
+  images?: string[];
 }
 
 interface TavilyResponse {
@@ -17,6 +18,40 @@ interface TavilyResponse {
   answer?: string;
   results: TavilySearchResult[];
   response_time: string;
+  images?: Array<string | { url: string; description?: string }>;
+}
+
+const VISUAL_DESIGN_EXCLUDED_DOMAINS = [
+  'taobao.com',
+  'tmall.com',
+  'jd.com',
+  '1688.com',
+  'alicdn.com',
+  'aliexpress.com',
+  'amazon.com',
+  'ebay.com',
+  'walmart.com',
+  'temu.com',
+  'shopee.com',
+  'lazada.com',
+  'tiktok.com',
+  'youtube.com',
+];
+
+const UNSTABLE_RESEARCH_IMAGE_HOSTS = new Set([
+  'tiktok.com',
+  'www.tiktok.com',
+  'youtube.com',
+  'www.youtube.com',
+]);
+
+function isStableResearchImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return !UNSTABLE_RESEARCH_IMAGE_HOSTS.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 async function tavilySearch(
@@ -29,6 +64,7 @@ async function tavilySearch(
     timeRange?: 'day' | 'week' | 'month' | 'year';
     includeDomains?: string[];
     excludeDomains?: string[];
+    includeImages?: boolean;
   },
 ): Promise<TavilyResponse> {
   const apiKey = process.env.TAVILY_API_KEY;
@@ -51,6 +87,10 @@ async function tavilySearch(
     body.include_domains = options.includeDomains;
   if (options?.excludeDomains?.length)
     body.exclude_domains = options.excludeDomains;
+  if (options?.includeImages) {
+    body.include_images = true;
+    body.include_image_descriptions = true;
+  }
 
   const res = await fetch('https://api.tavily.com/search', {
     method: 'POST',
@@ -105,6 +145,17 @@ export const webSearchTool: AgentTool = {
         description:
           'Filter results by time: "day", "week", "month", or "year". Optional.',
       },
+      include_images: {
+        type: 'boolean',
+        description:
+          'Return image-search references with descriptions. Use true for visual design, trend, competitor, product-photography, or mood research; otherwise omit it.',
+      },
+      search_scope: {
+        type: 'string',
+        enum: ['visual_design'],
+        description:
+          'Use "visual_design" for campaign, editorial, agency, award, photography, or design-trend research. It excludes marketplace storefront domains so a single listing product photo cannot dominate art direction. Omit search_scope when researching Chinese ecommerce 主图/详情页 module structure and layout patterns from design articles (still never put web images in refImages as product identity).',
+      },
     },
     required: ['query'],
   },
@@ -115,6 +166,7 @@ export const webSearchTool: AgentTool = {
     }
 
     try {
+      const visualDesignScope = input.search_scope === 'visual_design';
       const response = await tavilySearch(query, {
         maxResults: Math.min(Math.max(input.max_results ?? 5, 1), 10),
         searchDepth: input.search_depth === 'advanced' ? 'advanced' : 'basic',
@@ -122,6 +174,10 @@ export const webSearchTool: AgentTool = {
         topic: input.topic === 'news' ? 'news' : 'general',
         timeRange: ['day', 'week', 'month', 'year'].includes(input.time_range)
           ? input.time_range
+          : undefined,
+        includeImages: input.include_images === true,
+        excludeDomains: visualDesignScope
+          ? VISUAL_DESIGN_EXCLUDED_DOMAINS
           : undefined,
       });
 
@@ -131,13 +187,33 @@ export const webSearchTool: AgentTool = {
         snippet: r.content?.slice(0, 500),
         relevanceScore: r.score,
       }));
+      const images = (response.images ?? [])
+        .map((image) => typeof image === 'string'
+          ? { url: image, description: '' }
+          : {
+              url: image?.url,
+              description: image?.description?.slice(0, 500) ?? '',
+            })
+        .filter((image) =>
+          typeof image.url === 'string' &&
+          image.url.startsWith('http') &&
+          (!visualDesignScope || isStableResearchImageUrl(image.url))
+        )
+        // In visual-design research the agent normally issues two searches.
+        // Cap each source at three references so the first result set cannot
+        // fill the entire multimodal context and force one copied direction.
+        .slice(0, visualDesignScope ? 3 : 8);
 
       return {
         output: {
           answer: response.answer ?? null,
           results,
           totalResults: results.length,
+          ...(images.length > 0 ? { images } : {}),
           responseTime: response.response_time,
+          ...(visualDesignScope
+            ? { scope: 'visual_design', excludedStorefrontDomains: true }
+            : {}),
           note: `Found ${results.length} results for "${query}".`,
         },
       };
