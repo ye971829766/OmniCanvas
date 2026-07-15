@@ -36,6 +36,10 @@ const USER_SAFE_PREFIXES = [
   "生成",
   "余额",
   "上传",
+  "服务",
+  "模型",
+  "渠道",
+  "任务",
 ];
 
 const TECH_MARKERS = [
@@ -64,6 +68,13 @@ const TECH_MARKERS = [
   /encrypt/i,
   /ECONNRESET/i,
   /status code/i,
+  /\[Channel\s+/i,
+  /providerErrors?/i,
+  /upstream/i,
+  /base_?url/i,
+  /api[_ -]?key/i,
+  /traceback/i,
+  /exception/i,
 ];
 
 function extractRawMessage(err: unknown): string {
@@ -78,6 +89,10 @@ function extractRawMessage(err: unknown): string {
     if (typeof data.error === "string") return data.error;
     if (typeof data.error === "object" && data.error?.message) {
       return String(data.error.message);
+    }
+    // Prefer a single public error; never surface providerErrors arrays as-is.
+    if (Array.isArray(data.providerErrors) && data.providerErrors.length > 0) {
+      return String(data.providerErrors[0]);
     }
   }
   if (typeof anyErr?.message === "string") return anyErr.message;
@@ -95,12 +110,71 @@ function isUserSafeMessage(msg: string): boolean {
   return USER_SAFE_PREFIXES.some((p) => t.startsWith(p) || t.includes(p));
 }
 
+/**
+ * Map generation / channel / upstream failures to short product copy.
+ * Never show channel names, provider dumps, or English infra jargon in the UI.
+ */
+export function userFacingGenerationError(
+  err: unknown,
+  fallback = "生成失败，请稍后重试",
+): string {
+  const raw = extractRawMessage(err).trim();
+  if (!raw) return fallback;
+
+  if (
+    /excessive system load|system load|overloaded|capacity|too many requests|rate.?limit|429|繁忙|拥挤|负载过高|超负荷/i.test(
+      raw,
+    )
+  ) {
+    return "服务繁忙，请稍后重试";
+  }
+  if (/timeout|timed?\s*out|deadline|超时/i.test(raw)) {
+    return "生成超时，请稍后重试";
+  }
+  if (
+    /content.?policy|safety|nsfw|moderation|违规|敏感|审核/i.test(raw)
+  ) {
+    return "内容未通过安全审核，请修改描述后重试";
+  }
+  if (
+    /insufficient|quota|balance|积分不足|余额不足|402/i.test(raw)
+  ) {
+    return "积分不足，请充值后继续";
+  }
+  if (
+    /unauthorized|forbidden|invalid.?api.?key|401|403|未配置.*渠道|没有可用/i.test(
+      raw,
+    )
+  ) {
+    return "服务暂时不可用，请稍后重试或联系管理员";
+  }
+  if (
+    /\[Channel\s+|providerErrors?|upstream|ECONN|ENOTFOUND|socket|TLS|certificate|HTTP\s*\d{3}/i.test(
+      raw,
+    )
+  ) {
+    return fallback;
+  }
+
+  if (isUserSafeMessage(raw)) return raw;
+  return fallback;
+}
+
 export function userFacingError(
   err: unknown,
   fallback = "操作失败，请稍后重试",
 ): string {
   const status = Number((err as any)?.response?.status || 0);
   const raw = extractRawMessage(err).trim();
+
+  // Generation / channel style payloads (even without HTTP status)
+  if (
+    /\[Channel\s+/i.test(raw) ||
+    /providerErrors?/i.test(raw) ||
+    /excessive system load/i.test(raw)
+  ) {
+    return userFacingGenerationError(err, "生成失败，请稍后重试");
+  }
 
   if (status === 429) return "操作过于频繁，请稍后再试";
   if (status === 401) {
@@ -119,7 +193,9 @@ export function userFacingError(
     return "操作冲突，请刷新后重试";
   }
   if (status === 413) return "上传内容过大，请压缩后重试";
-  if (status >= 500) return "服务暂时不可用，请稍后再试";
+  if (status >= 500 || status === 502 || status === 503 || status === 504) {
+    return userFacingGenerationError(err, "服务暂时不可用，请稍后再试");
+  }
 
   if (raw && isUserSafeMessage(raw)) return raw;
 

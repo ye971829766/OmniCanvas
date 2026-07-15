@@ -511,6 +511,23 @@ ${videoModelInfo || "- None"}
       currentUserMessage,
     ];
 
+    // Persist early and often so a mid-run refresh still restores chat history.
+    const persistHistory = () => {
+      try {
+        this.persistTurnHistory(
+          sessionId,
+          messages,
+          currentUserMessage,
+          currentAssets,
+        );
+      } catch (err: any) {
+        this.logger.warn(
+          `[session=${sessionId}] failed to checkpoint history: ${err?.message || err}`,
+        );
+      }
+    };
+    persistHistory();
+
     try {
       const loggedMessages = messages.map((m) => {
         if (typeof m.content === "string") return m;
@@ -564,6 +581,7 @@ ${videoModelInfo || "- None"}
     const invalidToolCallGuard = new InvalidToolCallGuard();
     let selectedImageWasInspected = false;
 
+    try {
     for (let step = 0; step < this.MAX_STEPS; step++) {
       if (abortSignal?.aborted) {
         throw new DOMException("Agent run aborted", "AbortError");
@@ -964,8 +982,41 @@ ${videoModelInfo || "- None"}
           text: `已达到安全步数上限（${this.MAX_STEPS} 步），为防止死循环，任务已自动停止。`,
         });
       }
-    }
 
+      // Checkpoint after each step so partial tool/image progress survives refresh.
+      persistHistory();
+    }
+    } catch (error: any) {
+      if (error?.name === "AbortError" || abortSignal?.aborted) {
+        // Keep whatever was already done; surface a short final note for history.
+        const hasFinal = messages.some(
+          (m) =>
+            m.role === "assistant" &&
+            typeof (m as any).content === "string" &&
+            String((m as any).content).includes("已停止"),
+        );
+        if (!hasFinal) {
+          messages.push({
+            role: "assistant",
+            content: "任务已中断（页面刷新或手动停止）。已生成的内容仍保留在画布上。",
+          } as any);
+        }
+      }
+      throw error;
+    } finally {
+      persistHistory();
+    }
+  }
+
+  /**
+   * Persist the current turn (without system messages) so reloads can restore chat.
+   */
+  private persistTurnHistory(
+    sessionId: string,
+    messages: ModelMessage[],
+    currentUserMessage: ModelMessage,
+    currentAssets: AgentAsset[],
+  ): void {
     const historyToSave = messages
       .filter((m) => m.role !== "system")
       .map((message) => {

@@ -77,23 +77,15 @@ function downloadMedia(e: MouseEvent) {
       : state.url || state.thumbnailUrl;
   if (!url) return;
 
-  const isVid = state.type === "video" || looksLikeVideoUrl(url);
-  let ext = isVid ? "mp4" : "png";
+  // Open media in a new tab so the user can save/share without navigating away
+  // from the chat. Absolute-ize relative /files/... URLs against the app origin.
+  let href = url;
   try {
-    const path = new URL(url, window.location.origin).pathname;
-    const match = path.match(/\.([a-z0-9]{2,5})$/i);
-    if (match) ext = match[1].toLowerCase();
+    href = new URL(url, window.location.origin).href;
   } catch {
-    /* keep default */
+    /* keep raw url */
   }
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${displayTitle.value || "media"}_${Date.now()}.${ext}`;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  window.open(href, "_blank", "noopener,noreferrer");
 }
 
 async function onPlayClick(e: MouseEvent) {
@@ -165,7 +157,8 @@ function onVideoEnded() {
       <button
         class="action-download-btn"
         type="button"
-        aria-label="下载图片"
+        aria-label="在新标签页打开图片"
+        title="在新标签页打开"
         @click.stop="downloadMedia"
       >
         <Download :size="15" />
@@ -222,7 +215,8 @@ function onVideoEnded() {
       <button
         class="action-download-btn"
         type="button"
-        aria-label="下载视频"
+        aria-label="在新标签页打开视频"
+        title="在新标签页打开"
         @click.stop="downloadMedia"
       >
         <Download :size="15" />

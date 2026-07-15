@@ -416,7 +416,8 @@ const handleGenerate = async () => {
     }
   } catch (err: any) {
     console.error("[ImageGenTool] failed:", err);
-    const errMsg = err.message || "生成失败，请重试";
+    const { userFacingGenerationError } = await import("@/utils/userFacingError");
+    const errMsg = userFacingGenerationError(err, "生成失败，请稍后重试");
     errorMessage.value = errMsg;
     targetAny.set({
       generationStatus: "error",

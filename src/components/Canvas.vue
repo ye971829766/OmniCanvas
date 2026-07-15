@@ -439,7 +439,9 @@ const {
   selectTarget,
   toolbarStyle,
   toolbarVersion,
+  recordHistory,
   recordHistoryDebounced,
+  saveCanvasState,
   beginHistoryTransaction,
   commitHistoryTransaction,
   rollbackHistoryTransaction,
@@ -1496,7 +1498,9 @@ function triggerAgentRipple(worldX: number, worldY: number): void {
 
 defineExpose({
   canvasApp,
+  recordHistory,
   recordHistoryDebounced,
+  saveCanvasState,
   beginHistoryTransaction,
   commitHistoryTransaction,
   rollbackHistoryTransaction,

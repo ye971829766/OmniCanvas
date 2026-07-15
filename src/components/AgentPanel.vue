@@ -21,7 +21,7 @@ const confirm = useConfirm();
 
 const props = defineProps<{
   canvasApp: Ref<any> | any;
-  recordHistory?: () => void;
+  recordHistory?: (immediate?: boolean) => void;
   beginHistoryTransaction?: () => void;
   commitHistoryTransaction?: () => boolean;
   rollbackHistoryTransaction?: () => boolean;

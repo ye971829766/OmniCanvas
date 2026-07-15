@@ -23,6 +23,7 @@ import {
   baiduUpscaleImage,
   isBaiduUpscaleConfigured,
 } from "./baidu-image.client";
+import { userFacingGenerationError } from "../utils/user-facing-error";
 
 @Injectable()
 export class FilesService implements OnModuleInit {
@@ -846,7 +847,10 @@ export class FilesService implements OnModuleInit {
         err,
       );
       this.setTaskStatus(taskId, "error", {
-        error: err.message || "背景消除失败，请重试",
+        error: userFacingGenerationError(
+          err?.message || err,
+          "背景消除失败，请稍后重试",
+        ),
       });
     }
   }
@@ -901,7 +905,10 @@ export class FilesService implements OnModuleInit {
     } catch (err: any) {
       console.error(`[runUpscaleTaskInBackground] Task ${taskId} failed:`, err);
       this.setTaskStatus(taskId, "error", {
-        error: err.message || "超分放大失败，请重试",
+        error: userFacingGenerationError(
+          err?.message || err,
+          "超分放大失败，请稍后重试",
+        ),
       });
     }
   }
@@ -1133,7 +1140,10 @@ export class FilesService implements OnModuleInit {
         err,
       );
       this.setTaskStatus(taskId, "error", {
-        error: err.message || "图像修复失败，请重试",
+        error: userFacingGenerationError(
+          err?.message || err,
+          "图像修复失败，请稍后重试",
+        ),
       });
     }
   }

@@ -27,6 +27,7 @@ import OpenAI from "openai";
 import { TokensService } from "../tokens/tokens.service";
 import { BillingService } from "../billing/billing.service";
 import type { BillingTaskContext } from "../billing/billing.types";
+import { userFacingGenerationError } from "../utils/user-facing-error";
 
 @Injectable()
 export class AiService implements OnModuleInit {
@@ -1415,7 +1416,9 @@ export class AiService implements OnModuleInit {
       `[${taskType}GenerationTask] Task ${taskId} rejected before reaching its internal error handler:`,
       error,
     );
-    this.setTaskStatus(taskId, "error", { error: message });
+    this.setTaskStatus(taskId, "error", {
+      error: userFacingGenerationError(message, "生成失败，请稍后重试"),
+    });
   }
 
   async runGenerationTaskInBackground(
@@ -1847,7 +1850,7 @@ export class AiService implements OnModuleInit {
         `[runGenerationTaskInBackground] Task ${taskId} failed:`,
         err,
       );
-      let errMsg = err.message || "生成失败，请重试";
+      let technical = err?.message || "生成失败，请重试";
       if (err instanceof HttpException) {
         const resp: any = err.getResponse();
         if (resp && typeof resp === "object") {
@@ -1855,14 +1858,19 @@ export class AiService implements OnModuleInit {
             Array.isArray(resp.providerErrors) &&
             resp.providerErrors.length > 0
           ) {
-            errMsg = resp.providerErrors.join("; ");
+            // Keep channel dumps in logs only — never surface to the client.
+            console.warn(
+              `[runGenerationTaskInBackground] providerErrors:`,
+              resp.providerErrors,
+            );
+            technical = resp.providerErrors.join("; ");
           } else if (resp.error) {
-            errMsg = resp.error;
+            technical = String(resp.error);
           }
         }
       }
       this.setTaskStatus(taskId, "error", {
-        error: errMsg,
+        error: userFacingGenerationError(technical, "生成失败，请稍后重试"),
         model,
       });
     }
@@ -2116,12 +2124,24 @@ export class AiService implements OnModuleInit {
       await this.pollVideoProviderTask(taskId, pollState);
     } catch (err: any) {
       console.error(`[runVideoGenerationTaskInBackground] Task ${taskId} failed:`, err);
-      let errMsg = err?.message || "视频生成失败，请重试";
+      let technical = err?.message || "视频生成失败，请重试";
       if (err instanceof HttpException) {
         const response: any = err.getResponse();
-        if (response && typeof response === "object" && response.error) errMsg = response.error;
+        if (response && typeof response === "object") {
+          if (Array.isArray(response.providerErrors) && response.providerErrors.length) {
+            console.warn(
+              `[runVideoGenerationTaskInBackground] providerErrors:`,
+              response.providerErrors,
+            );
+            technical = response.providerErrors.join("; ");
+          } else if (response.error) {
+            technical = String(response.error);
+          }
+        }
       }
-      this.setTaskStatus(taskId, "error", { error: errMsg });
+      this.setTaskStatus(taskId, "error", {
+        error: userFacingGenerationError(technical, "视频生成失败，请稍后重试"),
+      });
     }
   }
 

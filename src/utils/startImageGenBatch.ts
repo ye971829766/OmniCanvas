@@ -1,5 +1,6 @@
 import { ImageGen } from "@/components/canvas/nodes/ImageGen";
 import { generateImage } from "@/utils/api";
+import { userFacingGenerationError } from "@/utils/userFacingError";
 
 export type ImageGenBatchParams = {
   prompt: string;
@@ -130,11 +131,8 @@ export async function startImageGenBatch(options: {
   const errors = settled.map((result) => {
     if (result.status === "fulfilled") return "";
     const reason = result.reason as any;
-    return (
-      reason?.response?.data?.message ||
-      reason?.message ||
-      "生成失败，请重试"
-    );
+    console.error("[startImageGenBatch] task start failed:", reason);
+    return userFacingGenerationError(reason, "生成失败，请稍后重试");
   });
 
   settled.forEach((result, index) => {

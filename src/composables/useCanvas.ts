@@ -1013,10 +1013,16 @@ export function useCanvas(
           } else if (res.status === "error") {
             clearInterval(pollInterval);
             delete node._pollingInterval;
-            const errMsg = res.error || "生成失败，请重试";
+            const { userFacingGenerationError } = await import(
+              "@/utils/userFacingError"
+            );
+            if (res.error) console.error(`[task ${taskId}] generation error:`, res.error);
             node.set({
               generationStatus: "error",
-              errorMessage: errMsg,
+              errorMessage: userFacingGenerationError(
+                res.error,
+                "生成失败，请稍后重试",
+              ),
             });
             // Error is a generation status change, not an element-level change — skip history
           }
@@ -1281,12 +1287,21 @@ export function useCanvas(
             delete rawNode.upscaleScale;
             delete rawNode._pollingTaskId;
 
+            const { userFacingGenerationError } = await import(
+              "@/utils/userFacingError"
+            );
+            if (res.error) {
+              console.error(`[image task ${taskId}] error:`, res.error);
+            }
             window.dispatchEvent(
               new CustomEvent("canvas:toast", {
                 detail: {
                   severity: "error",
                   summary: "处理失败",
-                  detail: res.error || "任务处理失败，请重试",
+                  detail: userFacingGenerationError(
+                    res.error,
+                    "任务处理失败，请重试",
+                  ),
                 },
               }),
             );
@@ -1390,10 +1405,16 @@ export function useCanvas(
           } else if (res.status === "error") {
             clearInterval(pollInterval);
             delete node._pollingInterval;
-            const errMsg = res.error || "生成失败，请重试";
+            const { userFacingGenerationError } = await import(
+              "@/utils/userFacingError"
+            );
+            if (res.error) console.error(`[video task ${taskId}] error:`, res.error);
             node.set({
               generationStatus: "error",
-              errorMessage: errMsg,
+              errorMessage: userFacingGenerationError(
+                res.error,
+                "生成失败，请稍后重试",
+              ),
             });
             // Error is a generation status change, not an element-level change — skip history
           }
@@ -1402,10 +1423,13 @@ export function useCanvas(
           if (err.terminalVideoDisplayError || err.response?.status === 404) {
             clearInterval(pollInterval);
             delete node._pollingInterval;
+            const { userFacingGenerationError } = await import(
+              "@/utils/userFacingError"
+            );
             node.set({
               generationStatus: "error",
               errorMessage: err.terminalVideoDisplayError
-                ? err.message
+                ? userFacingGenerationError(err.message, "视频生成失败，请稍后重试")
                 : "任务不存在或任务已过期，请重新生成",
             });
             // Error is a generation status change, not an element-level change — skip history
@@ -1720,7 +1744,9 @@ export function useCanvas(
     selectTarget,
     toolbarStyle,
     toolbarVersion,
+    recordHistory,
     recordHistoryDebounced,
+    saveCanvasState,
     beginHistoryTransaction,
     commitHistoryTransaction,
     rollbackHistoryTransaction,

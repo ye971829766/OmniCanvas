@@ -49,13 +49,29 @@ const handleOpenAgentPanel = () => {
   agentPanelCollapsed.value = false;
 };
 
+const flushCanvasBeforeLeave = () => {
+  // Best-effort: fire an immediate workspace save so in-flight ImageGen taskIds
+  // are less likely to be lost on refresh/close.
+  try {
+    void canvasRef.value?.saveCanvasState?.();
+  } catch {
+    /* ignore */
+  }
+};
+
 onMounted(async () => {
   await validateAndSetWorkspace();
   window.addEventListener("agent:open-panel", handleOpenAgentPanel);
+  window.addEventListener("beforeunload", flushCanvasBeforeLeave);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushCanvasBeforeLeave();
+  });
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("agent:open-panel", handleOpenAgentPanel);
+  window.removeEventListener("beforeunload", flushCanvasBeforeLeave);
+  flushCanvasBeforeLeave();
 });
 
 watch(isLoggedIn, (loggedIn) => {
@@ -150,7 +166,12 @@ watch(activeWorkspaceId, (newId) => {
         v-model:collapsed="agentPanelCollapsed"
         :workspace-id="activeWorkspaceId"
         :canvas-app="canvasRef.canvasApp"
-        :record-history="canvasRef.recordHistoryDebounced"
+        :record-history="
+          (immediate?: boolean) =>
+            immediate
+              ? canvasRef.recordHistory?.(true)
+              : canvasRef.recordHistoryDebounced?.()
+        "
         :begin-history-transaction="canvasRef.beginHistoryTransaction"
         :commit-history-transaction="canvasRef.commitHistoryTransaction"
         :rollback-history-transaction="canvasRef.rollbackHistoryTransaction"

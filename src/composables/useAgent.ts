@@ -411,7 +411,8 @@ export function buildChatMessagesFromHistory(
 
 export function useAgent(
   canvasApp: Ref<any>,
-  recordHistory?: () => void,
+  /** Pass true to flush workspace canvas state immediately (generation tasks). */
+  recordHistory?: (immediate?: boolean) => void,
   activeWorkspaceIdRef?: Ref<string | number | null>,
   /** Called after each agent-placed node so the background can show a ripple */
   onAgentPlace?: (worldX: number, worldY: number) => void,
@@ -893,7 +894,13 @@ export function useAgent(
             lastAgentRippleAt = now;
           }
 
-          recordHistory?.();
+          // Image/video generation placeholders must hit disk immediately so a
+          // page refresh can restore taskId and resume polling.
+          const needsImmediateSave =
+            n.type === "image_gen" ||
+            n.type === "video_gen" ||
+            (n.type === "image" && Boolean((n as any).url));
+          recordHistory?.(needsImmediateSave);
         }
         break;
       }
@@ -921,6 +928,8 @@ export function useAgent(
             status: "generating",
           };
         }
+        // Persist taskId before the user can refresh and lose in-flight work.
+        recordHistory?.(true);
         break;
       }
 
