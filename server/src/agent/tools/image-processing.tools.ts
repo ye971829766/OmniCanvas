@@ -17,6 +17,7 @@ function createProcessingTarget(
   options?: { scale?: number },
 ): string {
   const sourceNode = getSourceNode(input.source, ctx);
+  const sourceAsset = ctx.assets?.find((asset) => asset.id === input.source);
   const replaceOriginal = input.replaceOriginal === true && sourceNode?.refId;
   const refId = replaceOriginal ? sourceNode.refId : ctx.newRefId(operation);
 
@@ -29,8 +30,18 @@ function createProcessingTarget(
       operation === 'upscale'
         ? Math.max(1, Number(options?.scale) || Number(input.scale) || 2)
         : 1;
-    const baseW = input.width ?? sourceNode?.width ?? 400;
-    const baseH = input.height ?? sourceNode?.height ?? 400;
+    // Prefer source photo / canvas node dimensions over a hard-coded 400×400 box.
+    // Final size is corrected to natural pixels when generation finishes.
+    const baseW =
+      input.width ??
+      sourceNode?.width ??
+      sourceAsset?.width ??
+      1024;
+    const baseH =
+      input.height ??
+      sourceNode?.height ??
+      sourceAsset?.height ??
+      1024;
     const width = Math.max(1, Math.round(Number(baseW) * scale));
     const height = Math.max(1, Math.round(Number(baseH) * scale));
     const node = {
@@ -38,10 +49,12 @@ function createProcessingTarget(
       type: 'image' as const,
       parentId,
       url: sourceUrl,
-      x: input.x ?? (typeof sourceNode?.x === 'number' ? sourceNode.x + (sourceNode.width || 400) + 24 : undefined),
+      x: input.x ?? (typeof sourceNode?.x === 'number' ? sourceNode.x + (sourceNode.width || width) + 24 : undefined),
       y: input.y ?? sourceNode?.y,
       width,
       height,
+      // Allow frontend poll to replace box with result naturalWidth/Height.
+      preserveLayout: false,
       ...(operation === 'upscale' ? { upscaleScale: scale } : {}),
     };
     ctx.sink.canvas({ op: 'add_node', node: node as any });
@@ -190,9 +203,10 @@ export const inpaintImageTool: AgentTool = {
 export const editImageTool: AgentTool = {
   name: 'edit_image',
   description:
-    'Edit an existing image with a text instruction, optionally constrained by a PNG mask asset/ref. ' +
-    'Use for adding, removing, or replacing pictured subjects (for example, adding a cat beside a dog inside the image), ' +
-    'or for changing a product detail, background, lighting, material, or color while preserving the source identity.',
+    'Edit an existing uploaded photo or canvas image with the image generation model (not canvas shapes/text). ' +
+    'Preferred for promotional shots, cool/new backgrounds, scene changes, retouching, and any "edit this photo" request. ' +
+    'Use for adding, removing, or replacing pictured subjects, or changing product detail, background, lighting, material, or color while preserving identity. ' +
+    'Pass source as the exact assetId or canvas refId. Do not rebuild posters with add_text/add_rect when this tool applies.',
   parameters: {
     type: 'object',
     properties: {

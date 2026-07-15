@@ -13,6 +13,11 @@ export class UpdateModelConfigDto {
   @IsArray()
   videoConfigs?: unknown[];
 
+  /** Reusable model logo assets used by the Models page picker. */
+  @IsOptional()
+  @IsArray()
+  logoLibrary?: unknown[];
+
   @IsOptional()
   @IsObject()
   dictionaries?: {
@@ -28,6 +33,8 @@ export class UpdateModelConfigDto {
     systemPrompt?: string;
     chatModel?: string;
     visionModel?: string;
+    /** Default image generation model (绘画模型). Empty = first enabled image mapping. */
+    imageModel?: string;
     inpaintModel?: string;
   };
 }

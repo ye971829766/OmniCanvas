@@ -81,6 +81,12 @@ export interface ModelConfigState {
     systemPrompt: string;
     chatModel: string;
     visionModel?: string;
+    /**
+     * Default image generation model (绘画模型).
+     * Used when the user / agent does not specify a model.
+     * Empty = first enabled image mapping, then env YUNWU_IMAGE_MODEL.
+     */
+    imageModel?: string;
     /** Image model id for canvas local inpaint / 局部重绘. Empty = first enabled image mapping. */
     inpaintModel?: string;
   };
@@ -182,6 +188,7 @@ export class ModelConfigService implements OnModuleInit {
         systemPrompt: SYSTEM_PROMPT,
         chatModel: "gpt-4o-mini",
         visionModel: "gpt-4o",
+        imageModel: "",
         inpaintModel: "",
       }
     };
@@ -255,19 +262,23 @@ export class ModelConfigService implements OnModuleInit {
       systemPrompt: SYSTEM_PROMPT,
       chatModel: "gpt-4o-mini",
       visionModel: "gpt-4o",
+      imageModel: "",
       inpaintModel: "",
     };
   }
 
   /**
    * Merge partial agentConfig onto a base so callers that only update mappings
-   * (Models page) do not wipe chat/vision/inpaint model choices.
+   * (Models page) do not wipe chat/vision/image/inpaint model choices.
    */
   private mergeAgentConfig(raw: any, base?: AgentConfigState | null): AgentConfigState {
     const fallback = base ?? this.defaultAgentConfig();
     const pickString = (value: unknown, fallbackValue: string) =>
       typeof value === "string" && value.trim() ? value.trim() : fallbackValue;
-    // inpaintModel may intentionally be "" (= auto / first image mapping)
+    // imageModel / inpaintModel may intentionally be "" (= auto / first image mapping)
+    const imageRaw = raw?.imageModel;
+    const imageModel =
+      typeof imageRaw === "string" ? imageRaw.trim() : (fallback.imageModel ?? "");
     const inpaintRaw = raw?.inpaintModel;
     const inpaintModel =
       typeof inpaintRaw === "string" ? inpaintRaw.trim() : (fallback.inpaintModel ?? "");
@@ -276,6 +287,7 @@ export class ModelConfigService implements OnModuleInit {
       systemPrompt: pickString(raw?.systemPrompt, fallback.systemPrompt),
       chatModel: pickString(raw?.chatModel, fallback.chatModel),
       visionModel: pickString(raw?.visionModel, fallback.visionModel || "gpt-4o"),
+      imageModel,
       inpaintModel,
     };
   }
@@ -652,6 +664,18 @@ export class ModelConfigService implements OnModuleInit {
       console.error("Failed to update model config in database:", err);
       throw new BadRequestException("保存模型配置失败，请重试");
     }
+  }
+
+  /**
+   * Resolve default model id for image generation (绘画模型).
+   * Priority: agentConfig.imageModel → first enabled image mapping.
+   */
+  async getImageModelId(): Promise<string | undefined> {
+    const config = await this.getConfig();
+    const configured = config.agentConfig?.imageModel?.trim();
+    if (configured) return configured;
+    const images = await this.getEnabledMappingsByPurpose("image");
+    return images.find((m) => m.enabled)?.id;
   }
 
   /** Resolve model id for canvas inpaint (局部重绘). */

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { selectAgentToolNames } from "./tool-selection";
+import {
+  isImageModelBitmapRequest,
+  selectAgentToolNames,
+} from "./tool-selection";
 
 describe("agent tool selection", () => {
   test("exposes image editing whenever the canvas contains an image", () => {
@@ -18,6 +21,52 @@ describe("agent tool selection", () => {
 
     expect(chinese.has("edit_image")).toBe(true);
     expect(english.has("edit_image")).toBe(true);
+  });
+
+  test("routes product photo promo / background requests to image-model tools only", () => {
+    for (const userInput of [
+      "给这张图片画一个炫酷的背景，我要用来当宣传图",
+      "把这张图的背景换成霓虹科技感场景",
+      "用上传的产品图做一张宣传海报效果图",
+      "Change the background of this product photo for a promo shot",
+    ]) {
+      const tools = selectAgentToolNames({
+        userInput,
+        canvasNodeCount: 0,
+        hasAssets: true,
+        hasCanvasImages: false,
+      });
+
+      expect(isImageModelBitmapRequest(userInput, { hasAssets: true })).toBe(
+        true,
+      );
+      expect(tools.has("edit_image")).toBe(true);
+      expect(tools.has("generate_image")).toBe(true);
+      expect(tools.has("add_text")).toBe(false);
+      expect(tools.has("add_rect")).toBe(false);
+      expect(tools.has("add_image")).toBe(false);
+      expect(tools.has("set_frame")).toBe(false);
+      expect(tools.has("add_group")).toBe(false);
+      expect(tools.has("auto_layout")).toBe(false);
+    }
+  });
+
+  test("keeps layered canvas tools when user explicitly wants editable layout", () => {
+    const tools = selectAgentToolNames({
+      userInput: "用这张产品图做可编辑分层的宣传海报源文件，文字要能改",
+      canvasNodeCount: 0,
+      hasAssets: true,
+      hasCanvasImages: false,
+    });
+
+    expect(
+      isImageModelBitmapRequest(
+        "用这张产品图做可编辑分层的宣传海报源文件，文字要能改",
+        { hasAssets: true },
+      ),
+    ).toBe(false);
+    expect(tools.has("add_text")).toBe(true);
+    expect(tools.has("add_rect")).toBe(true);
   });
 
   test("keeps image editing out when there is no image target", () => {

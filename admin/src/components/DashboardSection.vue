@@ -119,7 +119,7 @@
           <div class="panel__head">
             <div>
               <h3>默认 Agent 模型</h3>
-              <p>对话 / 视觉 / 局部重绘当前绑定</p>
+              <p>对话 / 视觉 / 绘画 / 局部重绘当前绑定</p>
             </div>
           </div>
           <div class="agent-list">
@@ -130,6 +130,12 @@
             <div class="agent-row">
               <span>视觉模型</span>
               <el-tag effect="plain" round>{{ agentConfig.visionModel || "未设置" }}</el-tag>
+            </div>
+            <div class="agent-row">
+              <span>绘画模型</span>
+              <el-tag effect="plain" round>
+                {{ agentConfig.imageModel || "自动（首个图像模型）" }}
+              </el-tag>
             </div>
             <div class="agent-row">
               <span>局部重绘</span>
@@ -327,7 +333,12 @@ const tokenStats = ref<SystemTokenStats | null>(null);
 const users = ref<AdminUser[]>([]);
 const accounts = ref<BillingAccountAdmin[]>([]);
 const recentOrders = ref<BillingOrderAdmin[]>([]);
-const agentConfig = ref<{ chatModel?: string; visionModel?: string; inpaintModel?: string }>({});
+const agentConfig = ref<{
+  chatModel?: string;
+  visionModel?: string;
+  imageModel?: string;
+  inpaintModel?: string;
+}>({});
 
 const logoLibraryCount = computed(() => props.logoLibrary?.length || 0);
 const enabledChannels = computed(() => props.channels.filter((c) => c.status).length);
@@ -573,6 +584,7 @@ async function loadDashboard() {
     agentConfig.value = {
       chatModel: modelCfg?.agentConfig?.chatModel,
       visionModel: modelCfg?.agentConfig?.visionModel,
+      imageModel: modelCfg?.agentConfig?.imageModel,
       inpaintModel: modelCfg?.agentConfig?.inpaintModel,
     };
   } finally {

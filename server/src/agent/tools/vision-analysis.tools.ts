@@ -202,23 +202,34 @@ Respond in JSON format:
       const config = await ctx.ai.getAgentConfig();
       const visionModel = config.agentConfig?.visionModel || 'gpt-4o';
 
-      // Upload base64 image to the private image host first
-      const uploadedUrl = await ctx.ai.uploadImageToHost(imageBase64);
+      // Remote vision models need publicly reachable URLs (not localhost / data:).
+      const uploadedUrl = await ctx.ai.ensurePublicImageUrl(imageBase64);
+      if (!uploadedUrl) {
+        throw new Error(
+          'Unable to publish design screenshot to a public image host for vision analysis',
+        );
+      }
 
       const requestContent: any[] = [];
       if (referenceAsset?.url) {
-        requestContent.push(
-          { type: 'text', text: 'SOURCE PRODUCT IMAGE — use only for identity comparison:' },
-          {
-            type: 'image_url',
-            image_url: {
-              url:
-                referenceAsset.publicUrl ||
-                (await ctx.ai.uploadImageToHost(referenceAsset.url)),
+        const referenceUrl =
+          (referenceAsset.publicUrl &&
+          ctx.ai.isModelSafeImageUrl?.(referenceAsset.publicUrl)
+            ? referenceAsset.publicUrl
+            : null) ||
+          (await ctx.ai.ensurePublicImageUrl(
+            referenceAsset.publicUrl || referenceAsset.url,
+          ));
+        if (referenceUrl) {
+          requestContent.push(
+            { type: 'text', text: 'SOURCE PRODUCT IMAGE — use only for identity comparison:' },
+            {
+              type: 'image_url',
+              image_url: { url: referenceUrl },
             },
-          },
-          { type: 'text', text: 'TARGET DESIGN IMAGE — evaluate this design:' },
-        );
+            { type: 'text', text: 'TARGET DESIGN IMAGE — evaluate this design:' },
+          );
+        }
       }
       requestContent.push(
         { type: 'image_url', image_url: { url: uploadedUrl } },

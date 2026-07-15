@@ -13,6 +13,10 @@ export interface NormalizedImageToolCall {
 export interface NormalizeImageToolCallOptions {
   userInput?: string;
   selectedImageWasInspected?: boolean;
+  /** When only an uploaded asset exists (no canvas selection), inject this id. */
+  fallbackSourceId?: string;
+  /** Prefer binding generate_image.refImages / edit_image.source to the source photo. */
+  preferSourceImageBinding?: boolean;
 }
 
 const MEDIA_TOOL_NAMES = new Set([
@@ -113,15 +117,21 @@ export function injectImplicitImageReference(
   toolName: string,
   rawInput: any,
   reference: ImplicitImageReference | undefined,
+  options: {
+    fallbackSourceId?: string;
+    preferSourceImageBinding?: boolean;
+  } = {},
 ): any {
-  if (!reference || !rawInput || typeof rawInput !== "object") return rawInput;
+  if (!rawInput || typeof rawInput !== "object") return rawInput;
+  const sourceId = reference?.source || options.fallbackSourceId;
+  if (!sourceId) return rawInput;
   const input = { ...rawInput };
 
   if (
     toolName === "edit_image" &&
     (!input.source || isDeicticReference(input.source))
   ) {
-    input.source = reference.source;
+    input.source = sourceId;
   }
 
   if (toolName === "generate_image") {
@@ -133,12 +143,14 @@ export function injectImplicitImageReference(
       ? input.refImages.filter((item: unknown) => typeof item === "string" && item)
       : [];
     if (refs.length > 0 && refs.every(isDeicticReference)) {
-      input.refImages = [reference.source];
-    } else if (!explicitlySetReferences && reference.reason === "selected") {
-      // A canvas selection is explicit editor context. Inherit it when a weaker
-      // model omits the reference, while preserving [] as an intentional opt-out
-      // for a genuinely unrelated fresh generation.
-      input.refImages = [reference.source];
+      input.refImages = [sourceId];
+    } else if (
+      !explicitlySetReferences &&
+      (reference?.reason === "selected" || options.preferSourceImageBinding)
+    ) {
+      // Canvas selection, or product-photo bitmap turn with an uploaded asset.
+      // Preserve [] as an intentional opt-out for an unrelated fresh generation.
+      input.refImages = [sourceId];
     }
   }
 
@@ -216,6 +228,9 @@ export function normalizeImageToolCallForSelection(
 
   return {
     toolName,
-    input: injectImplicitImageReference(toolName, rawInput, reference),
+    input: injectImplicitImageReference(toolName, rawInput, reference, {
+      fallbackSourceId: options.fallbackSourceId,
+      preferSourceImageBinding: options.preferSourceImageBinding,
+    }),
   };
 }

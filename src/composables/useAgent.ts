@@ -710,8 +710,9 @@ export function useAgent(
           leaferNode = new ImageGen({
             x,
             y,
-            width: n.width ?? 400,
-            height: n.height ?? 400,
+            // Placeholder only — finished image uses naturalWidth/Height unless preserveLayout.
+            width: n.width ?? 1024,
+            height: n.height ?? 1024,
             prompt: n.prompt ?? "",
             model: n.model,
             size: n.size,
@@ -836,12 +837,12 @@ export function useAgent(
           nodeStates.value[n.refId] = { refId: n.refId, type: "group", status: "done" };
 
         } else if (n.type === "image") {
-          // Static image from URL
+          // Static image from URL (also used as agent edit/upscale placeholder)
           leaferNode = createFitImage({
             x,
             y,
-            width: n.width ?? 400,
-            height: n.height ?? 300,
+            width: n.width ?? 1024,
+            height: n.height ?? 1024,
             url: n.url ?? "",
             cornerRadius: n.cornerRadius,
             opacity: n.opacity,
@@ -849,6 +850,10 @@ export function useAgent(
             zIndex: n.zIndex,
             editable: true,
           });
+          // Agent edit/generate results should snap to natural pixels when ready.
+          if (n.preserveLayout === true) {
+            leaferNode.preserveGeneratedLayout = true;
+          }
           if (typeof n.upscaleScale === "number" && n.upscaleScale > 1) {
             leaferNode.set({ upscaleScale: n.upscaleScale });
           }

@@ -20,6 +20,7 @@ import { resolveReferencesToBase64 } from './image-reference';
  * Grid reservation / placeholder estimate only.
  * Final canvas display uses natural image pixels unless preserveLayout is set
  * (ecommerce planned slots or images constrained to a parent frame).
+ * Prefer a larger placeholder so 1K/2K results don't briefly appear as a tiny 400 box.
  */
 const AUTO_LAYOUT_MAX_EDGE = 1024;
 
@@ -95,6 +96,9 @@ export const generateImageTool: AgentTool = {
   description:
     'Generate an image from a text prompt and place it on the canvas. Use for ' +
     'illustrations, photos, backgrounds, icons, concept art, and finished bitmap designs. ' +
+    'When the user uploaded or selected a product photo and wants a promo/background edit, ' +
+    'prefer edit_image; if using this tool instead, always pass that photo in refImages. ' +
+    'Do not use canvas add_text/add_rect to fake a product promo poster. ' +
     'For a final image, use a concise prompt that faithfully conveys the user intent. ' +
     'Prefer the user wording when sufficient and add only details the request genuinely requires.',
   parameters: {

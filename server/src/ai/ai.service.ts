@@ -121,9 +121,8 @@ export class AiService implements OnModuleInit {
 
     let model = this.getSelectedModel(body?.model, "");
     if (!model) {
-      const mappings = await this.modelConfigService.getEnabledMappingsByPurpose("image");
-      const activeMapping = mappings.find((mapping) => mapping.enabled);
-      model = activeMapping?.id || this.YUNWU_IMAGE_MODEL;
+      model =
+        (await this.modelConfigService.getImageModelId()) || this.YUNWU_IMAGE_MODEL;
     }
 
     const options = await this.getImageModelOptions(model);
@@ -1469,10 +1468,8 @@ export class AiService implements OnModuleInit {
 
     let model = this.getSelectedModel(body?.model, "");
     if (!model) {
-      const mappings =
-        await this.modelConfigService.getEnabledMappingsByPurpose("image");
-      const activeMapping = mappings.find((m) => m.enabled);
-      model = activeMapping ? activeMapping.id : this.YUNWU_IMAGE_MODEL;
+      model =
+        (await this.modelConfigService.getImageModelId()) || this.YUNWU_IMAGE_MODEL;
     }
     const options = await this.getImageModelOptions(model);
     const maxAllowed = options.maxReferenceImages ?? 1;
@@ -2286,15 +2283,101 @@ export class AiService implements OnModuleInit {
     };
   }
 
-  private isLocalImageUrl(value: string): boolean {
-    try {
-      const url = new URL(value);
-      return ["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(
-        url.hostname,
-      );
-    } catch {
-      return value.startsWith("/files/") || value.startsWith("files/");
+  private isPrivateOrLocalHostname(hostname: string): boolean {
+    const host = (hostname || "").trim().toLowerCase();
+    if (!host) return true;
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "0.0.0.0" ||
+      host === "[::1]"
+    ) {
+      return true;
     }
+    if (host.endsWith(".local") || host.endsWith(".internal")) return true;
+    // IPv4 private / link-local ranges (remote model providers cannot fetch these).
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+    if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+    if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+    return false;
+  }
+
+  private isLocalImageUrl(value: string): boolean {
+    if (!value || typeof value !== "string") return false;
+    const trimmed = value.trim();
+    if (
+      trimmed.startsWith("/files/") ||
+      trimmed.startsWith("files/") ||
+      trimmed.startsWith("data:")
+    ) {
+      return true;
+    }
+    try {
+      const url = new URL(trimmed);
+      return this.isPrivateOrLocalHostname(url.hostname);
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * True when a remote multimodal provider can fetch the URL itself.
+   * data:, relative, localhost, and private-LAN URLs are NOT acceptable for
+   * providers such as Aliyun Qwen (error: "The provided URL does not appear to be valid").
+   */
+  isPubliclyReachableImageUrl(value: string): boolean {
+    if (!value || typeof value !== "string") return false;
+    const trimmed = value.trim();
+    if (trimmed.startsWith("data:") || trimmed.startsWith("[")) return false;
+    try {
+      const url = new URL(trimmed);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+      if (this.isPrivateOrLocalHostname(url.hostname)) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** True when URL / data URI / filename indicates WebP (many chat models cannot decode it). */
+  isWebpImageSource(value: string): boolean {
+    if (!value || typeof value !== "string") return false;
+    const trimmed = value.trim();
+    if (/^data:image\/webp[;,]/i.test(trimmed)) return true;
+    try {
+      const url = new URL(trimmed);
+      if (/\.webp$/i.test(url.pathname)) return true;
+    } catch {
+      if (/\.webp(?:$|[?#])/i.test(trimmed)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Public http(s) URL that is also safe for models which reject WebP.
+   * Prefer JPEG/PNG URLs for multimodal chat providers.
+   */
+  isModelSafeImageUrl(value: string): boolean {
+    return (
+      this.isPubliclyReachableImageUrl(value) && !this.isWebpImageSource(value)
+    );
+  }
+
+  /** Map `/files/<name>` or `http://localhost/files/<name>` → local upload filename. */
+  private extractLocalUploadFilename(source: string): string | null {
+    const trimmed = source.trim();
+    const fromPath = trimmed.match(/^(?:\.?\/)?files\/([^/?#]+)$/i);
+    if (fromPath?.[1] && !fromPath[1].includes("..")) return fromPath[1];
+    try {
+      const url = new URL(trimmed);
+      const match = url.pathname.match(/\/files\/([^/]+)$/i);
+      if (match?.[1] && !match[1].includes("..")) return decodeURIComponent(match[1]);
+    } catch {
+      /* ignore */
+    }
+    return null;
   }
 
   private getImageFilename(source: string, mimeType: string): string {
@@ -2318,11 +2401,59 @@ export class AiService implements OnModuleInit {
     return `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${extension}`;
   }
 
+  private async normalizeUploadImageBytes(
+    bytes: Buffer,
+    mimeType: string,
+    filename: string,
+  ): Promise<{ bytes: Buffer; mimeType: string; filename: string }> {
+    const looksWebp =
+      mimeType === "image/webp" ||
+      filename.toLowerCase().endsWith(".webp") ||
+      (typeof this.filesService?.isWebpImage === "function" &&
+        this.filesService.isWebpImage(bytes, mimeType, filename));
+    if (!looksWebp) {
+      return { bytes, mimeType, filename };
+    }
+    try {
+      if (typeof this.filesService?.convertWebpBufferToJpeg === "function") {
+        const jpeg = await this.filesService.convertWebpBufferToJpeg(bytes);
+        return {
+          bytes: jpeg,
+          mimeType: "image/jpeg",
+          filename: filename.replace(/\.webp$/i, ".jpg") || "image.jpg",
+        };
+      }
+    } catch (err: any) {
+      console.warn(
+        "[resolveImageUploadSource] WebP→JPEG conversion failed, keeping original:",
+        err?.message || err,
+      );
+    }
+    return { bytes, mimeType, filename };
+  }
+
   private async resolveImageUploadSource(source: string): Promise<{
     blob: Blob;
     dataUrl: string;
     filename: string;
   }> {
+    const build = async (
+      bytes: Buffer,
+      mimeType: string,
+      filenameHint: string,
+    ) => {
+      const normalized = await this.normalizeUploadImageBytes(
+        bytes,
+        mimeType,
+        filenameHint,
+      );
+      return {
+        blob: new Blob([normalized.bytes], { type: normalized.mimeType }),
+        dataUrl: `data:${normalized.mimeType};base64,${normalized.bytes.toString("base64")}`,
+        filename: this.getImageFilename(filenameHint, normalized.mimeType),
+      };
+    };
+
     const dataUrlMatch = source.match(
       /^data:([^;,]+);base64,([\s\S]+)$/i,
     );
@@ -2331,15 +2462,43 @@ export class AiService implements OnModuleInit {
       const payload = dataUrlMatch[2];
       if (!payload) throw new Error("Invalid image data URL");
       const bytes = Buffer.from(payload, "base64");
-      return {
-        blob: new Blob([bytes], { type: mimeType }),
-        dataUrl: source,
-        filename: this.getImageFilename(source, mimeType),
-      };
+      return build(bytes, mimeType, this.getImageFilename(source, mimeType));
     }
 
-    if (this.isLocalImageUrl(source)) {
-      const response = await fetch(source);
+    // Prefer reading our own uploads from disk — more reliable than HTTP self-fetch.
+    const localFilename = this.extractLocalUploadFilename(source);
+    if (localFilename) {
+      try {
+        const { join } = await import("node:path");
+        const file = Bun.file(join("files", localFilename));
+        if (await file.exists()) {
+          const bytes = Buffer.from(await file.arrayBuffer());
+          const ext = localFilename.split(".").pop()?.toLowerCase();
+          const mimeType =
+            ext === "jpg" || ext === "jpeg"
+              ? "image/jpeg"
+              : ext === "webp"
+                ? "image/webp"
+                : ext === "gif"
+                  ? "image/gif"
+                  : "image/png";
+          return build(bytes, mimeType, localFilename);
+        }
+      } catch (err: any) {
+        console.warn(
+          "[resolveImageUploadSource] disk read failed, trying HTTP:",
+          err?.message || err,
+        );
+      }
+    }
+
+    if (this.isLocalImageUrl(source) && !source.startsWith("data:")) {
+      // Relative /files paths need an absolute base for fetch.
+      const fetchUrl =
+        source.startsWith("/files/") || source.startsWith("files/")
+          ? `http://127.0.0.1:${process.env.PORT || 3000}/${source.replace(/^\//, "")}`
+          : source;
+      const response = await fetch(fetchUrl);
       if (!response.ok) {
         throw new Error(`Failed to read local image: HTTP ${response.status}`);
       }
@@ -2349,11 +2508,23 @@ export class AiService implements OnModuleInit {
         throw new Error(`Local asset is not an image: ${mimeType}`);
       }
       const bytes = Buffer.from(await response.arrayBuffer());
-      return {
-        blob: new Blob([bytes], { type: mimeType }),
-        dataUrl: `data:${mimeType};base64,${bytes.toString("base64")}`,
-        filename: this.getImageFilename(source, mimeType),
-      };
+      return build(bytes, mimeType, this.getImageFilename(source, mimeType));
+    }
+
+    // Remote public URL (e.g. re-host WebP CDN link as JPEG for model safety).
+    if (source.startsWith("http://") || source.startsWith("https://")) {
+      const response = await fetch(source);
+      if (!response.ok) {
+        throw new Error(`Failed to download image: HTTP ${response.status}`);
+      }
+      const mimeType =
+        response.headers.get("content-type")?.split(";")[0] ||
+        (this.isWebpImageSource(source) ? "image/webp" : "image/png");
+      if (!mimeType.startsWith("image/")) {
+        throw new Error(`Remote asset is not an image: ${mimeType}`);
+      }
+      const bytes = Buffer.from(await response.arrayBuffer());
+      return build(bytes, mimeType, this.getImageFilename(source, mimeType));
     }
 
     const formattedBase64 = source.startsWith("data:")
@@ -2366,12 +2537,12 @@ export class AiService implements OnModuleInit {
     if (!source || typeof source !== "string") return source;
     if (source.startsWith("[")) return source;
 
-    const isHttpUrl =
-      source.startsWith("http://") || source.startsWith("https://");
-    if (isHttpUrl && !this.isLocalImageUrl(source)) return source;
+    // Already a public non-WebP URL the remote model can fetch — keep as-is.
+    // WebP public URLs are re-hosted as JPEG because many chat models reject WebP.
+    if (this.isModelSafeImageUrl(source)) return source;
 
     const cachedUrl = this.imageHostUrlCache.get(source);
-    if (cachedUrl) return cachedUrl;
+    if (cachedUrl && this.isModelSafeImageUrl(cachedUrl)) return cachedUrl;
 
     const url =
       process.env.IMAGE_HOST_UPLOAD_URL ||
@@ -2390,7 +2561,11 @@ export class AiService implements OnModuleInit {
         if (isScdn) {
           const form = new FormData();
           form.append("image", image.blob, image.filename);
-          form.append("outputFormat", "auto");
+          // Force JPEG — `auto` often returns .webp which Qwen/etc cannot decode.
+          form.append(
+            "outputFormat",
+            process.env.IMAGE_HOST_OUTPUT_FORMAT || "jpg",
+          );
           form.append(
             "cdn_domain",
             process.env.IMAGE_HOST_CDN_DOMAIN || "cloudflareimg.cdn.sn",
@@ -2415,6 +2590,7 @@ export class AiService implements OnModuleInit {
           body: JSON.stringify({
             base64: image.dataUrl,
             filename: image.filename,
+            outputFormat: process.env.IMAGE_HOST_OUTPUT_FORMAT || "jpg",
           }),
         });
       };
@@ -2434,7 +2610,15 @@ export class AiService implements OnModuleInit {
       const resData = (await response.json()) as any;
       const hostedUrl = resData?.url || resData?.data?.url;
       if (response.ok && resData?.success && hostedUrl) {
-        if (isHttpUrl) this.imageHostUrlCache.set(source, hostedUrl);
+        if (this.isWebpImageSource(hostedUrl)) {
+          // Host still returned WebP despite jpg request — do not cache as final.
+          console.warn(
+            "[uploadImageToHost] image host returned WebP URL despite jpg outputFormat:",
+            hostedUrl,
+          );
+        } else {
+          this.imageHostUrlCache.set(source, hostedUrl);
+        }
         return hostedUrl;
       }
       throw new Error(resData?.message || `HTTP ${response.status}`);
@@ -2445,6 +2629,35 @@ export class AiService implements OnModuleInit {
       );
       return fallback;
     }
+  }
+
+  /**
+   * Resolve an image source to a publicly reachable, model-safe (non-WebP)
+   * http(s) URL for remote multimodal chat models.
+   * Returns null when publishing fails (never returns data:/localhost/WebP URLs).
+   */
+  async ensurePublicImageUrl(source: string): Promise<string | null> {
+    if (!source || typeof source !== "string") return null;
+    if (source.startsWith("[")) return null;
+    if (this.isModelSafeImageUrl(source)) return source.trim();
+
+    const hosted = await this.uploadImageToHost(source);
+    if (this.isModelSafeImageUrl(hosted)) return hosted;
+
+    // Host returned WebP — try one forced re-encode pass from the hosted bytes.
+    if (this.isPubliclyReachableImageUrl(hosted) && this.isWebpImageSource(hosted)) {
+      const rehosted = await this.uploadImageToHost(hosted);
+      if (this.isModelSafeImageUrl(rehosted)) {
+        this.imageHostUrlCache.set(source, rehosted);
+        return rehosted;
+      }
+    }
+
+    console.warn(
+      "[ensurePublicImageUrl] image host did not return a model-safe public URL; omitting image for remote model:",
+      typeof hosted === "string" ? hosted.slice(0, 96) : hosted,
+    );
+    return null;
   }
 
   async getAgentConfig() {

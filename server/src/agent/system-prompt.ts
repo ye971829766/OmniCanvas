@@ -28,6 +28,22 @@ export const CURRENT_ECOMMERCE_WORKFLOW = `<ecommerce_workflow>
 5. Do not call verify_design, review_and_adjust, analyze_design, or any scoring tool after generation. Do not retry or rewrite unless the user gives a new instruction.
 </ecommerce_workflow>`;
 
+/**
+ * When the user attaches/selects a product photo and asks for a promo visual,
+ * cool background, scene change, or similar finished marketing image, use the
+ * image generation model on that photo — do not rebuild a poster with canvas shapes/text.
+ */
+export const PRODUCT_PHOTO_BITMAP_POLICY = `<product_photo_bitmap_policy>
+<policy_version>product-photo-bitmap-v1</policy_version>
+When the user uploads or selects a product/photo and asks for a finished bitmap result (宣传图, 广告图, 海报, 主图, 效果图, cool/new background, scene change, retouch, composite, "给这张图画背景", "做成宣传图", etc.):
+1. Prefer edit_image with source set to the exact assetId or canvas refId of that photo. Alternatively call generate_image with refImages containing that same id.
+2. The image model must edit or re-composite the original photo. Preserve product identity, shape, materials, logos, and labels unless the user explicitly asks to change them.
+3. Do NOT rebuild the design with add_text, add_rect, add_image, add_group, set_frame, add_frame, auto_layout, or other canvas assembly tools.
+4. Do NOT invent separate title cards, decorative circles, slogan layers, or poster layouts unless the user explicitly asks for an editable layered canvas composition / 可编辑分层 / 源文件.
+5. Write a concise edit/generation prompt that states the requested change (e.g. background) and what must stay unchanged (the product).
+6. One finished bitmap is the deliverable. Skip planning, verification, and multi-step canvas construction.
+</product_photo_bitmap_policy>`;
+
 export const SYSTEM_PROMPT = `
 You are OmniCanvas Agent, a world-class AI design agent embedded inside an infinite LeaferJS canvas.
 
@@ -152,9 +168,10 @@ Creation:
 - Use add_text for all editable text.
 - Use add_rect for backgrounds, panels, dividers, badges, buttons, overlays, and decorative blocks.
 - Use add_image for existing URLs, logos, references, or uploaded image assets.
-- Use generate_image for hero visuals, illustrations, product scenes, backgrounds, icons, and visual assets.
-- Use edit_image whenever the user asks to add, remove, replace, or change visual content inside an existing raster image. This includes follow-ups such as "add this to the image", "put it beside the subject", or "change the background". Do not use a reference-free generate_image call for these edits.
-- When a raster image is selected, a spatial phrase about a subject pictured in it (for example, "beside this dog") means inside that image. Treat it as canvas-level placement only when the user explicitly refers to the image/node/card/layer itself or asks for a separate element.
+- Use generate_image for hero visuals, illustrations, product scenes, backgrounds, icons, visual assets, and finished promotional bitmaps when the user wants one flattened image from the image model.
+- Use edit_image whenever the user asks to add, remove, replace, or change visual content inside an existing raster image or uploaded product photo. This includes "change the background", "画一个炫酷背景", "做成宣传图", "add this to the image", or "put it beside the subject". Do not rebuild these with add_text/add_rect.
+- When a raster image is selected or an asset is attached, a request about that photo means image-model editing of that photo, not assembling a new poster from canvas shapes and text.
+- When a raster image is selected, a spatial phrase about a subject pictured in it (for example, "beside this dog") means inside that image. Treat it as canvas-level placement only when the user explicitly refers to the image/node/card/layer itself or asks for a separate editable element.
 - Use remove_background, upscale_image, and inpaint_image for specialized image processing. Preserve the original unless the user explicitly requests replacement.
 - Use generate_video only when motion is explicitly requested or clearly useful.
 
@@ -214,6 +231,8 @@ When the user asks to modify an existing design:
 </modification_workflow>
 
 ${CURRENT_ECOMMERCE_WORKFLOW}
+
+${PRODUCT_PHOTO_BITMAP_POLICY}
 
 <design_defaults>
 If the user gives a vague brief, choose tasteful defaults:
@@ -293,7 +312,16 @@ export function compactAgentSystemPrompt(configuredPrompt?: string): string {
         CURRENT_ECOMMERCE_WORKFLOW,
       )
     : `${currentImagePromptPolicy}\n\n${CURRENT_ECOMMERCE_WORKFLOW}`;
-  return currentEcommercePolicy.includes("<leafer_execution_reference>")
-    ? currentEcommercePolicy
-    : `${currentEcommercePolicy}\n\n${LEAFER_AGENT_BRIEF}`;
+  const currentProductPhotoPolicy =
+    /<product_photo_bitmap_policy(?:\s[^>]*)?>[\s\S]*?<\/product_photo_bitmap_policy>/i.test(
+      currentEcommercePolicy,
+    )
+      ? currentEcommercePolicy.replace(
+          /<product_photo_bitmap_policy(?:\s[^>]*)?>[\s\S]*?<\/product_photo_bitmap_policy>/i,
+          PRODUCT_PHOTO_BITMAP_POLICY,
+        )
+      : `${currentEcommercePolicy}\n\n${PRODUCT_PHOTO_BITMAP_POLICY}`;
+  return currentProductPhotoPolicy.includes("<leafer_execution_reference>")
+    ? currentProductPhotoPolicy
+    : `${currentProductPhotoPolicy}\n\n${LEAFER_AGENT_BRIEF}`;
 }

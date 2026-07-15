@@ -32,7 +32,13 @@ function extractErrorMessage(e: any): string {
   const body = e?.responseBody ?? cause?.responseBody ?? "";
   if (body) {
     try {
-      const parsed = typeof body === "string" ? JSON.parse(body) : body;
+      // Plain JSON or SSE: `data: {"error":...}`
+      const raw = typeof body === "string" ? body : JSON.stringify(body);
+      const jsonText = raw
+        .split("\n")
+        .map((line) => line.replace(/^data:\s*/, "").trim())
+        .find((line) => line.startsWith("{") && line.endsWith("}"));
+      const parsed = JSON.parse(jsonText || raw);
       const msg = parsed?.error?.message ?? parsed?.message;
       if (msg) return msg;
     } catch {
@@ -90,6 +96,7 @@ import {
 import { sanitizeCanvasState } from "./canvas-context";
 import {
   isDirectImageRequest,
+  isImageModelBitmapRequest,
   selectAgentToolNames,
 } from "./tool-selection";
 import {
@@ -373,18 +380,18 @@ ${videoModelInfo || "- None"}
     const normalizedAssets = normalizeAgentAssets(incomingAssets);
     const currentAssets: AgentAsset[] = [];
     for (const asset of normalizedAssets) {
-      if (asset.publicUrl) {
+      if (
+        asset.publicUrl &&
+        this.ai.isModelSafeImageUrl(asset.publicUrl)
+      ) {
         currentAssets.push(asset);
         continue;
       }
-      const publicUrl = await this.ai.uploadImageToHost(asset.url);
+      const publicUrl = await this.ai.ensurePublicImageUrl(
+        asset.publicUrl || asset.url,
+      );
       currentAssets.push(
-        /^https?:\/\//i.test(publicUrl) &&
-          !/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(
-            publicUrl,
-          )
-          ? { ...asset, publicUrl }
-          : asset,
+        publicUrl ? { ...asset, publicUrl } : { ...asset, publicUrl: undefined },
       );
     }
     const sessionAssets = this.memory.registerAssets(sessionId, currentAssets);
@@ -394,13 +401,23 @@ ${videoModelInfo || "- None"}
       safeCanvasState,
       history as any[],
     );
-    const directImageRequest = isDirectImageRequest(userInput);
+    const hasAssetSource = sessionAssets.length > 0 || !!images?.length;
+    const imageModelBitmapRequest = isImageModelBitmapRequest(userInput, {
+      hasAssets: hasAssetSource || currentAssets.length > 0,
+      hasCanvasImages: canvasHasImages,
+    });
+    // Treat photo-edit / promo-bitmap turns like direct image turns so tools
+    // inherit the uploaded asset and skip canvas poster assembly.
+    const directImageRequest =
+      isDirectImageRequest(userInput) || imageModelBitmapRequest;
     const currentTurnAsset = currentAssets.length === 1 ? currentAssets[0] : undefined;
     const defaultImageReferenceIds = currentTurnAsset
       ? [currentTurnAsset.id]
       : currentAssets.length === 0 && implicitImageReference
         ? [implicitImageReference.refId]
-        : [];
+        : sessionAssets.length === 1
+          ? [sessionAssets[0]!.id]
+          : [];
     if (implicitImageReference?.url) {
       const referencedNode = safeCanvasState.find(
         (node: any) => node.refId === implicitImageReference.refId,
@@ -412,11 +429,18 @@ ${videoModelInfo || "- None"}
     const selectedToolNames = selectAgentToolNames({
       userInput,
       canvasNodeCount: safeCanvasState.length,
-      hasAssets: sessionAssets.length > 0 || !!images?.length,
+      hasAssets: hasAssetSource || currentAssets.length > 0,
       hasCanvasImages: canvasHasImages,
     });
     systemPrompt += `\n\n<active_tools>\n${[...selectedToolNames].join(", ")}\n</active_tools>\n<frame_policy>Frames are optional. Use the root canvas or a Group by default. Create a frame only for a bounded, clipped, exportable, auto-layout, or multi-deliverable composition. If set_frame/add_frame is not listed above, do not create or assume agent_frame.</frame_policy>\nOnly call tools listed above. Issue independent tool calls together in the same response. For nested batches, assign explicit refId values to new frames/groups/nodes and reuse them as parentId. Wait for a result only when a later call depends on generated output.`;
-    if (directImageRequest) {
+    if (imageModelBitmapRequest) {
+      const preferredSource =
+        currentTurnAsset?.id ||
+        defaultImageReferenceIds[0] ||
+        implicitImageReference?.refId ||
+        sessionAssets[sessionAssets.length - 1]?.id;
+      systemPrompt += `\n\n<current_product_photo_bitmap_request>\nThe user wants a finished bitmap from the image generation model based on their uploaded/selected photo. Prefer edit_image with source="${preferredSource || "the attached assetId"}". You may use generate_image with refImages: ["${preferredSource || "assetId"}"] as a fallback. Do NOT use add_text, add_rect, add_image, frames, or other canvas assembly tools to rebuild a poster. Preserve product identity; change only what the user asked for (e.g. background / scene).\n</current_product_photo_bitmap_request>`;
+    } else if (isDirectImageRequest(userInput)) {
       systemPrompt += `\n\n<current_final_image_request>\nSend this final image request directly to generate_image without planning, decomposition, or verification. Use your judgment to write a concise generation prompt that faithfully conveys the user's intent. Preserve the user's wording when it is already sufficient; otherwise make only the changes needed for the image model to understand the request. Do not invent product facts, creative directions, layouts, copy, or constraints that the user did not imply. If the user explicitly requests multiple separate outputs, make direct generation calls without inventing an intermediate plan.\n</current_final_image_request>`;
     }
     if (implicitImageReference) {
@@ -430,6 +454,9 @@ ${videoModelInfo || "- None"}
         .slice(-16)
         .map((asset) => formatAgentAssetForPrompt(asset))
         .join("\n")}\n</session_assets>\nThese are durable session assets. Use exact IDs and never invent one.`;
+      if (imageModelBitmapRequest) {
+        systemPrompt += `\nFor this turn, the source photo assetId to edit is preferred from the list above (usually the latest attached asset).`;
+      }
     }
 
     let userContent: string | any[] = userInput;
@@ -440,28 +467,36 @@ ${videoModelInfo || "- None"}
             .join("\n")}\n</attached_assets>\nUse these exact assetId values in image tools. Do not invent asset IDs.`
         : "";
       const parts: any[] = [{ type: "text", text: `${userInput}${assetContext}` }];
+      let omittedImages = 0;
       if (screenshot) {
-        const uploadedUrl = await this.ai.uploadImageToHost(screenshot);
-        parts.push({
-          type: "image",
-          image: uploadedUrl,
-        });
+        const uploadedUrl = await this.ai.ensurePublicImageUrl(screenshot);
+        if (uploadedUrl) parts.push({ type: "image", image: uploadedUrl });
+        else omittedImages++;
       }
       if (images && images.length > 0) {
         for (const img of images) {
-          const uploadedUrl = await this.ai.uploadImageToHost(img);
-          parts.push({
-            type: "image",
-            image: uploadedUrl,
-          });
+          const uploadedUrl = await this.ai.ensurePublicImageUrl(img);
+          if (uploadedUrl) parts.push({ type: "image", image: uploadedUrl });
+          else omittedImages++;
         }
       }
       for (const asset of currentAssets) {
+        const uploadedUrl =
+          (asset.publicUrl && this.ai.isModelSafeImageUrl(asset.publicUrl)
+            ? asset.publicUrl
+            : null) ||
+          (await this.ai.ensurePublicImageUrl(asset.publicUrl || asset.url));
+        if (uploadedUrl) parts.push({ type: "image", image: uploadedUrl });
+        else omittedImages++;
+      }
+      if (omittedImages > 0) {
         parts.push({
-          type: "image",
-          image:
-            asset.publicUrl || (await this.ai.uploadImageToHost(asset.url)),
+          type: "text",
+          text: `\n[${omittedImages} image(s) could not be published to a public URL for the model; local/data URLs were omitted.]`,
         });
+        this.logger.warn(
+          `[session=${sessionId}] omitted ${omittedImages} image(s) that could not be published publicly`,
+        );
       }
       userContent = parts;
     }
@@ -543,7 +578,11 @@ ${videoModelInfo || "- None"}
       usage.steps = step + 1;
 
       // Single turn with streamText
-      const modelMessages = this.memory.compactForModel(messages);
+      // Rewrite local/data image parts to public URLs before calling the model.
+      // Remote providers (e.g. Aliyun Qwen) reject localhost / data: URLs with 400.
+      const modelMessages = await this.prepareModelMessages(
+        this.memory.compactForModel(messages),
+      );
       let text = "";
       const toolCalls: any[] = [];
       let llmBillingOperationId: string | undefined;
@@ -637,6 +676,8 @@ ${videoModelInfo || "- None"}
             {
               userInput,
               selectedImageWasInspected,
+              fallbackSourceId: defaultImageReferenceIds[0],
+              preferSourceImageBinding: imageModelBitmapRequest,
             },
           );
           call.name = normalizedCall.toolName;
@@ -900,11 +941,21 @@ ${videoModelInfo || "- None"}
       // Append visual observations if any
       if (stepVisualObservations.length > 0) {
         const combinedParts: any[] = [];
+        let omitted = 0;
         for (const obs of stepVisualObservations) {
-          const uploadedUrl = await this.ai.uploadImageToHost(obs.image);
-          combinedParts.push({ type: "image", image: uploadedUrl });
+          const uploadedUrl = await this.ai.ensurePublicImageUrl(obs.image);
+          if (uploadedUrl) combinedParts.push({ type: "image", image: uploadedUrl });
+          else omitted++;
         }
-        messages.push({ role: "user", content: combinedParts });
+        if (omitted > 0) {
+          combinedParts.push({
+            type: "text",
+            text: `[${omitted} visual observation image(s) omitted: could not publish a public URL]`,
+          });
+        }
+        if (combinedParts.length > 0) {
+          messages.push({ role: "user", content: combinedParts });
+        }
       }
 
       if (step === this.MAX_STEPS - 1) {
@@ -933,14 +984,67 @@ ${videoModelInfo || "- None"}
           ...message,
           content: [
             ...nonImageParts,
+            // Prefer public CDN URLs so later turns can re-send without re-hosting.
             ...currentAssets.map((asset) => ({
               type: "image" as const,
-              image: asset.url,
+              image: asset.publicUrl || asset.url,
             })),
           ],
         } as ModelMessage;
       });
     this.memory.set(sessionId, historyToSave as any);
+  }
+
+  /**
+   * Ensure every image part sent to the chat model is a publicly reachable URL.
+   * Remote providers (Aliyun Qwen etc.) reject localhost / private / data: URLs.
+   */
+  private async prepareModelMessages(
+    messages: ModelMessage[],
+  ): Promise<ModelMessage[]> {
+    const prepared: ModelMessage[] = [];
+    for (const message of messages) {
+      if (!Array.isArray((message as any).content)) {
+        prepared.push(message);
+        continue;
+      }
+
+      const content: any[] = [];
+      let omitted = 0;
+      for (const part of (message as any).content) {
+        if (part?.type !== "image") {
+          content.push(part);
+          continue;
+        }
+        const source =
+          typeof part.image === "string"
+            ? part.image
+            : part?.image && typeof part.image === "object" && "href" in part.image
+              ? String((part.image as { href?: unknown }).href ?? "")
+              : "";
+        if (!source) {
+          omitted++;
+          continue;
+        }
+        const publicUrl = await this.ai.ensurePublicImageUrl(source);
+        if (publicUrl) {
+          content.push({ ...part, image: publicUrl });
+        } else {
+          omitted++;
+        }
+      }
+      if (omitted > 0) {
+        content.push({
+          type: "text",
+          text: `[${omitted} image(s) omitted: could not publish a publicly reachable URL for the model]`,
+        });
+      }
+      if (content.length === 0) {
+        content.push({ type: "text", text: "" });
+      }
+      prepared.push({ ...(message as any), content } as ModelMessage);
+    }
+    return prepared;
   }
 
   private capturePendingGeneration(

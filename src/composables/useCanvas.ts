@@ -1209,45 +1209,58 @@ export function useCanvas(
             // Update URL
             applyImagePaintMode(rawNode, "fit", res.imageUrl);
 
-            // Upscale: match canvas box to result pixels so HD is visibly larger
-            if (wasUpscale) {
-              const scaleFactor =
-                appliedScale > 1
-                  ? appliedScale
-                  : requestedScale > 1
-                    ? requestedScale
-                    : 2;
+            // Match canvas box to result pixels (edit/generate/upscale).
+            // Agent image tools often place a 400×400 placeholder; without this
+            // the finished 2K image stays tiny on the canvas.
+            const lockLayout = rawNode.preserveGeneratedLayout === true;
+            const scaleFactor =
+              appliedScale > 1
+                ? appliedScale
+                : requestedScale > 1
+                  ? requestedScale
+                  : wasUpscale
+                    ? 2
+                    : 0;
 
-              const probe = new window.Image();
-              probe.onload = () => {
-                if (probe.naturalWidth > 0 && probe.naturalHeight > 0) {
-                  rawNode.set({
-                    width: probe.naturalWidth,
-                    height: probe.naturalHeight,
-                  });
-                }
-                delete rawNode.upscaleScale;
-                recordHistoryDebounced();
-              };
-              probe.onerror = () => {
-                // Fallback: keep pre-scaled box from UpscaleTool, or multiply once
+            const probe = new window.Image();
+            probe.onload = () => {
+              if (
+                !lockLayout &&
+                probe.naturalWidth > 0 &&
+                probe.naturalHeight > 0
+              ) {
+                rawNode.set({
+                  width: probe.naturalWidth,
+                  height: probe.naturalHeight,
+                });
+              } else if (wasUpscale && !lockLayout) {
                 const curW = Number(rawNode.width) || 0;
                 const curH = Number(rawNode.height) || 0;
-                // If tool already set width ≈ source * scale, leave as-is
-                if (!(curW > 0 && curH > 0)) {
+                if (!(curW > 0 && curH > 0) && scaleFactor > 0) {
                   rawNode.set({
                     width: Math.round(400 * scaleFactor),
                     height: Math.round(300 * scaleFactor),
                   });
                 }
-                delete rawNode.upscaleScale;
-                recordHistoryDebounced();
-              };
-              probe.src = res.imageUrl;
-            } else {
+              }
               delete rawNode.upscaleScale;
               recordHistoryDebounced();
-            }
+            };
+            probe.onerror = () => {
+              if (wasUpscale && !lockLayout) {
+                const curW = Number(rawNode.width) || 0;
+                const curH = Number(rawNode.height) || 0;
+                if (!(curW > 0 && curH > 0) && scaleFactor > 0) {
+                  rawNode.set({
+                    width: Math.round(400 * scaleFactor),
+                    height: Math.round(300 * scaleFactor),
+                  });
+                }
+              }
+              delete rawNode.upscaleScale;
+              recordHistoryDebounced();
+            };
+            probe.src = res.imageUrl;
           } else if (res.status === "error") {
             clearInterval(pollInterval);
             delete rawNode._pollingInterval;

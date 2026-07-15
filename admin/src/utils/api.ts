@@ -258,6 +258,8 @@ export interface ModelConfigState {
   agentConfig?: {
     chatModel: string;
     visionModel?: string;
+    /** 默认绘画模型；空字符串表示自动使用第一个启用的图片模型 */
+    imageModel?: string;
     /** 局部重绘模型；空字符串表示自动使用第一个启用的图片模型 */
     inpaintModel?: string;
   };

@@ -332,26 +332,38 @@ function parseMessageText(text: string): ParsedMessagePart[] {
   return parts;
 }
 
+/**
+ * User-facing chat text: hide technical tokens the agent needs
+ * (`[modelId:...]`, `[refId:...]`) and highlight @mentions cleanly.
+ */
 function parseUserText(text: string) {
   if (!text) return [];
-  const regex = /(@\w+)/g;
-  const parts = [];
+  // Backend still receives modelId/refId; users only need the @label chip.
+  const cleaned = text
+    .replace(/\s*\[modelId:[^\]]+\]/gi, "")
+    .replace(/\s*\[refId:[^\]]+\]/gi, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+  // Mentions may include hyphens / dots (e.g. @nano-banna-2)
+  const regex = /(@[\w.\u4e00-\u9fff-]+)/g;
+  const parts: Array<{ type: string; content: string }> = [];
   let lastIndex = 0;
   let match;
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(cleaned)) !== null) {
     if (match.index > lastIndex) {
       parts.push({
         type: "text",
-        content: text.substring(lastIndex, match.index),
+        content: cleaned.substring(lastIndex, match.index),
       });
     }
     parts.push({ type: "mention", content: match[1] });
     lastIndex = regex.lastIndex;
   }
-  if (lastIndex < text.length) {
-    parts.push({ type: "text", content: text.substring(lastIndex) });
+  if (lastIndex < cleaned.length) {
+    parts.push({ type: "text", content: cleaned.substring(lastIndex) });
   }
-  return parts.length > 0 ? parts : [{ type: "text", content: text }];
+  return parts.length > 0 ? parts : [{ type: "text", content: cleaned }];
 }
 </script>
 

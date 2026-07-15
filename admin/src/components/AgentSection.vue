@@ -136,6 +136,53 @@
             </p>
           </el-form-item>
 
+          <!-- Default image generation model -->
+          <el-form-item
+            label="绘画模型 (imageModel)"
+            style="margin-top: 16px"
+          >
+            <template #label>
+              <span
+                style="
+                  color: #a1a1aa;
+                  font-weight: 600;
+                  display: flex;
+                  align-items: center;
+                  gap: 4px;
+                "
+              >
+                绘画模型 (imageModel)
+                <el-tooltip
+                  content="用户或 Agent 未指定绘画模型时使用的默认图片生成模型。留空则使用模型目录中第一个启用的图片模型"
+                  placement="top"
+                >
+                  <el-icon style="cursor: help"><InfoFilled /></el-icon>
+                </el-tooltip>
+              </span>
+            </template>
+            <el-select
+              v-model="agentConfig.imageModel"
+              filterable
+              allow-create
+              clearable
+              default-first-option
+              placeholder="自动（第一个启用的图片模型）"
+              style="width: 100%"
+            >
+              <el-option label="自动（第一个启用的图片模型）" value="" />
+              <el-option
+                v-for="mapping in imageModelMappings"
+                :key="mapping.id"
+                :label="`${mapping.label} (${mapping.id})`"
+                :value="mapping.id"
+              />
+            </el-select>
+            <p style="margin: 6px 0 0 0; font-size: 12px; color: #71717a">
+              画布生图、Agent
+              generate_image 等场景在未指定模型时，将使用此默认绘画模型。
+            </p>
+          </el-form-item>
+
           <!-- Inpaint / local redraw model -->
           <el-form-item
             label="局部重绘模型 (inpaintModel)"
@@ -215,6 +262,7 @@ const rawState = ref<ModelConfigState | null>(null);
 const agentConfig = ref({
   chatModel: "",
   visionModel: "",
+  imageModel: "",
   inpaintModel: "",
 });
 
@@ -235,12 +283,14 @@ async function loadConfig() {
       agentConfig.value = {
         chatModel: config.agentConfig.chatModel || "",
         visionModel: config.agentConfig.visionModel || "",
+        imageModel: config.agentConfig.imageModel ?? "",
         inpaintModel: config.agentConfig.inpaintModel ?? "",
       };
     } else {
       agentConfig.value = {
         chatModel: "",
         visionModel: "",
+        imageModel: "",
         inpaintModel: "",
       };
     }
@@ -270,6 +320,7 @@ async function saveConfig() {
       agentConfig: {
         chatModel: agentConfig.value.chatModel.trim(),
         visionModel: agentConfig.value.visionModel.trim(),
+        imageModel: (agentConfig.value.imageModel || "").trim(),
         inpaintModel: (agentConfig.value.inpaintModel || "").trim(),
       },
     };

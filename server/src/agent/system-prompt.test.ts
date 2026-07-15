@@ -27,6 +27,9 @@ describe("agent system prompt compaction", () => {
     expect(SYSTEM_PROMPT).not.toContain("Use plan_ecommerce_suite first");
     expect(SYSTEM_PROMPT).toContain("Use edit_image whenever the user asks to add, remove, replace, or change visual content");
     expect(SYSTEM_PROMPT).toContain("the single selected image, then the latest successful generated or edited image");
+    expect(SYSTEM_PROMPT).toContain("<policy_version>product-photo-bitmap-v1</policy_version>");
+    expect(SYSTEM_PROMPT).toContain("Prefer edit_image with source set to the exact assetId");
+    expect(SYSTEM_PROMPT).toContain("Do NOT rebuild the design with add_text");
   });
 
   test("migrates persisted always-create-artboard guidance", () => {

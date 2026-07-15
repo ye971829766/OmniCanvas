@@ -588,6 +588,89 @@ export class FilesService implements OnModuleInit {
     };
   }
 
+  /**
+   * Detect WebP from mimetype, filename extension, or RIFF/WEBP magic bytes.
+   * Some clients send webp as application/octet-stream or image/* with a .webp name.
+   */
+  isWebpImage(
+    buffer: Buffer | Uint8Array | undefined,
+    mimetype?: string,
+    originalName?: string,
+  ): boolean {
+    const mime = (mimetype || "").split(";")[0]?.trim().toLowerCase();
+    if (mime === "image/webp") return true;
+    const ext = originalName
+      ? this.getSafeExtension(originalName, "").toLowerCase()
+      : "";
+    if (ext === "webp") return true;
+    if (!buffer || buffer.length < 12) return false;
+    // RIFF....WEBP
+    return (
+      buffer[0] === 0x52 &&
+      buffer[1] === 0x49 &&
+      buffer[2] === 0x46 &&
+      buffer[3] === 0x46 &&
+      buffer[8] === 0x57 &&
+      buffer[9] === 0x45 &&
+      buffer[10] === 0x42 &&
+      buffer[11] === 0x50
+    );
+  }
+
+  /**
+   * Convert WebP bytes to JPEG via FFmpeg (already used for GIF→MP4).
+   * Avoids shipping WebP to models that cannot decode it.
+   */
+  async convertWebpBufferToJpeg(buffer: Buffer | Uint8Array): Promise<Buffer> {
+    const id = crypto.randomUUID();
+    const inputPath = join(this.UPLOAD_DIR, `${id}.webp`);
+    const outputPath = join(this.UPLOAD_DIR, `${id}.jpg`);
+    await Bun.write(inputPath, buffer);
+
+    try {
+      const proc = Bun.spawn(
+        [
+          ffmpegInstaller.path,
+          "-y",
+          "-i",
+          inputPath,
+          // High-quality still JPEG; -frames:v 1 keeps animated WebP first frame.
+          "-frames:v",
+          "1",
+          "-q:v",
+          "2",
+          outputPath,
+        ],
+        { stderr: "pipe" },
+      );
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        const errText = await new Response(proc.stderr).text();
+        console.error("FFmpeg WebP→JPEG conversion error:", errText);
+        throw new HttpException(
+          {
+            error:
+              "Failed to convert WebP to JPEG. Make sure it is a valid WebP image.",
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const jpegBytes = await Bun.file(outputPath).arrayBuffer();
+      return Buffer.from(jpegBytes);
+    } finally {
+      try {
+        await unlink(inputPath);
+      } catch {
+        /* ignore */
+      }
+      try {
+        await unlink(outputPath);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   async uploadImageFile(image: Express.Multer.File | null, originUrl: string) {
     if (!image) {
       throw new HttpException(
@@ -603,11 +686,19 @@ export class FilesService implements OnModuleInit {
     }
 
     const id = crypto.randomUUID();
-    const extension = this.getSafeExtension(image.originalname, "png");
+    let payload: Buffer | Uint8Array = image.buffer;
+    let extension = this.getSafeExtension(image.originalname, "png");
+
+    // Some models cannot read WebP — normalize uploads to JPEG.
+    if (this.isWebpImage(image.buffer, image.mimetype, image.originalname)) {
+      payload = await this.convertWebpBufferToJpeg(image.buffer);
+      extension = "jpg";
+    }
+
     const imageFilename = `${id}.${extension}`;
     const imagePath = join("files", imageFilename);
 
-    await Bun.write(imagePath, image.buffer);
+    await Bun.write(imagePath, payload);
     const imageUrl = `${originUrl}/files/${imageFilename}`;
 
     return {
