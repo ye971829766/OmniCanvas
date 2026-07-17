@@ -18,6 +18,32 @@ const profileModalVisible = ref(false);
 const authModalMode = ref<"login" | "register">("login");
 const isInitializing = ref(true);
 
+/** In-flight profile fetch so concurrent callers share one request. */
+let profileFetchPromise: Promise<UserProfile | null> | null = null;
+
+function isAuthError(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } } | null)?.response?.status;
+  return status === 401 || status === 403;
+}
+
+function readStoredToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function clearSession() {
+  currentUser.value = null;
+  token.value = null;
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function useUser() {
   const isLoggedIn = computed(() => !!currentUser.value);
 
@@ -41,25 +67,73 @@ export function useUser() {
     }
   };
 
-  const fetchProfile = async () => {
-    if (!token.value) {
-      currentUser.value = null;
-      isInitializing.value = false;
+  /**
+   * Load / refresh the current user from the API.
+   * Only clears the session on real auth failures (401/403).
+   * Network / 5xx / decrypt errors keep the token so browser-back from
+   * Stripe (or a brief outage) does not force a full re-login.
+   */
+  const fetchProfile = async (): Promise<UserProfile | null> => {
+    if (profileFetchPromise) return profileFetchPromise;
+
+    profileFetchPromise = (async () => {
+      // Stay in sync with storage (multi-tab, bfcache, payment return).
+      const stored = readStoredToken();
+      if (stored !== token.value) {
+        token.value = stored;
+      }
+
+      if (!token.value) {
+        currentUser.value = null;
+        isInitializing.value = false;
+        return null;
+      }
+
+      try {
+        const profile = await getCurrentUser();
+        currentUser.value = profile;
+        authModalVisible.value = false;
+        return profile;
+      } catch (err) {
+        console.warn("Failed to fetch current user profile:", err);
+        if (isAuthError(err)) {
+          // request interceptor may already have cleared storage; keep state consistent
+          clearSession();
+        }
+        // Transient error: keep token (and any existing currentUser) so a retry can recover.
+        return currentUser.value;
+      } finally {
+        isInitializing.value = false;
+        profileFetchPromise = null;
+      }
+    })();
+
+    return profileFetchPromise;
+  };
+
+  /**
+   * Ensure we have a session when a token exists (e.g. after pageshow / payment return).
+   * Retries once after a short delay for flaky post-redirect networks.
+   */
+  const ensureSession = async (): Promise<UserProfile | null> => {
+    if (currentUser.value) return currentUser.value;
+
+    const stored = readStoredToken();
+    if (!stored) {
+      token.value = null;
       return null;
     }
-    try {
-      const profile = await getCurrentUser();
-      currentUser.value = profile;
-      authModalVisible.value = false;
-      return profile;
-    } catch (err) {
-      console.warn("Failed to fetch current user profile:", err);
-      currentUser.value = null;
-      setToken(null);
-      return null;
-    } finally {
-      isInitializing.value = false;
+    token.value = stored;
+
+    let profile = await fetchProfile();
+    if (profile) return profile;
+
+    // Token still present → likely transient; retry once.
+    if (readStoredToken()) {
+      await new Promise((r) => setTimeout(r, 450));
+      profile = await fetchProfile();
     }
+    return profile;
   };
 
   const applyAuthResponse = (res: { token?: string; user?: UserProfile } | null | undefined) => {
@@ -88,8 +162,7 @@ export function useUser() {
   };
 
   const logout = () => {
-    currentUser.value = null;
-    setToken(null);
+    clearSession();
     profileModalVisible.value = false;
   };
 
@@ -135,6 +208,7 @@ export function useUser() {
     openAuthModal,
     openProfileModal,
     fetchProfile,
+    ensureSession,
     login,
     loginWithGoogle,
     register,
@@ -146,7 +220,17 @@ export function useUser() {
 // Global listener setup
 if (typeof window !== "undefined") {
   window.addEventListener("omnicanvas:unauthorized", () => {
-    currentUser.value = null;
-    token.value = null;
+    clearSession();
+  });
+
+  // Multi-tab: another tab logged out/in
+  window.addEventListener("storage", (event) => {
+    if (event.key !== TOKEN_KEY) return;
+    if (!event.newValue) {
+      currentUser.value = null;
+      token.value = null;
+    } else {
+      token.value = event.newValue;
+    }
   });
 }

@@ -205,12 +205,9 @@ export function normalizeImageToolCallForSelection(
     !explicitlySetReferences
   ) {
     const {
-      aspectRatio: _aspectRatio,
       deliverable: _deliverable,
       platform: _platform,
-      refId: _refId,
       refImages: _refImages,
-      style: _style,
       ...compatibleInput
     } = rawInput;
     return {

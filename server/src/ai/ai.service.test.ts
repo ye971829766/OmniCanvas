@@ -271,6 +271,10 @@ describe("AiService GPT Image 2 request defaults", () => {
     expect(service.resolveImageRequestQuality("gpt-image-2", "hd")).toBe("high");
     expect(service.resolveImageRequestQuality("gpt-image-2", "low")).toBe("low");
     expect(service.resolveImageRequestSize("gpt-image-2", "2000x2000", options)).toBe("2000x2000");
+    expect(service.resolveImageRequestSize("gpt-image-2", "auto", options, "16:9")).toBe("1536x864");
+    expect(service.resolveImageRequestSize("gpt-image-2", undefined, options, "2:3")).toBe("1024x1536");
+    expect(service.resolveImageRequestSize("gpt-image-2", undefined, options, "3:4")).toBe("1152x1536");
+    expect(service.resolveImageRequestSize("other-image", "auto", options, "16:9")).toBe("auto");
   });
 
   test("normalizes direct-generator and agent requests to the same model, quality, size, and reference bytes", async () => {
@@ -301,6 +305,15 @@ describe("AiService GPT Image 2 request defaults", () => {
       quality: "high",
       images: [reference],
     });
+  });
+
+  test("maps shared quality levels to native Gemini imageSize controls", () => {
+    const service = createService() as any;
+
+    expect(service.resolveNativeGeminiImageSize("gemini-3.1-flash-image", "auto", "high")).toBe("4K");
+    expect(service.resolveNativeGeminiImageSize("gemini-3.1-flash-image", "auto", "medium")).toBe("2K");
+    expect(service.resolveNativeGeminiImageSize("gemini-3.1-flash-image", "1K", "high")).toBe("1K");
+    expect(service.resolveNativeGeminiImageSize("gemini-image", "auto", "auto")).toBe("1K");
   });
 });
 

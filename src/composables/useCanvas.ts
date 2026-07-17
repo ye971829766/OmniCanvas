@@ -1120,6 +1120,8 @@ export function useCanvas(
         cornerRadius: rawNode.cornerRadius || 0,
       });
 
+      // Shimmer sweep — CustomSnap ignores LayoutEvent.AFTER while dragging so
+      // continuous layout from this animation no longer clears guide lines.
       const loadingRect = new Rect({
         x: -w,
         width: w,
@@ -1162,9 +1164,7 @@ export function useCanvas(
       rawNode._loadingGroup = loadingGroup;
 
       loadingRect.animate(
-        {
-          x: w,
-        },
+        { x: w },
         {
           duration: 1.2,
           loop: true,

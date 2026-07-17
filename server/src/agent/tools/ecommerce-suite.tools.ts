@@ -221,10 +221,12 @@ export const planEcommerceSuiteTool: AgentTool = {
           `${needsUpscale ? 'Upscale the source first; every generation will use the original identity reference plus the returned refId as a resolution aid. ' : ''}` +
           'Generate every deliverable with generate_image as one finished flattened image at its exact root-canvas x/y and size. Do not create frames, groups, text nodes, or shape nodes. ' +
           'For each deliverable, write a complete role-specific production prompt (same language as the user) that states the commercial role, composition, lighting, typography intent, and any verified selling points from the plan — not a one-line stub like "生成主图". ' +
-          '详情页 / detail roles must be finished mobile conversion modules (headline hierarchy, multi-angle evidence, captions), not pure studio product photos. ' +
+          (platforms.includes('amazon')
+            ? 'Amazon work must meet the amazon_listing_gold_standard quality bar: pure-white main image with zero text, coherent suite lighting, English claim hierarchy on infographic/material/detail slides, material macro + icon row, multi-panel construction details, no cart/stars/price chrome, no invented specs. Use each deliverable role seed/objective from the plan. '
+            : '详情页 / detail roles must be finished mobile conversion modules (headline hierarchy, multi-angle evidence, captions), not pure studio product photos. ') +
           'You own the full production prompt; the server does not append art-direction scaffolds. Lock product identity via refImages and do not invent product claims. ' +
           'Pass platform and deliverable on each generate_image call when possible. Use high quality. Do not add an automatic verification or scoring step.',
-        note: 'Platform presets are production defaults and should be rechecked against the seller console before final publishing.',
+        note: 'Platform presets are production defaults and should be rechecked against the seller console before final publishing. Amazon presets encode the gold-standard listing suite quality bar.',
       },
     };
   },

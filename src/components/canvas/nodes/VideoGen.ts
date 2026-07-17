@@ -225,7 +225,8 @@ export class VideoGen extends Box {
 
       group.add(iconGroup);
 
-      // Loading state (shimmer animation and prompt text)
+      // Loading state with horizontal shimmer.
+      // Snap guides must tolerate continuous layout (see CustomSnap).
       if (this.generationStatus === "generating") {
         const loadingText = new Text({
           x: w / 2,
@@ -233,7 +234,7 @@ export class VideoGen extends Box {
           text: this.prompt,
           fontSize: 14,
           fontWeight: "bold",
-          fill: "#00000050", // grey transparent
+          fill: "#00000050",
           textAlign: "center",
           verticalAlign: "middle",
         });
@@ -259,9 +260,7 @@ export class VideoGen extends Box {
         group.remove(iconGroup);
 
         loadingRect.animate(
-          {
-            x: w,
-          },
+          { x: w },
           {
             duration: 1.2,
             loop: true,

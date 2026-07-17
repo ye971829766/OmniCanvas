@@ -191,7 +191,9 @@ export function selectAgentToolNames({
     hasCanvasImages,
   });
   const focusedImageModel = directImageRequest || imageModelBitmap;
-  const imageResearchRequired = shouldResearchFinalImageRequest(userInput);
+  const webResearchAvailable = Boolean(process.env.TAVILY_API_KEY);
+  const imageResearchRequired =
+    webResearchAvailable && shouldResearchFinalImageRequest(userInput);
 
   const explicitSize = matches(
     input,
@@ -256,7 +258,10 @@ export function selectAgentToolNames({
     selected.add("collect_inspiration");
   }
 
-  if (matches(input, /\b(?:search|research|latest|news|trend|website|web page|url)\b|https?:\/\/|\u641c\u7d22|\u67e5\u627e|\u6700\u65b0|\u65b0\u95fb|\u8d8b\u52bf|\u7f51\u9875|\u7f51\u7ad9/)) {
+  if (
+    webResearchAvailable &&
+    matches(input, /\b(?:search|research|latest|news|trend|website|web page|url)\b|https?:\/\/|\u641c\u7d22|\u67e5\u627e|\u6700\u65b0|\u65b0\u95fb|\u8d8b\u52bf|\u7f51\u9875|\u7f51\u7ad9/)
+  ) {
     selected.add("web_search");
     selected.add("web_extract");
   }

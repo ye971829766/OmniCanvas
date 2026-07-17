@@ -106,12 +106,18 @@ import { useUser } from "@/composables/useUser";
 import AuthForm from "@/components/auth/AuthForm.vue";
 
 const router = useRouter();
-const { isLoggedIn, isInitializing, authModalMode } = useUser();
+const { isLoggedIn, isInitializing, authModalMode, ensureSession } = useUser();
 
 const isLogin = computed(() => authModalMode.value === "login");
 
 onMounted(() => {
   authModalMode.value = "login";
+  // Returning from payment / hard refresh may land here with a still-valid token.
+  if (localStorage.getItem("omnicanvas_token") && !isLoggedIn.value) {
+    void ensureSession().then((profile) => {
+      if (profile) void router.replace("/canvas");
+    });
+  }
 });
 
 watch(

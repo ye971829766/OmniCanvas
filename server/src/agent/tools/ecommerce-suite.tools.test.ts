@@ -50,6 +50,7 @@ describe('planEcommerceSuiteTool', () => {
     });
     expect(output.plan.steps.some((step: any) => step.tools?.includes('add_frame'))).toBe(false);
     expect(output.instruction).toContain('Do not create frames');
+    expect(output.instruction).toContain('amazon_listing_gold_standard');
   });
 
   test('rejects unknown asset ids', async () => {

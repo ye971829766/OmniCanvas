@@ -33,9 +33,18 @@ describe('image processing canvas task state', () => {
     await editImageTool.execute({
       source: 'source_image',
       prompt: 'Add a handbag and keep everything else unchanged.',
+      style: 'natural editorial photography',
+      aspectRatio: '2:3',
+      quality: 'high',
     }, ctx);
 
     expect(imageRequests).toHaveLength(1);
+    expect(imageRequests[0]).toMatchObject({
+      prompt: 'Add a handbag and keep everything else unchanged.',
+      style: 'natural editorial photography',
+      aspectRatio: '2:3',
+      quality: 'high',
+    });
     expect(canvasOps).toContainEqual({
       op: 'generation_started',
       refId: 'edit_1',

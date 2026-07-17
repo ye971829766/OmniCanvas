@@ -513,8 +513,12 @@ ${videoModelInfo || "- None"}
       hasAssets: hasAssetSource || currentAssets.length > 0,
       hasCanvasImages: canvasHasImages,
     });
+    // Research is required only when the optional web tools are configured and
+    // actually selected for this turn.
     const imageResearchRequired =
-      directImageRequest && shouldResearchFinalImageRequest(userInput);
+      directImageRequest &&
+      shouldResearchFinalImageRequest(userInput) &&
+      selectedToolNames.has("web_search");
     const preferredSource =
       currentTurnAsset?.id ||
       defaultImageReferenceIds[0] ||

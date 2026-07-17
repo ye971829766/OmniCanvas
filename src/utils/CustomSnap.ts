@@ -1,4 +1,4 @@
-import { Line, PointerEvent, LayoutEvent, Group } from "leafer-ui";
+import { Line, PointerEvent, Group } from "leafer-ui";
 import { EditorEvent, EditorMoveEvent } from "@leafer-in/editor";
 import type { IApp, IUI } from "@leafer-ui/interface";
 import type { ISimulateElement } from "@leafer-in/interface";
@@ -46,6 +46,8 @@ export class CustomSnap {
   private horizontalLines: Line[] = [];
   private verticalLinePoints: Group[] = [];
   private horizontalLinePoints: Group[] = [];
+  /** True while an editor move is in progress — ignore layout-driven clears. */
+  private isMoving = false;
 
   // 吸附距离
   public snapSize: number = DEFAULT_SNAP_SIZE;
@@ -92,6 +94,7 @@ export class CustomSnap {
     this.handleMove = this.handleMove.bind(this);
     this.handleSelect = this.handleSelect.bind(this);
     this.clear = this.clear.bind(this);
+    this.handlePointerUp = this.handlePointerUp.bind(this);
   }
 
   /**
@@ -199,6 +202,7 @@ export class CustomSnap {
    * 处理移动事件
    */
   private handleMove(event: EditorMoveEvent) {
+    this.isMoving = true;
     this.clearLines();
     if (this.showLinePoints) {
       this.clearPoints();
@@ -768,15 +772,24 @@ export class CustomSnap {
     }
   }
 
+  private handlePointerUp() {
+    this.isMoving = false;
+    this.clear();
+  }
+
   /**
    * 启用吸附
+   *
+   * Intentionally do NOT clear guides on tree LayoutEvent.AFTER.
+   * Generating nodes run looped shimmer animations that thrash layout every
+   * frame; listening to AFTER would hide/show snap lines and cause flicker.
+   * Guides are redrawn on MOVE and cleared on pointer up / deselect instead.
    */
   public enable(enable: boolean) {
     if (enable) {
       this.app.editor?.on(EditorEvent.SELECT, this.handleSelect);
       this.app.editor?.on(EditorMoveEvent.MOVE, this.handleMove);
-      this.app.on(PointerEvent.UP, this.clear);
-      this.app.tree?.on(LayoutEvent.AFTER, this.clear);
+      this.app.on(PointerEvent.UP, this.handlePointerUp);
 
       const selectElements = this.app.editor?.list;
       if (selectElements && selectElements.length > 0) {
@@ -787,8 +800,8 @@ export class CustomSnap {
     } else {
       this.app.editor?.off(EditorEvent.SELECT, this.handleSelect);
       this.app.editor?.off(EditorMoveEvent.MOVE, this.handleMove);
-      this.app.off(PointerEvent.UP, this.clear);
-      this.app.tree?.off(LayoutEvent.AFTER, this.clear);
+      this.app.off(PointerEvent.UP, this.handlePointerUp);
+      this.isMoving = false;
     }
   }
 
@@ -798,8 +811,8 @@ export class CustomSnap {
   public destroy() {
     this.app.editor?.off(EditorEvent.SELECT, this.handleSelect);
     this.app.editor?.off(EditorMoveEvent.MOVE, this.handleMove);
-    this.app.off(PointerEvent.UP, this.clear);
-    this.app.tree?.off(LayoutEvent.AFTER, this.clear);
+    this.app.off(PointerEvent.UP, this.handlePointerUp);
+    this.isMoving = false;
 
     this.clear();
     this.horizontalLines.forEach((line) => {

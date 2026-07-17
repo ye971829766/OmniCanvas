@@ -37,6 +37,21 @@ describe('buildEcommerceDeliverables', () => {
     });
     expect(defaults).toHaveLength(6);
     expect(deliverables).toHaveLength(8);
+    expect(defaults.map((item) => item.role)).toEqual([
+      'main',
+      'lifestyle',
+      'secondary_angle',
+      'infographic',
+      'material',
+      'detail',
+    ]);
+    expect(defaults.find((item) => item.role === 'main')?.copyMode).toBe('none');
+    expect(defaults.find((item) => item.role === 'main')?.promptSeed).toContain(
+      'Amazon-compliant main listing image',
+    );
+    expect(defaults.find((item) => item.role === 'material')?.promptSeed).toContain(
+      'real visible product material',
+    );
   });
 
   test('defaults Chinese marketplace suites to a six-image purchase narrative', () => {

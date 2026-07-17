@@ -227,7 +227,9 @@ export class ImageGen extends Box {
 
     group.add(iconGroup);
 
-    // Loading state
+    // Loading state with horizontal shimmer.
+    // Snap guides must tolerate continuous layout (see CustomSnap) — do not
+    // clear reference lines on LayoutEvent.AFTER while this runs.
     if (this.generationStatus === "generating") {
       const loadingText = new Text({
         x: w / 2,
@@ -235,32 +237,36 @@ export class ImageGen extends Box {
         text: this.prompt,
         fontSize: 14,
         fontWeight: "bold",
-        fill: "#00000050", // sky-500
+        fill: "#00000050",
         textAlign: "center",
-        verticalAlign: 'middle',
+        verticalAlign: "middle",
       });
 
       const loadingRect = new Rect({
-        x:-w,
+        x: -w,
         width: w,
         height: h,
-        // fill:'red',
         fill: {
-        type: 'linear', // 水平线性渐变（从左到右）
-        from: { type: 'percent', x: 0, y: 0.5 }, // 起点：左侧中间
-        to: { type: 'percent', x: 1, y: 0.5 },   // 终点：右侧中间
-        stops: ['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']
-      },
+          type: "linear",
+          from: { type: "percent", x: 0, y: 0.5 },
+          to: { type: "percent", x: 1, y: 0.5 },
+          stops: [
+            "rgba(255,255,255,0)",
+            "rgba(255,255,255,0.6)",
+            "rgba(255,255,255,0)",
+          ],
+        },
       });
       group.add(loadingRect);
       group.add(loadingText);
       group.remove(iconGroup);
-      loadingRect.animate({
-        x:w
-      }, {
-        duration: 1.2,
-        loop:true
-      });
+      loadingRect.animate(
+        { x: w },
+        {
+          duration: 1.2,
+          loop: true,
+        },
+      );
     }
     // Error state
     else if (this.generationStatus === "error") {

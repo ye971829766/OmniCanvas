@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Download, Play } from "lucide-vue-next";
+import { ExternalLink, Play } from "lucide-vue-next";
 import type { NodeState } from "@/composables/useAgent";
 import { resolveMediaDisplayUrl } from "@/utils/agentMediaState";
 
@@ -178,7 +178,7 @@ function onVideoEnded() {
         title="在新标签页打开"
         @click.stop="downloadMedia"
       >
-        <Download :size="15" />
+        <ExternalLink :size="13" :stroke-width="2.25" />
       </button>
     </div>
 
@@ -191,13 +191,13 @@ function onVideoEnded() {
       <span class="error-text">{{ imageFailed ? "预览加载失败" : "图片地址缺失" }}</span>
       <button
         v-if="imageSrc"
-        class="action-download-btn"
+        class="action-download-btn is-always-visible"
         type="button"
         aria-label="在新标签页打开图片"
         title="在新标签页打开"
         @click.stop="downloadMedia"
       >
-        <Download :size="15" />
+        <ExternalLink :size="13" :stroke-width="2.25" />
       </button>
     </div>
 
@@ -255,7 +255,7 @@ function onVideoEnded() {
         title="在新标签页打开"
         @click.stop="downloadMedia"
       >
-        <Download :size="15" />
+        <ExternalLink :size="13" :stroke-width="2.25" />
       </button>
     </div>
   </div>
@@ -483,44 +483,98 @@ function onVideoEnded() {
   object-fit: cover;
 }
 
+/* Floating open action — light glass chip, only asserts itself on hover */
 .action-download-btn {
   position: absolute;
-  right: 9px;
-  bottom: 9px;
+  right: 8px;
+  bottom: 8px;
   z-index: 5;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 999px;
-  background: rgba(24, 24, 27, 0.84);
-  color: #ffffff;
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #18181b;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 2px 8px rgba(0, 0, 0, 0.12),
+    0 8px 20px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
   cursor: pointer;
+  opacity: 0;
+  transform: translateY(3px) scale(0.96);
+  pointer-events: none;
   transition:
-    background-color 150ms ease,
-    transform 150ms ease;
+    opacity 160ms ease,
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.preview-card:hover .action-download-btn,
+.preview-card:focus-within .action-download-btn,
+.action-download-btn.is-always-visible,
+.action-download-btn:focus-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
 }
 
 .action-download-btn:hover {
-  background: rgba(24, 24, 27, 0.96);
-  transform: translateY(-1px);
+  background: #ffffff;
+  color: #09090b;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.05),
+    0 4px 14px rgba(0, 0, 0, 0.14),
+    0 10px 24px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px) scale(1.04);
+}
+
+.action-download-btn:active {
+  transform: translateY(0) scale(0.98);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .action-download-btn:focus-visible {
-  outline: 2px solid #ffffff;
+  outline: 2px solid rgba(24, 24, 27, 0.55);
   outline-offset: 2px;
 }
 
 .compact .action-download-btn {
-  right: 7px;
-  bottom: 7px;
-  width: 27px;
-  height: 27px;
+  right: 6px;
+  bottom: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+
+@media (hover: none), (pointer: coarse) {
+  /* Touch devices: keep the control reachable without hover */
+  .action-download-btn {
+    opacity: 0.92;
+    transform: none;
+    pointer-events: auto;
+  }
+}
+
+:global(.p-dark .action-download-btn) {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(24, 24, 27, 0.78);
+  color: #fafafa;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+:global(.p-dark .action-download-btn:hover) {
+  background: rgba(39, 39, 42, 0.95);
+  color: #ffffff;
 }
 
 /* Overlay */

@@ -52,15 +52,17 @@
       </div>
     </div>
 
-    <!-- Prompt Textarea (using PrimeVue Textarea with autoResize) -->
-    <Textarea
-      v-model="promptText"
-      class="prompt-textarea"
-      placeholder="今天我们要创作什么"
-      rows="2"
-      autoResize
-      :disabled="isGenerating"
-    />
+    <!-- Prompt: auto-grow with capped scroll so long prompts never overflow the viewport -->
+    <div class="prompt-scroll-container">
+      <Textarea
+        v-model="promptText"
+        class="prompt-textarea"
+        placeholder="今天我们要创作什么"
+        rows="2"
+        autoResize
+        :disabled="isGenerating"
+      />
+    </div>
 
     <!-- Bottom Controls Row -->
     <div class="card-controls-row">
@@ -401,6 +403,34 @@ const handleGenerate = async () => {
   pointer-events: auto;
 }
 
+.prompt-scroll-container {
+  width: 100%;
+  min-height: 0;
+  max-height: min(42vh, 320px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Keep wheel scroll inside the card instead of zooming the canvas */
+  touch-action: pan-y;
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--p-surface-300, #cbd5e1) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--p-surface-300, #cbd5e1);
+    border-radius: 9999px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--p-surface-400, #94a3b8);
+  }
+}
+
 .prompt-textarea {
   width: 100% !important;
   border: none !important;
@@ -413,6 +443,9 @@ const handleGenerate = async () => {
   resize: none;
   padding: 2px 4px !important;
   line-height: 1.5;
+  /* Height is managed by autoResize; scrolling is on the wrapper */
+  overflow: hidden !important;
+  display: block;
 
   &::placeholder {
     color: var(--p-surface-400);

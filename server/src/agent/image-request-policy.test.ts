@@ -3,8 +3,10 @@ import {
   applyFinalImageRequestPolicy,
   applyFinalImageSeriesLayout,
   finalImagePromptFromUserInput,
+  getEcommercePlatformHint,
   getFinalImagePromptMode,
   getFinalImageSeriesStrategy,
+  isAmazonAPlusRequest,
   shouldResearchFinalImageRequest,
 } from './image-request-policy';
 
@@ -21,7 +23,10 @@ describe('final image request policy', () => {
     )).toBe('optimize');
     expect(getFinalImagePromptMode(
       '用这双鞋做一张暗黑科技风电商主图，黑色背景、蓝色霓虹侧光，产品居中，不要文字',
-    )).toBe('preserve');
+    )).toBe('normalize');
+    expect(getFinalImagePromptMode(
+      '不要改写提示词，生成一张黑白建筑摄影',
+    )).toBe('verbatim');
     expect(getFinalImagePromptMode(
       '生成这双鞋的淘宝套图 主图+详情页',
     )).toBe('optimize');
@@ -69,7 +74,7 @@ describe('final image request policy', () => {
     });
   });
 
-  test('protects a production-ready user prompt but does not delete technical controls', () => {
+  test('keeps the original concrete brief authoritative while allowing production normalization', () => {
     const userPrompt =
       '用这双鞋做一张暗黑科技风电商主图，黑色背景、蓝色霓虹侧光，产品居中，不要文字';
     const input = applyFinalImageRequestPolicy('generate_image', {
@@ -80,12 +85,25 @@ describe('final image request policy', () => {
       aspectRatio: '3:2',
     }, userPrompt);
 
-    expect(input).toEqual({
-      prompt: userPrompt,
+    expect(input.prompt).toContain(userPrompt);
+    expect(input.prompt).toContain('改成纯白背景目录图');
+    expect(input.prompt).toContain('如有冲突以上述原始要求为准');
+    expect(input.style).toBe('minimal catalog');
+    expect(input).toMatchObject({
       size: '1536x1024',
       quality: 'high',
       aspectRatio: '3:2',
     });
+  });
+
+  test('honors an explicit verbatim request but still applies the final-quality floor', () => {
+    const userPrompt = '不要改写提示词：黑白建筑摄影，强烈透视';
+    const input = applyFinalImageRequestPolicy('generate_image', {
+      prompt: 'rewritten',
+      style: 'colorful illustration',
+    }, userPrompt);
+
+    expect(input).toEqual({ prompt: userPrompt, quality: 'high' });
   });
 
   test('adds suite layout metadata and high quality without rewriting creative prompts', () => {
@@ -145,15 +163,82 @@ describe('final image request policy', () => {
     });
   });
 
-  test('leaves shared variants and non-image tools completely untouched', () => {
-    const calls = [{
+  test('leaves non-commercial shared variants and non-image tools untouched', () => {
+    const calls: Array<{ name: string; input: any }> = [{
       name: 'generate_image',
       input: { prompt: 'Agent prompt', quality: 'high' },
     }];
-    applyFinalImageSeriesLayout(calls, '生成 5 张统一风格的电商主图');
+    applyFinalImageSeriesLayout(calls, '生成 5 张统一风格的插画');
     expect(calls[0]!.input).toEqual({ prompt: 'Agent prompt', quality: 'high' });
 
     const input = { text: 'hello' };
     expect(applyFinalImageRequestPolicy('add_text', input, 'ignored')).toBe(input);
+  });
+
+  test('detects Amazon A+ and fills commercial provider defaults when omitted', () => {
+    expect(getEcommercePlatformHint('生成亚马逊的高级A+详情页')).toBe('amazon');
+    expect(isAmazonAPlusRequest('生成亚马逊的高级A+详情页')).toBe(true);
+    expect(getFinalImagePromptMode('生成亚马逊的高级A+详情页')).toBe('optimize');
+    expect(shouldResearchFinalImageRequest('生成亚马逊的高级A+详情页')).toBe(true);
+
+    const input = applyFinalImageRequestPolicy('generate_image', {
+      prompt: 'A multi-module Amazon A+ catalog page for white sneakers.',
+      refImages: ['asset_product'],
+    }, '生成亚马逊的高级A+详情页');
+
+    expect(input.quality).toBe('high');
+    expect(input.aspectRatio).toBe('2:3');
+    expect(input.size).toBe('1024x1536');
+    expect(input.prompt).toContain('Amazon A+');
+
+    const calls: Array<{ name: string; input: any }> = [{
+      name: 'generate_image',
+      input: {
+        prompt: 'Premium multi-module A+ content page',
+        refImages: ['asset_product'],
+      },
+    }];
+    applyFinalImageSeriesLayout(calls, '生成亚马逊的高级A+详情页');
+    expect(calls[0]!.input.quality).toBe('high');
+    expect(calls[0]!.input.aspectRatio).toBe('2:3');
+    expect(calls[0]!.input.size).toBe('1024x1536');
+  });
+
+  test('does not force A+ layout onto explicit Taobao detail briefs', () => {
+    expect(isAmazonAPlusRequest('生成这双鞋的淘宝详情页')).toBe(false);
+    const input = applyFinalImageRequestPolicy('generate_image', {
+      prompt: '淘宝详情页模块',
+      quality: 'high',
+      aspectRatio: '2:3',
+      size: '1024x1536',
+    }, '生成这双鞋的淘宝详情页');
+    expect(input.prompt).toBe('淘宝详情页模块');
+    expect(input.quality).toBe('high');
+  });
+
+  test('keeps every Amazon listing-suite image square and assigns category-neutral roles', () => {
+    const calls: Array<{ name: string; input: any }> = Array.from({ length: 6 }, (_, index) => ({
+      name: 'generate_image',
+      input: {
+        prompt: `Amazon image ${index + 1}`,
+        ...(index >= 3 ? { size: '1024x1536', aspectRatio: '1:1' } : {}),
+      },
+    }));
+
+    applyFinalImageSeriesLayout(calls, '生成这件产品的亚马逊套图');
+
+    expect(calls.map((call) => call.input.seriesRole)).toEqual([
+      'main',
+      'supporting_view',
+      'lifestyle',
+      'feature_evidence',
+      'visible_detail',
+      'use_or_scale',
+    ]);
+    expect(calls.every((call) =>
+      call.input.size === '2000x2000' &&
+      call.input.aspectRatio === '1:1' &&
+      call.input.quality === 'high'
+    )).toBe(true);
   });
 });

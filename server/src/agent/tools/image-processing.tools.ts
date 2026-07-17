@@ -204,7 +204,7 @@ export const editImageTool: AgentTool = {
     'Edit an existing uploaded photo or canvas image with the image generation model (not canvas shapes/text). ' +
     'Preferred for promotional shots, cool/new backgrounds, scene changes, retouching, and any "edit this photo" request. ' +
     'Use for adding, removing, or replacing pictured subjects, or changing product detail, background, lighting, material, or color while preserving identity. ' +
-    'Pass source as the exact assetId or canvas refId. Preserve concrete visual prompts and optimize only high-level task briefs. ' +
+    'Pass source as the exact assetId or canvas refId. Preserve every explicit edit constraint while normalizing concrete briefs; optimize high-level task briefs. ' +
     'Do not rebuild posters with add_text/add_rect when this tool applies.',
   parameters: {
     type: 'object',
@@ -213,12 +213,15 @@ export const editImageTool: AgentTool = {
       prompt: {
         type: 'string',
         description:
-          'Complete edit prompt. Concrete user requests stay unchanged; for a high-level task, author all useful art direction without a fixed length or template. Do not invent factual product attributes.',
+          'Complete edit prompt. Keep every explicit change and invariant; normalize a concrete request into a focused edit spec, or author useful art direction for a high-level task. Exact wording is required only when the user asks for verbatim handling. Do not invent factual product attributes.',
       },
       maskRef: { type: 'string', description: 'Optional PNG mask assetId, canvas refId, URL, or data URL for localized edits.' },
       model: { type: 'string' },
       size: { type: 'string' },
       quality: { type: 'string' },
+      aspectRatio: { type: 'string', description: 'Optional output aspect ratio such as 1:1, 16:9, or 2:3.' },
+      style: { type: 'string', description: 'Optional style instruction appended to the edit prompt.' },
+      seriesRole: { type: 'string', description: 'Optional semantic role when this edit belongs to a multi-image suite.' },
       ...placementProperties,
     },
     required: ['source', 'prompt'],
@@ -237,12 +240,22 @@ export const editImageTool: AgentTool = {
     const billed = await startBilledAgentTask(
       ctx,
       'image_edit',
-      { prompt: input.prompt, model: input.model, size: input.size, quality: input.quality, source: input.source, localized: Boolean(mask) },
+      {
+        prompt: input.prompt,
+        model: input.model,
+        size: input.size,
+        quality: input.quality,
+        aspectRatio: input.aspectRatio,
+        source: input.source,
+        localized: Boolean(mask),
+      },
       (billingContext) => ctx.ai.generateImageFromJson(
         {
           prompt: input.prompt,
           model: input.model,
+          style: input.style,
           size: input.size,
+          aspectRatio: input.aspectRatio,
           quality: input.quality,
           images: [sourceBase64],
           mask: mask || undefined,

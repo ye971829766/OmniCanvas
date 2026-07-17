@@ -114,7 +114,7 @@ export function getGenerationAspectRatio(width: number, height: number): string 
 export const generateImageTool: AgentTool = {
   name: 'generate_image',
   description:
-    'Generate a finished bitmap and place it on the canvas. Preserve a concrete visual prompt unchanged. ' +
+    'Generate a finished bitmap and place it on the canvas. Preserve every explicit requirement in a concrete visual brief while normalizing it into a production-ready prompt. ' +
     'When the user supplied only a high-level task brief, use research and design judgment to author the complete production prompt. Pass attached ' +
     'or selected images in refImages. Explicit main+detail suites should use coherent, meaningfully different role-specific prompts.',
   parameters: {
@@ -124,7 +124,7 @@ export const generateImageTool: AgentTool = {
       prompt: {
         type: 'string',
         description:
-          'Complete image-model prompt. Preserve a concrete user prompt unchanged. For a high-level brief, write the full art direction needed for the strongest result; no fixed length or template applies. Avoid unsupported product facts and empty keyword stuffing.',
+          'Complete image-model prompt. Keep every explicit user detail and constraint; normalize concrete briefs into a focused production spec and expand high-level briefs with the art direction needed for the strongest result. Exact wording is required only when the user asks for verbatim handling. Avoid unsupported facts and empty keyword stuffing.',
       },
       model: { type: 'string', description: 'Optional image model id. Usually omit unless the user selected one.' },
       aspectRatio: { type: 'string', description: 'Optional aspect ratio such as 1:1, 16:9, 3:4, or a provider-supported custom ratio.' },
@@ -133,6 +133,11 @@ export const generateImageTool: AgentTool = {
       style: {
         type: 'string',
         description: 'Optional provider style control. Use only when it materially improves the requested deliverable.',
+      },
+      seriesRole: {
+        type: 'string',
+        description:
+          'Optional semantic role for this image in a multi-image suite (for example main, lifestyle, visible_detail, detail_overview). Use a distinct role per deliverable.',
       },
       refImages: {
         type: 'array',

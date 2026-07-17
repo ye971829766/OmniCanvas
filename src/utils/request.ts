@@ -174,9 +174,21 @@ request.interceptors.response.use(
       }
     }
 
+    // Only treat authenticated-request 401 as session expiry.
+    // Login/register 401 must not wipe an existing token, and bare 401s
+    // without Authorization are not session invalidation.
     if (error.response?.status === 401) {
-      localStorage.removeItem("omnicanvas_token");
-      window.dispatchEvent(new CustomEvent("omnicanvas:unauthorized"));
+      const headers = error.config?.headers;
+      const authHeader =
+        headers &&
+        (typeof (headers as { get?: (k: string) => unknown }).get === "function"
+          ? (headers as { get: (k: string) => unknown }).get("Authorization")
+          : (headers as Record<string, unknown>).Authorization ||
+            (headers as Record<string, unknown>).authorization);
+      if (authHeader) {
+        localStorage.removeItem("omnicanvas_token");
+        window.dispatchEvent(new CustomEvent("omnicanvas:unauthorized"));
+      }
     }
     if (error.response?.status === 402) {
       window.dispatchEvent(

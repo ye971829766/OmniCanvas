@@ -29,21 +29,35 @@ const router = createRouter({
 let authReady = false;
 
 router.beforeEach(async (to) => {
-  const { fetchProfile, isLoggedIn } = useUser();
+  const { ensureSession, fetchProfile, isLoggedIn } = useUser();
 
   if (!authReady) {
-    await fetchProfile();
+    // Prefer ensureSession (includes one retry) so a flaky first request
+    // after browser-back from Stripe does not dump the user on /login.
+    await ensureSession();
     authReady = true;
+  } else if (!isLoggedIn.value && localStorage.getItem("omnicanvas_token")) {
+    // Token present but session not hydrated (bfcache / race) — rehydrate.
+    await fetchProfile();
   }
 
   if (to.meta.public) {
     if (to.path === "/login" && isLoggedIn.value) {
       return "/canvas";
     }
+    // Token exists but profile not loaded yet — try once more on the login page.
+    if (to.path === "/login" && !isLoggedIn.value && localStorage.getItem("omnicanvas_token")) {
+      await ensureSession();
+      if (isLoggedIn.value) return "/canvas";
+    }
     return true;
   }
 
   if (!isLoggedIn.value) {
+    if (localStorage.getItem("omnicanvas_token")) {
+      await ensureSession();
+      if (isLoggedIn.value) return true;
+    }
     return "/login";
   }
 

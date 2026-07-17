@@ -17,25 +17,67 @@ import { useToast } from "primevue/usetoast";
 
 const route = useRoute();
 const router = useRouter();
-const { isLoggedIn, isInitializing } = useUser();
-const { openBilling } = useBilling();
+const { isLoggedIn, isInitializing, ensureSession } = useUser();
+const { openBilling, refreshBalance } = useBilling();
 const toast = useToast();
 const handlePaymentRequired = () => openBilling("plans");
 
-onMounted(() => window.addEventListener("omnicanvas:payment-required", handlePaymentRequired));
-onUnmounted(() => window.removeEventListener("omnicanvas:payment-required", handlePaymentRequired));
+/** Rehydrate auth after bfcache restore or return from external checkout. */
+async function rehydrateAuthAfterReturn() {
+  if (!localStorage.getItem("omnicanvas_token")) return;
+  const profile = await ensureSession();
+  if (profile && route.path === "/login") {
+    await router.replace("/canvas");
+  }
+  if (profile) {
+    void refreshBalance();
+  }
+}
+
+function handlePageShow(event: PageTransitionEvent) {
+  // event.persisted = restored from bfcache; also rehydrate on normal show
+  // after leaving to Stripe via location.assign + browser Back.
+  if (event.persisted || document.visibilityState === "visible") {
+    void rehydrateAuthAfterReturn();
+  }
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === "visible") {
+    void rehydrateAuthAfterReturn();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("omnicanvas:payment-required", handlePaymentRequired);
+  window.addEventListener("pageshow", handlePageShow);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+});
+onUnmounted(() => {
+  window.removeEventListener("omnicanvas:payment-required", handlePaymentRequired);
+  window.removeEventListener("pageshow", handlePageShow);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+});
 
 watch(
   () => route.query.payment,
-  (payment) => {
+  async (payment) => {
+    if (payment !== "stripe_success" && payment !== "stripe_cancelled") {
+      return;
+    }
+    // Official Stripe return URL: ensure session before opening billing UI.
+    await ensureSession();
     if (payment === "stripe_success") {
       openBilling("orders");
-      toast.add({ severity: "info", summary: "支付确认中", detail: "Stripe 到账后积分会自动更新", life: 4500 });
-    } else if (payment === "stripe_cancelled") {
+      toast.add({
+        severity: "info",
+        summary: "支付确认中",
+        detail: "Stripe 到账后积分会自动更新",
+        life: 4500,
+      });
+    } else {
       openBilling("orders");
       toast.add({ severity: "secondary", summary: "支付已取消", life: 3000 });
-    } else {
-      return;
     }
     const query = { ...route.query };
     delete query.payment;
@@ -46,11 +88,16 @@ watch(
   { immediate: true },
 );
 
-watch([isLoggedIn, isInitializing], ([loggedIn, initializing]) => {
+watch([isLoggedIn, isInitializing], async ([loggedIn, initializing]) => {
   if (initializing) return;
-  if (!loggedIn && route.path !== "/login") {
-    router.push("/login");
+  if (loggedIn || route.path === "/login") return;
+
+  // Token still present → transient profile failure; try restore before kicking out.
+  if (localStorage.getItem("omnicanvas_token")) {
+    const profile = await ensureSession();
+    if (profile) return;
   }
+  router.push("/login");
 });
 </script>
 

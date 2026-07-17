@@ -496,6 +496,9 @@ const handleGenerate = async () => {
   font-size: 11px;
   font-family: inherit;
   resize: vertical;
+  max-height: min(42vh, 280px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background-color: var(--p-surface-50);
   color: var(--text-primary);
   outline: none;

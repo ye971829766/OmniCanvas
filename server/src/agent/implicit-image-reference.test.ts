@@ -137,6 +137,8 @@ describe("implicit image reference routing", () => {
         height: 1536,
         x: -2432,
         y: 858,
+        aspectRatio: "2:3",
+        style: "natural editorial photography",
       },
       {
         source: "image_mrg8wdpu_1",
@@ -156,6 +158,8 @@ describe("implicit image reference routing", () => {
       height: 1536,
       x: -2432,
       y: 858,
+      aspectRatio: "2:3",
+      style: "natural editorial photography",
     });
     expect(normalized.input.prompt).toContain(
       "Add a kitten beside the puppy in the selected image",

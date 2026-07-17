@@ -78,7 +78,7 @@ describe('generateImageTool prompt policy', () => {
     expect(generatedNodes(events)[0].deliverable).toBeUndefined();
   });
 
-  test('keeps technical controls that the user explicitly supplied', async () => {
+  test('keeps the agent production prompt and explicit provider controls', async () => {
     const { ctx, imageRequests } = createContext();
     ctx.directImageRequest = true;
     ctx.userInput = '生成 1024x1536、2:3、high 的竖版插画';
@@ -92,12 +92,27 @@ describe('generateImageTool prompt policy', () => {
     }, ctx);
 
     expect(imageRequests[0]).toMatchObject({
-      prompt: ctx.userInput,
+      prompt: 'rewritten prompt',
       size: '1024x1536',
       quality: 'high',
       aspectRatio: '2:3',
-      style: undefined,
+      style: 'invented style suffix',
     });
+  });
+
+  test('keeps a concrete user brief authoritative while retaining useful rendering notes', async () => {
+    const { ctx, imageRequests } = createContext();
+    ctx.directImageRequest = true;
+    ctx.userInput = '黑色背景、蓝色霓虹侧光，产品居中，不要文字，写实商业摄影';
+
+    await generateImageTool.execute({
+      prompt: 'Use controlled specular highlights and a clean centered silhouette.',
+      aspectRatio: '1:1',
+    }, ctx);
+
+    expect(imageRequests[0].prompt).toContain(ctx.userInput);
+    expect(imageRequests[0].prompt).toContain('controlled specular highlights');
+    expect(imageRequests[0].quality).toBe('high');
   });
 
   test('respects an explicit opt-out from an implicit reference', async () => {

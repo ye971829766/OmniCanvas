@@ -789,13 +789,16 @@ function parseUserText(text: string) {
   background: transparent;
   font-size: var(--text-base);
   line-height: 1.7;
+  font-weight: 500;
+  color: var(--agent-text-primary);
   word-break: break-word;
   animation: msg-enter-ai 0.3s cubic-bezier(0, 0, 0.2, 1) both;
 }
 
 .assistant-run {
-  /* Align with global Noir tokens — no local indigo/purple palette */
-  --agent-text-primary: var(--p-text-color, #1d1d1f);
+  /* Align with global Noir tokens — no local indigo/purple palette.
+     Reply body uses a near-black primary so final answers read denser. */
+  --agent-text-primary: #0a0a0a;
   --agent-text-secondary: var(--p-text-muted-color, #86868b);
   --agent-text-muted: var(--p-text-muted-color, #86868b);
   --agent-text-disabled: var(--p-surface-400, #c4c6ca);
@@ -896,8 +899,10 @@ function parseUserText(text: string) {
 
 .update-markdown {
   min-width: 0;
-  color: var(--agent-text-secondary);
+  /* Streaming draft should match final reply weight/contrast */
+  color: var(--agent-text-primary);
   font-size: 13px;
+  font-weight: 500;
   line-height: 1.58;
   overflow-wrap: anywhere;
 }
@@ -914,7 +919,7 @@ function parseUserText(text: string) {
 
 .update-markdown :deep(strong) {
   color: var(--agent-text-primary);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .update-markdown :deep(em) {
@@ -956,7 +961,7 @@ function parseUserText(text: string) {
 
 /* ── ChatGPT-style Pulsing Streaming Dot (Inline at text tail) ────── */
 .incremark {
-  --incremark-color-text-primary: var(--agent-text-primary, #18181b);
+  --incremark-color-text-primary: var(--agent-text-primary, #0a0a0a);
   --incremark-color-text-secondary: var(--agent-text-secondary, #52525b);
   --incremark-color-text-tertiary: var(--agent-text-muted, #71717a);
   --incremark-color-background-base: var(--agent-surface-raised, #ffffff);
@@ -965,11 +970,11 @@ function parseUserText(text: string) {
   --incremark-color-border-subtle: var(--agent-border-subtle, #e4e4e7);
   --incremark-color-border-strong: var(--agent-border-strong, #d4d4d8);
   --incremark-color-code-inline-background: var(--agent-surface-hover, #f4f4f5);
-  --incremark-color-code-inline-text: var(--agent-text-primary, #18181b);
+  --incremark-color-code-inline-text: var(--agent-text-primary, #0a0a0a);
   --incremark-color-code-block-background: #18181b;
   --incremark-color-code-block-text: #f4f4f5;
-  --incremark-color-interactive-link: var(--agent-text-primary, #18181b);
-  --incremark-color-interactive-link-hover: var(--agent-text-primary, #18181b);
+  --incremark-color-interactive-link: var(--agent-text-primary, #0a0a0a);
+  --incremark-color-interactive-link-hover: var(--agent-text-primary, #0a0a0a);
   --incremark-color-interactive-link-visited: var(
     --agent-text-secondary,
     #52525b
@@ -979,7 +984,7 @@ function parseUserText(text: string) {
   --incremark-color-status-completed: var(--accent-success, #34c759);
   --incremark-color-neutral-2: var(--agent-surface, #fafafa);
   --incremark-color-neutral-8: var(--agent-text-secondary, #52525b);
-  --incremark-color-neutral-9: var(--agent-text-primary, #18181b);
+  --incremark-color-neutral-9: var(--agent-text-primary, #0a0a0a);
   --incremark-typography-font-size-base: 14px;
   --incremark-typography-font-size-heading-h1: 15px;
   --incremark-typography-font-size-heading-h2: 14.5px;
@@ -1028,6 +1033,7 @@ function parseUserText(text: string) {
   max-width: 100%;
   font-size: 14px;
   line-height: 1.64;
+  font-weight: 500;
   color: var(--agent-text-primary);
   overflow-wrap: anywhere;
   text-rendering: optimizeLegibility;
@@ -1095,7 +1101,7 @@ function parseUserText(text: string) {
 
 .markdown-body :deep(strong) {
   color: var(--agent-text-primary);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .markdown-body :deep(em) {
@@ -1221,7 +1227,7 @@ function parseUserText(text: string) {
 .markdown-body :deep(h4),
 .markdown-body :deep(h5),
 .markdown-body :deep(h6) {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--agent-text-primary);
   margin: 14px 0 6px;
   line-height: 1.42;
@@ -1896,7 +1902,8 @@ function parseUserText(text: string) {
    ═══════════════════════════════════════════════════════════════════ */
 
 :global(.p-dark .assistant-run) {
-  --agent-text-primary: var(--p-text-color, #f4f4f6);
+  /* Slightly brighter than default zinc so replies stay high-contrast */
+  --agent-text-primary: #fafafa;
   --agent-text-secondary: var(--p-text-muted-color, #a1a1aa);
   --agent-text-muted: var(--p-text-muted-color, #a1a1aa);
   --agent-text-disabled: #71717a;
@@ -1928,9 +1935,12 @@ function parseUserText(text: string) {
   --markdown-surface: var(--agent-surface);
   --markdown-surface-raised: var(--agent-surface-raised);
   --markdown-muted: var(--agent-text-muted);
+  font-weight: 500;
+  color: var(--agent-text-primary);
 }
 
 :global(.p-dark .agent-bubble-ai),
+:global(.p-dark .update-markdown),
 :global(.p-dark .markdown-body),
 :global(.p-dark .markdown-body p),
 :global(.p-dark .markdown-body li),
@@ -1940,6 +1950,7 @@ function parseUserText(text: string) {
 :global(.p-dark .markdown-body h4),
 :global(.p-dark .markdown-body h5),
 :global(.p-dark .markdown-body h6) {
+  font-weight: 500;
   color: var(--agent-text-primary);
 }
 

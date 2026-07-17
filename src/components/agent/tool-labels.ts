@@ -46,14 +46,22 @@ export function getToolLabel(name: string): string {
 }
 
 /** Prefer the real image/video model id when the agent/tool recorded one. */
-export function getToolModelLabel(
-  tool: { name: string; input?: any; output?: any },
-  fallback?: string,
+export function getToolModelId(
+  tool: { name?: string; input?: any; output?: any },
 ): string {
   const model =
     (typeof tool.input?.model === "string" && tool.input.model.trim()) ||
     (typeof tool.output?.model === "string" && tool.output.model.trim()) ||
     "";
+  return model;
+}
+
+/** Prefer the real image/video model id when the agent/tool recorded one. */
+export function getToolModelLabel(
+  tool: { name: string; input?: any; output?: any },
+  fallback?: string,
+): string {
+  const model = getToolModelId(tool);
   if (model) return model;
   if (fallback) return fallback;
   return getToolLabel(tool.name);

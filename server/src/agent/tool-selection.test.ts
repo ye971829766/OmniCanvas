@@ -123,6 +123,25 @@ describe("agent tool selection", () => {
       "web_search",
       "web_extract",
     ]);
+    // ]);
+  });
+
+  test("automatically restores image research when Tavily is configured", () => {
+    const previous = process.env.TAVILY_API_KEY;
+    process.env.TAVILY_API_KEY = "test-key";
+    try {
+      const tools = selectAgentToolNames({
+        userInput: "帮我生成这双鞋的淘宝详情页",
+        canvasNodeCount: 0,
+        hasAssets: true,
+      });
+      expect(tools.has("generate_image")).toBe(true);
+      expect(tools.has("web_search")).toBe(true);
+      expect(tools.has("web_extract")).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.TAVILY_API_KEY;
+      else process.env.TAVILY_API_KEY = previous;
+    }
   });
 
   test("skips automatic research for a production-ready image prompt or explicit opt-out", () => {

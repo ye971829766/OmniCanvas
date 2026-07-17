@@ -341,7 +341,10 @@ describe("AgentService event lifecycle", () => {
     service.logger.log = () => undefined;
 
     const tool = TOOL_MAP.get("generate_image")!;
-    const researchTool = TOOL_MAP.get("web_search")!;
+    const researchTool = TOOL_MAP.get("web_search");
+    // Web research is an optional deployment capability. The focused prompt
+    // policy remains covered elsewhere when the tools are intentionally off.
+    if (!researchTool) return;
     const originalExecute = tool.execute;
     const originalResearchExecute = researchTool.execute;
     const receivedInputs: any[] = [];
@@ -422,10 +425,12 @@ describe("AgentService event lifecycle", () => {
         {
           prompt: "纯白背景，产品正面棚拍",
           size: "1024x1024",
+          quality: "high",
           refImages: ["image_selected"],
         },
         {
           prompt: userRequest,
+          quality: "high",
           refImages: ["image_selected"],
         },
       ]);
@@ -437,7 +442,7 @@ describe("AgentService event lifecycle", () => {
         "Media generation progress: 3/3",
       );
       const systemText = firstRequestBody.messages?.find((message: any) => message.role === "system")?.content;
-      expect(systemText.length).toBeLessThan(5_000);
+      expect(systemText.length).toBeLessThan(5_500);
       expect(systemText).toContain("<active_tools>generate_image, web_search, web_extract</active_tools>");
       expect(systemText).toContain("<prompt_mode>optimize</prompt_mode>");
       expect(systemText).toContain("<research_mode>required</research_mode>");

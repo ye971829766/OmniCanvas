@@ -64,3 +64,5 @@ server/client_secret_*.json
 admin/dist
 
 .env.production
+
+amazon-demo

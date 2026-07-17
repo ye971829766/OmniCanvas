@@ -158,7 +158,14 @@ export class AiService implements OnModuleInit {
 
     const requestedSize = typeof body?.size === "string" ? body.size.trim() : "";
     const requestedQuality = typeof body?.quality === "string" ? body.quality.trim() : "";
-    const size = requestedSize || options.defaults?.size;
+    const mappedModel = await this.resolveModelMapping("image", model);
+    const capabilityModel = mappedModel?.upstreamModel || model;
+    const size = this.resolveImageRequestSize(
+      capabilityModel,
+      requestedSize,
+      options,
+      body?.aspectRatio,
+    );
     const quality = requestedQuality || options.defaults?.quality;
 
     // Direct UI and agent calls now share the same configured defaults. This
@@ -298,11 +305,49 @@ export class AiService implements OnModuleInit {
     model: string,
     size: unknown,
     options: ImageModelOptionsResponse,
+    aspectRatio?: unknown,
   ): string {
     const requested = typeof size === "string" ? size.trim() : "";
+    if (requested && requested.toLowerCase() !== "auto") return requested;
+    const ratioSize = this.resolveGptImage2SizeFromAspectRatio(
+      model,
+      aspectRatio,
+    );
+    if (ratioSize) return ratioSize;
     if (requested) return requested;
     if (this.isGptImage2(model)) return "auto";
     return options.defaults?.size || "1024x1024";
+  }
+
+  /** GPT Image 2 uses pixel dimensions rather than a separate aspect-ratio field. */
+  private resolveGptImage2SizeFromAspectRatio(
+    model: string,
+    aspectRatio: unknown,
+  ): string | undefined {
+    if (!this.isGptImage2(model) || typeof aspectRatio !== "string") {
+      return undefined;
+    }
+    const match = aspectRatio.trim().match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
+    if (!match) return undefined;
+    const widthRatio = Number(match[1]);
+    const heightRatio = Number(match[2]);
+    if (
+      !Number.isFinite(widthRatio) ||
+      !Number.isFinite(heightRatio) ||
+      widthRatio <= 0 ||
+      heightRatio <= 0
+    ) return undefined;
+    const ratio = widthRatio / heightRatio;
+    if (ratio > 3 || ratio < 1 / 3) return undefined;
+    if (Math.abs(ratio - 1) < 0.01) return "1024x1024";
+
+    const longEdge = 1536;
+    const toMultipleOf16 = (value: number) =>
+      Math.max(16, Math.round(value / 16) * 16);
+    if (ratio > 1) {
+      return `${longEdge}x${toMultipleOf16(longEdge / ratio)}`;
+    }
+    return `${toMultipleOf16(longEdge * ratio)}x${longEdge}`;
   }
 
   private resolveImageRequestQuality(model: string, quality: unknown): string {
@@ -312,6 +357,31 @@ export class AiService implements OnModuleInit {
     if (["hd", "2k", "4k"].includes(requested)) return "high";
     if (["standard", "1k"].includes(requested)) return "medium";
     return "high";
+  }
+
+  private resolveNativeGeminiImageSize(
+    model: string,
+    size: unknown,
+    quality: unknown,
+  ): "512" | "1K" | "2K" | "4K" {
+    const normalizedModel = model.toLowerCase();
+    const fallback = normalizedModel.includes("3.1") ||
+        normalizedModel.includes("banana-2")
+      ? "2K"
+      : "1K";
+    const allowed = new Set(["512", "1K", "2K", "4K"]);
+    const explicitSize = typeof size === "string" ? size.trim().toUpperCase() : "";
+    if (allowed.has(explicitSize)) {
+      return explicitSize as "512" | "1K" | "2K" | "4K";
+    }
+    const requestedQuality = typeof quality === "string"
+      ? quality.trim().toLowerCase()
+      : "";
+    if (["high", "hd", "4k"].includes(requestedQuality)) return "4K";
+    if (["medium", "2k"].includes(requestedQuality)) return "2K";
+    if (["low", "standard", "1k"].includes(requestedQuality)) return "1K";
+    if (requestedQuality === "512" || requestedQuality === "0.5k") return "512";
+    return fallback;
   }
 
   async resolveModelMapping(
@@ -1508,12 +1578,17 @@ export class AiService implements OnModuleInit {
         upstreamModel || model,
         body?.size,
         options,
+        body?.aspectRatio,
       );
       const requestQuality = this.resolveImageRequestQuality(
         upstreamModel || model,
         body?.quality,
       );
       const isGptImage2 = this.isGptImage2(upstreamModel || model);
+      const providerPrompt = this.buildPrompt(
+        prompt,
+        typeof body?.style === "string" ? body.style : undefined,
+      );
 
       const useNativeGemini =
         (model.toLowerCase().includes("gemini") ||
@@ -1522,8 +1597,26 @@ export class AiService implements OnModuleInit {
           upstreamModel.toLowerCase().includes("gemini") ||
           upstreamModel.toLowerCase().includes("nano-banana") ||
           upstreamModel.toLowerCase().includes("nano-banna") ||
-          upstreamModel.toLowerCase().includes("imagen")) &&
+        upstreamModel.toLowerCase().includes("imagen")) &&
         process.env.GEMINI_API_FORMAT !== "openai";
+
+      if (process.env.IMAGE_GENERATION_DEBUG === "true") {
+        console.debug("[image-generation:resolved]", JSON.stringify({
+          model,
+          upstreamModel,
+          endpoint: Array.isArray(body?.images) && body.images.length > 0
+            ? "edits"
+            : "generations",
+          transport: useNativeGemini ? "native-gemini" : "openai-compatible",
+          promptChars: providerPrompt.length,
+          styleChars: typeof body?.style === "string" ? body.style.length : 0,
+          size: requestSize,
+          aspectRatio: body?.aspectRatio,
+          quality: requestQuality,
+          referenceCount: Array.isArray(body?.images) ? body.images.length : 0,
+          hasMask: Boolean(body?.mask),
+        }));
+      }
 
       if (useNativeGemini) {
         const channel = route.channel;
@@ -1548,7 +1641,7 @@ export class AiService implements OnModuleInit {
           },
         });
 
-        const contentsParts: any[] = [{ text: prompt }];
+        const contentsParts: any[] = [{ text: providerPrompt }];
 
         // Support reference images (Image-to-Image / Multi-modal).
         // @google/genai expects camelCase `inlineData.mimeType` — snake_case
@@ -1578,27 +1671,13 @@ export class AiService implements OnModuleInit {
           }
         }
 
-        // Resolve a valid imageSize (quality) for native Gemini
-        let quality = "1K";
-        let defaultSize = "1K";
-        if (
-          upstreamModel.toLowerCase().includes("3.1") ||
-          upstreamModel.toLowerCase().includes("banana-2")
-        ) {
-          defaultSize = "2K";
-        }
-        quality = defaultSize;
-
-        const sizeCandidates = [body?.size, body?.quality];
-        for (const candidate of sizeCandidates) {
-          if (typeof candidate === "string" && candidate.trim()) {
-            const val = candidate.trim().toUpperCase();
-            if (val === "512" || val === "1K" || val === "2K" || val === "4K") {
-              quality = val;
-              break;
-            }
-          }
-        }
+        // Native Gemini calls the resolution control `imageSize`. Translate
+        // the shared final-quality vocabulary instead of silently ignoring it.
+        const quality = this.resolveNativeGeminiImageSize(
+          upstreamModel,
+          body?.size,
+          body?.quality,
+        );
 
         // Resolve a valid aspectRatio for native Gemini
         let aspectRatio = "1:1";
@@ -1691,10 +1770,7 @@ export class AiService implements OnModuleInit {
           upstreamForm.append("model", model);
           upstreamForm.append(
             "prompt",
-            this.buildPrompt(
-              prompt,
-              typeof body?.style === "string" ? body.style : undefined,
-            ),
+            providerPrompt,
           );
           upstreamForm.append(
             "size",
@@ -1804,10 +1880,7 @@ export class AiService implements OnModuleInit {
 
           const generateParams: Record<string, any> = {
             model: upstreamModel,
-            prompt: this.buildPrompt(
-              prompt,
-              typeof body?.style === "string" ? body.style : undefined,
-            ),
+            prompt: providerPrompt,
             size: requestSize,
             n: requestedCount,
           };
