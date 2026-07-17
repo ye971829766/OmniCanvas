@@ -106,7 +106,7 @@ import { useUser } from "@/composables/useUser";
 import AuthForm from "@/components/auth/AuthForm.vue";
 
 const router = useRouter();
-const { isLoggedIn, isInitializing, authModalMode, ensureSession } = useUser();
+const { isLoggedIn, authModalMode, ensureSession } = useUser();
 
 const isLogin = computed(() => authModalMode.value === "login");
 
@@ -121,11 +121,11 @@ onMounted(() => {
 });
 
 watch(
-  [isLoggedIn, isInitializing],
-  ([loggedIn, initializing]) => {
-    if (!initializing && loggedIn) {
-      router.replace("/canvas");
-    }
+  isLoggedIn,
+  (loggedIn) => {
+    // A successful auth response is already authoritative. Do not let a stale
+    // bootstrap flag keep an authenticated user on the login page.
+    if (loggedIn) void router.replace("/canvas");
   },
   { immediate: true },
 );

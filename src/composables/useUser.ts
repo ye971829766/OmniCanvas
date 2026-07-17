@@ -37,6 +37,7 @@ function readStoredToken(): string | null {
 function clearSession() {
   currentUser.value = null;
   token.value = null;
+  isInitializing.value = false;
   try {
     localStorage.removeItem(TOKEN_KEY);
   } catch {
@@ -116,11 +117,15 @@ export function useUser() {
    * Retries once after a short delay for flaky post-redirect networks.
    */
   const ensureSession = async (): Promise<UserProfile | null> => {
-    if (currentUser.value) return currentUser.value;
+    if (currentUser.value) {
+      isInitializing.value = false;
+      return currentUser.value;
+    }
 
     const stored = readStoredToken();
     if (!stored) {
       token.value = null;
+      isInitializing.value = false;
       return null;
     }
     token.value = stored;
@@ -142,6 +147,7 @@ export function useUser() {
     }
     setToken(res.token);
     currentUser.value = res.user;
+    isInitializing.value = false;
     authModalVisible.value = false;
     return res.user;
   };
