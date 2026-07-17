@@ -1,9 +1,18 @@
-import { shouldResearchFinalImageRequest } from "./image-request-policy";
+import {
+  getFinalImagePromptMode,
+  isAmazonAPlusRequest,
+  shouldAutoReviewFinalImageRequest,
+  shouldResearchFinalImageRequest,
+} from "./image-request-policy";
+import { isImageSuiteRequest } from "./image-suite-plan";
 
 export interface AgentToolSelectionInput {
   userInput: string;
   canvasNodeCount: number;
+  /** Assets attached in the current user turn. */
   hasAssets: boolean;
+  /** Persisted assets from older turns; usable only when the user refers to them. */
+  hasHistoricalAssets?: boolean;
   hasCanvasImages?: boolean;
 }
 
@@ -51,35 +60,38 @@ function matches(input: string, pattern: RegExp): boolean {
   return pattern.test(input);
 }
 
-/** Multi-shot marketplace suite, not a single one-off listing image. */
-export function isEcommerceSuiteRequest(userInput: string): boolean {
-  const input = userInput.toLowerCase();
-  const isEcommerce = matches(
-    input,
-    /\b(?:amazon|taobao|tmall|jd|listing|ecommerce|a\+)\b|\u7535\u5546|\u6dd8\u5b9d|\u5929\u732b|\u4eac\u4e1c|\u4e3b\u56fe|\u8be6\u60c5\u9875|\u5957\u56fe/,
-  );
-  if (!isEcommerce) return false;
+function rejectsEditableCanvas(input: string): boolean {
   return matches(
     input,
-    /\b(?:suite|listing images?|gallery images?|product images? suite|multi[- ]?(?:image|shot) listing)\b|\u5957\u56fe|\u4e00\u5957|\u5168\u5957|\u591a\u5f20|\u591a\u89d2|\u4e3b\u56fe\s*[+＋和与及、,，]\s*\u8be6\u60c5|\u8be6\u60c5\s*[+＋和与及、,，]\s*\u4e3b\u56fe|\u4e3b\u56fe.{0,12}\u8be6\u60c5\u9875|\u8be6\u60c5\u9875.{0,12}\u4e3b\u56fe|\b(?:main|hero).{0,24}(?:detail|lifestyle|infographic|selling)|(?:detail|lifestyle).{0,24}(?:main|hero)|\b(?:5|6|7|8)\s*(?:images?|shots?|pics?)\b|[5-8]\u5f20/,
+    /\b(?:do not|don't|dont|without|avoid|no)\s+(?:an?\s+)?(?:editable|layered|canvas|source[- ]?file|text[- ]?layer)|(?:不要|不用|不使用|禁止|别用|无需|无须|避免).{0,12}(?:可编辑|分层|画布|图层|文字层|源文件|源工程)/i,
   );
+}
+
+function requestsEditableCanvas(input: string): boolean {
+  if (rejectsEditableCanvas(input)) return false;
+  return matches(
+    input,
+    /\b(?:editable|layered|separate text layers?|source layout|source file|source project|canvas(?:\s+(?:layout|composition|design|project))?)\b|可编辑|分层|文字图层|独立文字层|源文件|源工程|画布(?:排版|布局|设计|工程)?/i,
+  );
+}
+
+/** Multi-shot marketplace suite, not a single one-off listing image. */
+export function isEcommerceSuiteRequest(userInput: string): boolean {
+  return isImageSuiteRequest(userInput);
 }
 
 export function classifyEcommerceRequest(userInput: string): EcommerceRequestIntent {
   const input = userInput.toLowerCase();
+  const isSuite = isEcommerceSuiteRequest(userInput);
   const isEcommerce = matches(
     input,
-    /\b(?:amazon|taobao|tmall|jd|listing|ecommerce|a\+)\b|\u7535\u5546|\u6dd8\u5b9d|\u5929\u732b|\u4eac\u4e1c|\u4e3b\u56fe|\u8be6\u60c5\u9875|\u5957\u56fe/,
-  );
-  const isEditable = matches(
-    input,
-    /\b(?:editable|layered|separate text layers?|source layout|source file)\b|\u53ef\u7f16\u8f91|\u5206\u5c42|\u6587\u5b57\u56fe\u5c42|\u6e90\u6587\u4ef6/,
-  );
+    /\b(?:amazon|taobao|tmall|jd|listing|ecommerce)\b|a\+|\u7535\u5546|\u6dd8\u5b9d|\u5929\u732b|\u4eac\u4e1c|\u4e3b\u56fe|\u8be6\u60c5\u9875|\u5957\u56fe/,
+  ) || isSuite;
+  const isEditable = requestsEditableCanvas(input);
   const isImageEdit = matches(
     input,
-    /\b(?:edit|modify|retouch|replace|remove|change)\b|\u4fee\u6539|\u7f16\u8f91|\u4fee\u56fe|\u66ff\u6362|\u5220\u9664|\u53bb\u6389|\u6539\u6210/,
+    /\b(?:edit|modify|retouch|replace|remove|change)\b|\u4fee\u6539|(?<!\u53ef)\u7f16\u8f91|\u4fee\u56fe|\u66ff\u6362|\u5220\u9664|\u53bb\u6389|\u6539\u6210/,
   );
-  const isSuite = isEcommerceSuiteRequest(userInput);
   return {
     isEcommerce,
     isEditable,
@@ -93,6 +105,15 @@ export function classifyEcommerceRequest(userInput: string): EcommerceRequestInt
 
 export function isDirectImageRequest(userInput: string): boolean {
   const input = userInput.toLowerCase();
+  const refersToExistingImage = matches(
+    input,
+    /\b(?:this|that|selected|uploaded|previous|last)\s+(?:image|photo|picture|product|shot)\b|\b(?:uploaded|selected)\s+product\b|这张(?:图|图片|照片)|那张(?:图|图片|照片)|上传的(?:图|图片|照片|产品图)|选中的(?:图|图片|照片)|原图|上一张图|刚才的图/,
+  );
+  const changesExistingImage = matches(
+    input,
+    /\b(?:use|add|insert|place|put|edit|modify|retouch|replace|remove|change|restyle|composite)\b|(?:用|做|制作|添加|加入|加上|画上|放入|放到|修改|编辑|修图|替换|删除|去掉|换成|换掉|改成|合成|换背景|改背景|做成).{0,24}/,
+  );
+  if (refersToExistingImage && changesExistingImage) return false;
   const ecommerceIntent = classifyEcommerceRequest(userInput);
   if (ecommerceIntent.isDirectFinalImage) return true;
   // Only block direct generation for ecommerce editable/edit intents.
@@ -103,10 +124,33 @@ export function isDirectImageRequest(userInput: string): boolean {
   ) {
     return false;
   }
-  return matches(
+  const brief = userInput.trim();
+  if (!brief) return false;
+  if (/[?？]$|^(?:如何|怎么|为什么|请解释|分析一下|评价一下|what|why|how|explain|analy[sz]e|review)\b/i.test(brief)) {
+    return false;
+  }
+  if (
+    requestsEditableCanvas(brief) ||
+    (!rejectsEditableCanvas(brief) && /(?:节点|图层|按钮|组件|文本框|移动|对齐|删除|调整大小)|\b(?:node|layer|button|component|move|align|delete|resize)\b/i.test(brief))
+  ) {
+    return false;
+  }
+  if (matches(
     input,
-    /\b(?:generate|render)\b[^\r\n.!?]{0,100}\b(?:image|picture|photo|illustration|poster|banner|cover|artwork|wallpaper|logo)\b|(?:\u751f\u6210|\u751f\u56fe|\u7ed8\u5236|\u753b\u4e00\u5f20|\u5236\u4f5c\u4e00\u5f20)[^\r\n\u3002\uff01\uff1f]{0,100}(?:\u56fe\u7247|\u56fe\u50cf|\u7167\u7247|\u63d2\u753b|\u6d77\u62a5|\u5c01\u9762|\u5e7f\u544a\u56fe|\u5546\u54c1\u56fe|\u6548\u679c\u56fe|\u58c1\u7eb8|\u5ba3\u4f20\u56fe|logo)/i,
-  );
+    /\b(?:generate|render|create|make|design)\b[^\r\n.!?]{0,100}\b(?:image|picture|photo|illustration|poster|banner|cover|artwork|wallpaper|logo|visual|ad creative|mockup|social (?:media )?post|flyer|brochure|thumbnail|presentation|slide|landing page|web page|ui screen|mobile screen|business card|menu design|infographic|diagram|flowchart|mind map|chart)\b|(?:生成|生图|绘制|画|制作|做|设计)[^\r\n。！？]{0,100}(?:图片|图像|照片|插画|海报|横幅|封面|广告图|商品图|主图|详情页|套图|效果图|壁纸|宣传图|视觉图|缩略图|社交媒体图|小红书图|宣传单|演示页|幻灯片|落地页|网页|页面|界面|移动端页面|名片|菜单|信息图|流程图|思维导图|图表|示意图|标志|logo)/i,
+  )) return true;
+
+  // A design-canvas user often supplies only the visual brief. Route concise
+  // scene descriptions such as "宇航员猫，月球，电影感" without requiring the
+  // ceremonial phrase "生成一张图片".
+  if (brief.length > 180) return false;
+  const namedRasterArtifact =
+    /(?:一张|一幅|一组|一个).{0,100}(?:图片|图像|插画|照片|壁纸|商品图|效果图|海报|横幅|封面|广告图|宣传图|主图|详情页|套图|缩略图|视觉图|社交媒体图|小红书图|宣传单|演示页|幻灯片|落地页|网页|页面|界面|名片|菜单|信息图|流程图|思维导图|图表|示意图|标志)|\b(?:an?|one)\s+.{0,100}\b(?:image|illustration|photo|picture|wallpaper|artwork|poster|banner|cover|visual|mockup|social (?:media )?post|flyer|brochure|thumbnail|slide|landing page|ui screen|business card|infographic|diagram|flowchart|mind map|chart)\b/i.test(brief);
+  const visualDirection =
+    /(?:电影感|摄影感|摄影|写实|插画|水彩|油画|三维|3d|赛博朋克|极简|复古|未来感|霓虹|特写|广角|景深|光影|构图|月球|太空|森林|城市夜景)|\b(?:cinematic|photoreal|photographic|photography|illustration|watercolor|oil paint|3d|cyberpunk|minimal|retro|futuristic|neon|close-up|wide-angle|depth of field|moon|space|forest|city at night)\b/i.test(brief);
+  const subjectInScene =
+    /^(?:一[只位个艘辆座]|这[只位个艘辆座]|an?\s+).{2,120}(?:在|站在|位于|穿着|拿着|飞过|on\s+the|in\s+the|under\s+the|beside\s+the|wearing|holding).+/i.test(brief);
+  return namedRasterArtifact || visualDirection || subjectInScene;
 }
 
 /**
@@ -116,9 +160,22 @@ export function isDirectImageRequest(userInput: string): boolean {
  */
 export function isImageModelBitmapRequest(
   userInput: string,
-  options: { hasAssets?: boolean; hasCanvasImages?: boolean } = {},
+  options: {
+    hasAssets?: boolean;
+    hasHistoricalAssets?: boolean;
+    hasCanvasImages?: boolean;
+  } = {},
 ): boolean {
-  const hasSource = Boolean(options.hasAssets || options.hasCanvasImages);
+  const input = userInput.toLowerCase();
+  const refersToSourcePhoto = matches(
+    input,
+    /\b(?:this|that|previous|last)\s+(?:image|photo|picture|product|shot)\b|\bthe\s+product\b|\u8fd9\u5f20\u56fe|\u8fd9\u5f20\u56fe\u7247|\u8fd9\u5f20|\u90a3\u5f20\u56fe|\u8fd9\u53cc|\u8fd9\u4e2a\u4ea7\u54c1|\u8fd9\u4e2a\u5546\u54c1|\u4e0a\u4f20\u7684|\u4e4b\u524d\u4e0a\u4f20\u7684|\u521a\u624d\u7684\u56fe|\u4e0a\u4e00\u5f20\u56fe|\u524d\u4e00\u5f20\u56fe|\u539f\u56fe|\u53c2\u8003\u56fe/,
+  );
+  const hasSource = Boolean(
+    options.hasAssets ||
+    options.hasCanvasImages ||
+    (options.hasHistoricalAssets && refersToSourcePhoto),
+  );
   if (!hasSource) return false;
 
   const ecommerceIntent = classifyEcommerceRequest(userInput);
@@ -135,14 +192,9 @@ export function isImageModelBitmapRequest(
     return false;
   }
 
-  const input = userInput.toLowerCase();
-  const refersToSourcePhoto = matches(
-    input,
-    /\b(?:this|that)\s+(?:image|photo|picture|product|shot)\b|\bthe\s+product\b|\u8fd9\u5f20\u56fe|\u8fd9\u5f20\u56fe\u7247|\u8fd9\u5f20|\u90a3\u5f20\u56fe|\u8fd9\u53cc|\u8fd9\u4e2a\u4ea7\u54c1|\u8fd9\u4e2a\u5546\u54c1|\u4e0a\u4f20\u7684|\u539f\u56fe|\u53c2\u8003\u56fe/,
-  );
   const wantsBitmapTransform = matches(
     input,
-    /\b(?:change|replace|new|cool|dramatic)\s+(?:the\s+)?background\b|\bbackground\b|\bretouch\b|\bcomposite\b|\bproduct\s+(?:shot|poster|banner|promo)\b|\bpromo(?:tional)?\s+(?:image|poster|shot|visual)\b|\u80cc\u666f|\u573a\u666f|\u6362\u666f|\u4fee\u56fe|\u6539\u56fe|\u5408\u6210|\u5ba3\u4f20\u56fe|\u5e7f\u544a\u56fe|\u6d77\u62a5|\u4e3b\u56fe|\u6548\u679c\u56fe|\u5546\u54c1\u5c55\u793a|\u70ab\u9177|\u9177\u70ab|\u653e\u5728.{0,12}\u80cc\u666f|\u6362.{0,8}\u80cc\u666f|\u6539.{0,8}\u80cc\u666f|\u753b.{0,12}\u80cc\u666f|\u52a0.{0,12}\u80cc\u666f|\u505a\u6210.{0,10}(?:\u56fe|\u6d77\u62a5)|(?:\u5f53|\u7528\u6765\u5f53).{0,8}(?:\u5ba3\u4f20|\u5e7f\u544a|\u6d77\u62a5)/,
+    /\b(?:change|replace|new|cool|dramatic)\s+(?:the\s+)?background\b|\b(?:add|insert|place|put|retouch|composite)\b|\bbackground\b|\bproduct\s+(?:shot|poster|banner|promo)\b|\bpromo(?:tional)?\s+(?:image|poster|shot|visual)\b|\u80cc\u666f|\u573a\u666f|\u6362\u666f|\u4fee\u56fe|\u6539\u56fe|\u5408\u6210|\u6dfb\u52a0|\u52a0\u4e0a|\u753b\u4e0a|\u653e\u5165|\u5ba3\u4f20\u56fe|\u5e7f\u544a\u56fe|\u6d77\u62a5|\u4e3b\u56fe|\u6548\u679c\u56fe|\u5546\u54c1\u5c55\u793a|\u70ab\u9177|\u9177\u70ab|\u653e\u5728.{0,12}\u80cc\u666f|\u6362.{0,8}\u80cc\u666f|\u6539.{0,8}\u80cc\u666f|\u753b.{0,12}\u80cc\u666f|\u52a0.{0,12}\u80cc\u666f|\u505a\u6210.{0,10}(?:\u56fe|\u6d77\u62a5)|(?:\u5f53|\u7528\u6765\u5f53).{0,8}(?:\u5ba3\u4f20|\u5e7f\u544a|\u6d77\u62a5)/,
   );
 
   // With an attached/selected photo, either deictic "this image" + transform,
@@ -168,7 +220,11 @@ export function isImageModelBitmapRequest(
 /** True when the agent should focus on image-model tools (no canvas poster assembly). */
 export function isFocusedImageModelRequest(
   userInput: string,
-  options: { hasAssets?: boolean; hasCanvasImages?: boolean } = {},
+  options: {
+    hasAssets?: boolean;
+    hasHistoricalAssets?: boolean;
+    hasCanvasImages?: boolean;
+  } = {},
 ): boolean {
   return (
     isDirectImageRequest(userInput) ||
@@ -180,20 +236,24 @@ export function selectAgentToolNames({
   userInput,
   canvasNodeCount,
   hasAssets,
+  hasHistoricalAssets = false,
   hasCanvasImages = false,
 }: AgentToolSelectionInput): Set<string> {
   const input = userInput.toLowerCase();
   const selected = new Set(CORE_CREATION_TOOLS);
   const ecommerceIntent = classifyEcommerceRequest(userInput);
+  const amazonAPlus = isAmazonAPlusRequest(userInput);
   const directImageRequest = isDirectImageRequest(userInput);
   const imageModelBitmap = isImageModelBitmapRequest(userInput, {
     hasAssets,
+    hasHistoricalAssets,
     hasCanvasImages,
   });
   const focusedImageModel = directImageRequest || imageModelBitmap;
   const webResearchAvailable = Boolean(process.env.TAVILY_API_KEY);
   const imageResearchRequired =
     webResearchAvailable && shouldResearchFinalImageRequest(userInput);
+  const autoQualityReview = shouldAutoReviewFinalImageRequest(userInput);
 
   const explicitSize = matches(
     input,
@@ -225,7 +285,6 @@ export function selectAgentToolNames({
   if (focusedImageModel) {
     ECOMMERCE_EDITABLE_COMPOSITION_TOOLS.forEach((name) => selected.delete(name));
     selected.delete("update_node");
-    selected.delete("verify_design");
   }
 
   if (!focusedImageModel && ((multiDeliverable && !ecommerce) || explicitAdditionalArtboard)) {
@@ -268,18 +327,29 @@ export function selectAgentToolNames({
 
   const complex = ecommerce || multiDeliverable;
   if (complex && !ecommerce && !focusedImageModel) selected.add("plan_design");
+  if (autoQualityReview && !focusedImageModel && (boundedDeliverable || complex)) {
+    selected.add("verify_design");
+  }
 
   if (matches(input, /\b(?:manual vision|analyze screenshot|visual analysis|score this design)\b|\u622a\u56fe\u5206\u6790|\u89c6\u89c9\u5206\u6790|\u8bbe\u8ba1\u8bc4\u5206/)) {
     selected.add("export_node_image");
     selected.add("analyze_design");
   }
 
-  if (matches(
+  if (autoQualityReview && matches(
     input,
     /\b(?:verify|review|quality check|inspect the design|score the design)\b|\u8d28\u68c0|\u68c0\u67e5\u8bbe\u8ba1|\u8bc4\u5ba1|\u8bbe\u8ba1\u8bc4\u5206/,
   )) {
     selected.add("review_and_adjust");
     selected.add("verify_design");
+  }
+
+  // A+ is a flattened image-model deliverable by default. Canvas authoring and
+  // deterministic exports are available only when the user explicitly asks
+  // for an editable/layered source project.
+  if (amazonAPlus && ecommerceIntent.isEditable) {
+    selected.add("add_frame");
+    selected.add("export_node_image");
   }
 
   // A request to generate a final image always needs one tool. References are
@@ -289,6 +359,12 @@ export function selectAgentToolNames({
     if (imageResearchRequired) {
       directTools.add("web_search");
       directTools.add("web_extract");
+    }
+    if (autoQualityReview || selected.has("verify_design")) {
+      if (getFinalImagePromptMode(userInput) !== "verbatim") {
+        directTools.add("edit_image");
+      }
+      directTools.add("verify_design");
     }
     for (const reviewTool of [
       "review_and_adjust",
@@ -308,6 +384,9 @@ export function selectAgentToolNames({
     if (imageResearchRequired) {
       bitmapTools.add("web_search");
       bitmapTools.add("web_extract");
+    }
+    if (autoQualityReview || selected.has("verify_design")) {
+      bitmapTools.add("verify_design");
     }
     if (matches(input, /\b(?:remove background|background removal)\b|\u62a0\u56fe|\u53bb\u80cc\u666f/)) {
       bitmapTools.add("remove_background");

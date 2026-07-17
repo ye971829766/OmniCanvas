@@ -14,6 +14,7 @@ const MEDIA_TOOL_NAMES = new Set([
   "remove_background",
   "inpaint_image",
   "upscale_image",
+  "export_node_image",
 ]);
 
 const props = defineProps<{

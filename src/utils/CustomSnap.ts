@@ -47,7 +47,7 @@ export class CustomSnap {
   private verticalLinePoints: Group[] = [];
   private horizontalLinePoints: Group[] = [];
   /** True while an editor move is in progress — ignore layout-driven clears. */
-  private isMoving = false;
+  public isMoving = false;
 
   // 吸附距离
   public snapSize: number = DEFAULT_SNAP_SIZE;
@@ -117,11 +117,19 @@ export class CustomSnap {
   /**
    * 获取元素相对于 tree 的边界，多种方式兜底
    */
-  private getElementBounds(element: any): { x: number; y: number; width: number; height: number } | null {
+  private getElementBounds(
+    element: any,
+  ): { x: number; y: number; width: number; height: number } | null {
     // 方式 1: getLayoutBounds
     try {
       const bounds = element.getLayoutBounds("box", this.app.tree);
-      if (bounds && isFinite(bounds.x) && isFinite(bounds.y) && isFinite(bounds.width) && isFinite(bounds.height)) {
+      if (
+        bounds &&
+        isFinite(bounds.x) &&
+        isFinite(bounds.y) &&
+        isFinite(bounds.width) &&
+        isFinite(bounds.height)
+      ) {
         return bounds;
       }
     } catch (e) {}
@@ -135,9 +143,9 @@ export class CustomSnap {
         const h = element.height ?? 0;
         // 元素四角在世界坐标中的位置
         const corners = [
-          { x: wt.e, y: wt.f },                                          // top-left
-          { x: wt.a * w + wt.e, y: wt.b * w + wt.f },                   // top-right
-          { x: wt.c * h + wt.e, y: wt.d * h + wt.f },                   // bottom-left
+          { x: wt.e, y: wt.f }, // top-left
+          { x: wt.a * w + wt.e, y: wt.b * w + wt.f }, // top-right
+          { x: wt.c * h + wt.e, y: wt.d * h + wt.f }, // bottom-left
           { x: wt.a * w + wt.c * h + wt.e, y: wt.b * w + wt.d * h + wt.f }, // bottom-right
         ];
         // 从世界坐标转换到 tree 坐标: tree 的逆矩阵
@@ -163,7 +171,12 @@ export class CustomSnap {
           const maxY = Math.max(...ys);
 
           if (isFinite(minX) && isFinite(minY)) {
-            return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+            return {
+              x: minX,
+              y: minY,
+              width: maxX - minX,
+              height: maxY - minY,
+            };
           }
         }
       }
@@ -181,7 +194,12 @@ export class CustomSnap {
           const maxX = Math.max(...xs);
           const maxY = Math.max(...ys);
           if (isFinite(minX) && isFinite(minY)) {
-            return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+            return {
+              x: minX,
+              y: minY,
+              width: maxX - minX,
+              height: maxY - minY,
+            };
           }
         }
       }
@@ -237,7 +255,10 @@ export class CustomSnap {
         c: { x: ex + ew / 2, y: ey + eh / 2 },
       };
     } else {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
       editorList.forEach((elem: any) => {
         const ex = elem.x ?? 0;
         const ey = elem.y ?? 0;
@@ -249,13 +270,29 @@ export class CustomSnap {
         maxY = Math.max(maxY, ey + eh);
       });
       targetPoints = {
-        tl: { x: minX === Infinity ? 0 : minX, y: minY === Infinity ? 0 : minY },
-        tr: { x: maxX === -Infinity ? 0 : maxX, y: minY === Infinity ? 0 : minY },
-        bl: { x: minX === Infinity ? 0 : minX, y: maxY === -Infinity ? 0 : maxY },
-        br: { x: maxX === -Infinity ? 0 : maxX, y: maxY === -Infinity ? 0 : maxY },
+        tl: {
+          x: minX === Infinity ? 0 : minX,
+          y: minY === Infinity ? 0 : minY,
+        },
+        tr: {
+          x: maxX === -Infinity ? 0 : maxX,
+          y: minY === Infinity ? 0 : minY,
+        },
+        bl: {
+          x: minX === Infinity ? 0 : minX,
+          y: maxY === -Infinity ? 0 : maxY,
+        },
+        br: {
+          x: maxX === -Infinity ? 0 : maxX,
+          y: maxY === -Infinity ? 0 : maxY,
+        },
         c: {
-          x: ((minX === Infinity ? 0 : minX) + (maxX === -Infinity ? 0 : maxX)) / 2,
-          y: ((minY === Infinity ? 0 : minY) + (maxY === -Infinity ? 0 : maxY)) / 2,
+          x:
+            ((minX === Infinity ? 0 : minX) + (maxX === -Infinity ? 0 : maxX)) /
+            2,
+          y:
+            ((minY === Infinity ? 0 : minY) + (maxY === -Infinity ? 0 : maxY)) /
+            2,
         },
       };
     }
@@ -564,7 +601,8 @@ export class CustomSnap {
       if (item === selectElements) return true;
       if (isArray(selectElements) && selectElements.includes(item)) return true;
       // innerId 比较（处理 editor 代理对象与 tree 元素不同引用的情况）
-      if (item.innerId !== undefined && selectedIds.has(item.innerId)) return true;
+      if (item.innerId !== undefined && selectedIds.has(item.innerId))
+        return true;
       return false;
     };
 
@@ -632,8 +670,12 @@ export class CustomSnap {
           y: maxY === -Infinity ? 0 : maxY,
         },
         c: {
-          x: ((minX === Infinity ? 0 : minX) + (maxX === -Infinity ? 0 : maxX)) / 2,
-          y: ((minY === Infinity ? 0 : minY) + (maxY === -Infinity ? 0 : maxY)) / 2,
+          x:
+            ((minX === Infinity ? 0 : minX) + (maxX === -Infinity ? 0 : maxX)) /
+            2,
+          y:
+            ((minY === Infinity ? 0 : minY) + (maxY === -Infinity ? 0 : maxY)) /
+            2,
         },
       };
     } else {
@@ -678,7 +720,12 @@ export class CustomSnap {
     const scaleX = zoomLayer.scaleX ?? 1;
     const scaleY = zoomLayer.scaleY ?? 1;
 
-    const viewportBounds = [-x / scaleX, -y / scaleY, -x / scaleX + width / scaleX, -y / scaleY + height / scaleY];
+    const viewportBounds = [
+      -x / scaleX,
+      -y / scaleY,
+      -x / scaleX + width / scaleX,
+      -y / scaleY + height / scaleY,
+    ];
 
     const data: IUI[] = [];
 
@@ -686,17 +733,27 @@ export class CustomSnap {
       if (!item) return;
 
       // 去除 Leafer 元素 and SimulateElement 元素
-      if (item.isLeafer || item.tag === "SimulateElement" || item.__tag === "SimulateElement") {
+      if (
+        item.isLeafer ||
+        item.tag === "SimulateElement" ||
+        item.__tag === "SimulateElement"
+      ) {
         return;
       }
 
-      const hasChildren = Array.isArray(item.children) && item.children.length > 0;
-      const isCustomNode = item.tag === "VideoNode" || item.__tag === "VideoNode" ||
-                           item.tag === "VideoGen" || item.__tag === "VideoGen" ||
-                           item.tag === "ImageGen" || item.__tag === "ImageGen";
+      const hasChildren =
+        Array.isArray(item.children) && item.children.length > 0;
+      const isCustomNode =
+        item.tag === "VideoNode" ||
+        item.__tag === "VideoNode" ||
+        item.tag === "VideoGen" ||
+        item.__tag === "VideoGen" ||
+        item.tag === "ImageGen" ||
+        item.__tag === "ImageGen";
 
       // If it's a target we want to snap to (a custom node or a leaf node or has isSnap === true)
-      const shouldCollect = isCustomNode || !hasChildren || item.isSnap === true;
+      const shouldCollect =
+        isCustomNode || !hasChildren || item.isSnap === true;
 
       if (shouldCollect) {
         const itemBounds = this.getElementBounds(item);

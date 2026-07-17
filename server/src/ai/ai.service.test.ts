@@ -314,6 +314,45 @@ describe("AiService GPT Image 2 request defaults", () => {
     expect(service.resolveNativeGeminiImageSize("gemini-3.1-flash-image", "auto", "medium")).toBe("2K");
     expect(service.resolveNativeGeminiImageSize("gemini-3.1-flash-image", "1K", "high")).toBe("1K");
     expect(service.resolveNativeGeminiImageSize("gemini-image", "auto", "auto")).toBe("1K");
+    expect(service.resolveNativeGeminiAspectRatio("1024x1536", undefined)).toBe("2:3");
+    expect(service.resolveNativeGeminiAspectRatio("auto", "16:9")).toBe("16:9");
+    expect(() => service.resolveNativeGeminiAspectRatio("1200x628", undefined)).toThrow(
+      "cannot be represented",
+    );
+  });
+
+  test("derives missing aspect ratios from explicit size and rejects conflicts", async () => {
+    const service = createService() as any;
+    service.getImageModelOptions = mock(async () => ({
+      maxGenerationCount: 1,
+      maxReferenceImages: 1,
+      sizes: ["1024x1024", "1024x1536", "1536x1024"],
+      defaults: { size: "1024x1024", quality: "high" },
+      qualities: ["high"],
+    }));
+
+    await expect(service.prepareImageGenerationRequest({
+      prompt: "portrait",
+      model: "gemini-image",
+      size: "1024x1536",
+    })).resolves.toMatchObject({
+      size: "1024x1536",
+      aspectRatio: "2:3",
+    });
+    try {
+      await service.prepareImageGenerationRequest({
+        prompt: "conflict",
+        model: "gemini-image",
+        size: "1024x1536",
+        aspectRatio: "16:9",
+      });
+      throw new Error("Expected conflicting geometry to be rejected");
+    } catch (error: any) {
+      expect(error.getResponse()).toMatchObject({
+        code: "CONFLICTING_IMAGE_GEOMETRY",
+        error: expect.stringContaining("conflicts"),
+      });
+    }
   });
 });
 

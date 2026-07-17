@@ -1,4 +1,5 @@
 import type { ToolContext } from './tool.interface';
+import { getCanvasNodeMap } from './canvas-state';
 import { TOOL_MAP } from './tool.registry';
 
 /**
@@ -12,6 +13,30 @@ interface GraphState {
   maxAttempts: number;
   lastImage?: string;
   fixed: boolean;
+}
+
+export function passesVisionQualityGate(
+  analysis: any,
+  requiresIdentityFidelity = false,
+): boolean {
+  const qualityPass =
+    analysis?.meetsRequirements === true &&
+    typeof analysis?.score === 'number' &&
+    analysis.score >= 8 &&
+    analysis?.failureType === 'none';
+  const identityPass = requiresIdentityFidelity
+    ? typeof analysis?.identityFidelityScore === 'number' &&
+      analysis.identityFidelityScore >= 9
+    : true;
+  return qualityPass && identityPass;
+}
+
+function directBitmapSource(ctx: ToolContext, refId: string): string | undefined {
+  const node = getCanvasNodeMap(ctx).get(refId);
+  const type = String(node?.type || '').toLowerCase();
+  if (!['image', 'image_gen', 'imagegen'].includes(type)) return undefined;
+  const source = node?.url || node?.imageUrl;
+  return typeof source === 'string' && source.trim() ? source.trim() : undefined;
 }
 
 export async function runMCotLoop(
@@ -31,18 +56,23 @@ export async function runMCotLoop(
   while (state.attempt < state.maxAttempts && !state.fixed) {
     state.attempt++;
 
-    // Step 1: Export node image
-    const exportTool = TOOL_MAP.get('export_node_image');
-    if (!exportTool) break;
+    // Generated bitmaps already have a server URL. Analyze the original file
+    // instead of round-tripping it through a frontend canvas export.
+    const originalBitmap = directBitmapSource(ctx, refId);
+    if (originalBitmap) {
+      state.lastImage = originalBitmap;
+    } else {
+      const exportTool = TOOL_MAP.get('export_node_image');
+      if (!exportTool) break;
 
-    const exportResult = await exportTool.execute({ refId, waitForGeneration: true }, ctx);
-    const output = exportResult.output as any;
-    if (output?.error) {
-      ctx.sink.emit({ type: 'progress', tool: 'export_node_image', message: `导出失败: ${output.error}` });
-      break;
+      const exportResult = await exportTool.execute({ refId, waitForGeneration: true }, ctx);
+      const output = exportResult.output as any;
+      if (output?.error) {
+        ctx.sink.emit({ type: 'progress', tool: 'export_node_image', message: `导出失败: ${output.error}` });
+        break;
+      }
+      state.lastImage = output?.image;
     }
-
-    state.lastImage = output?.image;
     if (!state.lastImage) break;
 
     // Step 2: Analyze design with vision model
@@ -57,12 +87,7 @@ export async function runMCotLoop(
     lastAnalysis = analyzeResult.output;
 
     // Step 3: Check if design meets requirements
-    const qualityPass =
-      lastAnalysis?.meetsRequirements === true || (lastAnalysis?.score ?? 0) >= 8;
-    const identityPass = analysisContext?.referenceAssetId
-      ? (lastAnalysis?.identityFidelityScore ?? 0) >= 9
-      : true;
-    if (qualityPass && identityPass) {
+    if (passesVisionQualityGate(lastAnalysis, Boolean(analysisContext?.referenceAssetId))) {
       state.fixed = true;
       ctx.sink.emit({ type: 'progress', tool: 'analyze_design', message: `质检通过（评分 ${lastAnalysis?.score}/10）` });
     } else if (state.attempt < state.maxAttempts) {
@@ -72,7 +97,7 @@ export async function runMCotLoop(
       const fixes: Array<Record<string, any>> = lastAnalysis?.fixes ?? [];
       const updateTool = TOOL_MAP.get('update_node');
 
-      if (updateTool && fixes.length > 0) {
+      if (!originalBitmap && updateTool && fixes.length > 0) {
         for (const fix of fixes) {
           const { refId: fixRefId, ...patch } = fix;
           const targetId = fixRefId || refId;

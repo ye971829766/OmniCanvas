@@ -173,7 +173,7 @@ describe("AgentService event lifecycle", () => {
   });
 
   test("passes independently authored production prompts through a researched multi-image brief", async () => {
-    const userRequest = "帮我生成适合的电商主图，生成 5 张，风格要统一";
+    const userRequest = "请先搜索电商视觉趋势并优化提示词，帮我生成适合的电商主图，生成 5 张，风格要统一";
     const optimizedPrompt =
       "为白色厚底运动鞋创作品牌 campaign 主视觉：夸张低机位透视、深靛蓝空间光场、电光青边缘光与动态切片排版，让产品成为压倒性视觉主体；保持参考鞋款结构与配色，不虚构参数。";
     const session = { messages: [], lastAccess: Date.now() };
@@ -446,7 +446,7 @@ describe("AgentService event lifecycle", () => {
       expect(systemText).toContain("<active_tools>generate_image, web_search, web_extract</active_tools>");
       expect(systemText).toContain("<prompt_mode>optimize</prompt_mode>");
       expect(systemText).toContain("<research_mode>required</research_mode>");
-      expect(systemText).toContain("Chinese ecommerce listing design");
+      expect(systemText).toContain("run up to two focused visual-design searches");
       expect(firstRequestBody.tools.map((item: any) => item.function.name)).toEqual([
         "generate_image",
         "web_search",
@@ -455,6 +455,181 @@ describe("AgentService event lifecycle", () => {
     } finally {
       tool.execute = originalExecute;
       researchTool.execute = originalResearchExecute;
+    }
+  });
+
+  test("keeps a platform-default suite open for later distinct image calls", async () => {
+    const scenarios = [
+      {
+        name: "inferred platform plan",
+        request: "帮我生成这个产品的亚马逊套图",
+        expectedExecutions: 3,
+        expectExplicitLimitSkip: false,
+      },
+      {
+        name: "explicit numeric limit",
+        request: "帮我生成这个产品的 2 张亚马逊套图",
+        expectedExecutions: 2,
+        expectExplicitLimitSkip: true,
+      },
+    ];
+    const tool = TOOL_MAP.get("generate_image")!;
+    const originalExecute = tool.execute;
+
+    try {
+      for (const scenario of scenarios) {
+        const session = { messages: [], lastAccess: Date.now() };
+        const memory = Object.create(AgentMemory.prototype) as any;
+        memory.getSession = () => session;
+        memory.get = () => [];
+        memory.consumeScreenshot = () => null;
+        memory.registerAssets = () => [];
+        memory.compactForModel = (messages: any[]) => messages;
+        memory.set = () => undefined;
+        memory.saveSession = () => undefined;
+
+        let requestCount = 0;
+        const ai = {
+          resolveChannelAndModel: async () => ({
+            channel: { apiKey: "test-key", baseUrl: "http://example.invalid/v1" },
+            upstreamModel: "test-model",
+          }),
+          fetchProvider: async () => {
+            requestCount++;
+            const chunks = requestCount === 1
+              ? [
+                  `data: ${JSON.stringify({
+                    id: "chatcmpl-suite",
+                    object: "chat.completion.chunk",
+                    created: 1,
+                    model: "test-model",
+                    choices: [{
+                      index: 0,
+                      delta: {
+                        role: "assistant",
+                        tool_calls: [
+                          ["call-main", "main"],
+                          ["call-a-plus", "a_plus"],
+                        ].map(([id, deliverable], index) => ({
+                          index,
+                          id,
+                          type: "function",
+                          function: {
+                            name: "generate_image",
+                            arguments: JSON.stringify({ deliverable }),
+                          },
+                        })),
+                      },
+                      finish_reason: null,
+                    }],
+                  })}`,
+                  'data: {"id":"chatcmpl-suite","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
+                  "data: [DONE]",
+                  "",
+                ]
+              : requestCount === 2
+                ? [
+                    `data: ${JSON.stringify({
+                      id: "chatcmpl-suite-next",
+                      object: "chat.completion.chunk",
+                      created: 1,
+                      model: "test-model",
+                      choices: [{
+                        index: 0,
+                        delta: {
+                          role: "assistant",
+                          tool_calls: [{
+                            index: 0,
+                            id: "call-feature",
+                            type: "function",
+                            function: {
+                              name: "generate_image",
+                              arguments: JSON.stringify({ deliverable: "feature" }),
+                            },
+                          }],
+                        },
+                        finish_reason: null,
+                      }],
+                    })}`,
+                    'data: {"id":"chatcmpl-suite-next","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
+                    "data: [DONE]",
+                    "",
+                  ]
+                : [
+                  'data: {"id":"chatcmpl-final","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"完成。"},"finish_reason":null}]}',
+                  'data: {"id":"chatcmpl-final","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+                  "data: [DONE]",
+                  "",
+                ];
+            return new Response(chunks.join("\n\n"), {
+              status: 200,
+              headers: { "content-type": "text/event-stream" },
+            });
+          },
+          getTaskStatus: (taskId: string) => ({
+            status: "success",
+            imageUrl: `https://example.com/${taskId}.png`,
+          }),
+        };
+        const service = new AgentService(
+          ai as any,
+          memory,
+          { getConfig: async () => ({ agentConfig: { chatModel: "test-model" } }) } as any,
+          { recordTokenUsage: () => undefined } as any,
+          {} as any,
+        ) as any;
+        service.logger.warn = () => undefined;
+        service.logger.error = () => undefined;
+        service.logger.debug = () => undefined;
+        service.logger.log = () => undefined;
+
+        const receivedInputs: any[] = [];
+        tool.execute = async (input: any) => {
+          receivedInputs.push(input);
+          const sequence = receivedInputs.length;
+          return {
+            output: {
+              refId: `img_${sequence}`,
+              taskId: `task-${sequence}`,
+              status: "generating",
+            },
+          };
+        };
+
+        const events: any[] = [];
+        for await (const event of service.run(
+          `session-suite-${scenario.expectedExecutions}`,
+          scenario.request,
+          "http://localhost",
+          undefined,
+          [{
+            refId: "image_selected",
+            tag: "Image",
+            selected: true,
+            url: "https://example.com/product.png",
+          }],
+        ).stream()) events.push(event);
+
+        expect(receivedInputs, scenario.name).toHaveLength(scenario.expectedExecutions);
+        expect(
+          receivedInputs.map((input) => input.prompt),
+          scenario.name,
+        ).toEqual(
+          scenario.expectedExecutions === 3
+            ? ["生成主图", "生成亚马逊A+详情页", "生成功能图"]
+            : ["生成主图", "生成亚马逊A+详情页"],
+        );
+        expect(
+          events.some((event) =>
+            event.type === "tool_result" &&
+            event.output?.status === "skipped" &&
+            String(event.output?.error).includes("User-specified image output limit")
+          ),
+          scenario.name,
+        ).toBe(scenario.expectExplicitLimitSkip);
+      }
+    } finally {
+      tool.execute = originalExecute;
     }
   });
 

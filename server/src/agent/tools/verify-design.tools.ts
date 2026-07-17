@@ -2,15 +2,14 @@ import type { AgentTool, ToolContext, ToolResult } from '../tool.interface';
 import { runMCotLoop } from '../mcot-graph';
 
 /**
- * verify_design — One-step MCoT quality gate:
- * export → vision-analyze → auto-fix → re-verify (up to 2 rounds)
+ * verify_design — bounded visual quality gate.
  */
 export const verifyDesignTool: AgentTool = {
   name: 'verify_design',
   description:
-    'Visually verify and auto-fix a canvas element. Takes a screenshot, runs AI vision critique, ' +
-    'applies fixes, and repeats up to 2 rounds until the design scores ≥8/10 or no fixable issues remain. ' +
-    'Call this ONCE after finishing a design composition instead of calling export_node_image + analyze_design separately.',
+    'Visually verify a finished canvas element or generated bitmap against the original requirements. ' +
+    'For editable canvas nodes it can apply safe property fixes and re-check. For a flattened bitmap it returns one actionable repairInstruction; ' +
+    'the agent may call edit_image once and then verify that repaired refId once. Do not repeatedly re-check an unchanged bitmap.',
   parameters: {
     type: 'object',
     properties: {
@@ -55,19 +54,27 @@ export const verifyDesignTool: AgentTool = {
 
     return {
       output: {
+        refId: input.refId,
         success: result.success,
         attempts: result.attempts,
         score: result.analysis?.score,
         failureType: result.analysis?.failureType,
+        repairStrategy: result.analysis?.repairStrategy,
         critique: result.analysis?.critique,
         suggestions: result.analysis?.suggestions,
+        repairInstruction: result.analysis?.repairInstruction,
+        repairRecommended: Boolean(
+          !result.success &&
+          result.analysis?.repairInstruction &&
+          ['edit', 'regenerate'].includes(result.analysis?.repairStrategy),
+        ),
         platform: input.platform,
         deliverable: input.deliverable,
         referenceAssetId: input.referenceAssetId,
         identityFidelityScore: result.analysis?.identityFidelityScore,
         note: result.success
           ? `✅ 设计已通过质检（评分 ${result.analysis?.score}/10，共检查 ${result.attempts} 次）`
-          : `⚠️ 经 ${result.attempts} 次优化仍有待改进：${result.analysis?.critique ?? '请手动检查'}`,
+          : `⚠️ 质检未通过（共检查 ${result.attempts} 次）：${result.analysis?.critique ?? '请手动检查'}`,
       },
     };
   },

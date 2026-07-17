@@ -158,13 +158,46 @@ export class AiService implements OnModuleInit {
 
     const requestedSize = typeof body?.size === "string" ? body.size.trim() : "";
     const requestedQuality = typeof body?.quality === "string" ? body.quality.trim() : "";
+    const requestedAspectRatio =
+      typeof body?.aspectRatio === "string" ? body.aspectRatio.trim() : "";
+    const pixelSize = this.parsePixelSize(requestedSize);
+    const derivedAspectRatio =
+      !requestedAspectRatio && pixelSize
+        ? this.aspectRatioFromPixelSize(pixelSize.width, pixelSize.height)
+        : undefined;
+    const aspectRatio = requestedAspectRatio || derivedAspectRatio;
+    if (requestedAspectRatio && requestedAspectRatio.toLowerCase() !== "auto") {
+      const parsedRatio = this.parseAspectRatio(requestedAspectRatio);
+      if (!parsedRatio) {
+        throw new HttpException(
+          {
+            code: "INVALID_IMAGE_ASPECT_RATIO",
+            error: `Invalid image aspect ratio: ${requestedAspectRatio}`,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (
+        pixelSize &&
+        Math.abs(pixelSize.width / pixelSize.height - parsedRatio.ratio) /
+          parsedRatio.ratio > 0.01
+      ) {
+        throw new HttpException(
+          {
+            code: "CONFLICTING_IMAGE_GEOMETRY",
+            error: `Image size ${requestedSize} conflicts with aspect ratio ${requestedAspectRatio}`,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
     const mappedModel = await this.resolveModelMapping("image", model);
     const capabilityModel = mappedModel?.upstreamModel || model;
     const size = this.resolveImageRequestSize(
       capabilityModel,
       requestedSize,
       options,
-      body?.aspectRatio,
+      aspectRatio,
     );
     const quality = requestedQuality || options.defaults?.quality;
 
@@ -176,6 +209,7 @@ export class AiService implements OnModuleInit {
       model,
       n: count,
       ...(size ? { size } : {}),
+      ...(aspectRatio ? { aspectRatio } : {}),
       ...(quality ? { quality } : {}),
     };
   }
@@ -301,6 +335,65 @@ export class AiService implements OnModuleInit {
     return model.trim().toLowerCase().includes("gpt-image-2");
   }
 
+  private parsePixelSize(value: unknown): { width: number; height: number } | undefined {
+    if (typeof value !== "string") return undefined;
+    const match = value.trim().match(/^(\d{2,5})\s*[x×]\s*(\d{2,5})$/i);
+    if (!match) return undefined;
+    const width = Number(match[1]);
+    const height = Number(match[2]);
+    if (!width || !height) return undefined;
+    return { width, height };
+  }
+
+  private parseAspectRatio(value: unknown): {
+    width: number;
+    height: number;
+    ratio: number;
+  } | undefined {
+    if (typeof value !== "string") return undefined;
+    const match = value.trim().match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
+    if (!match) return undefined;
+    const width = Number(match[1]);
+    const height = Number(match[2]);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return undefined;
+    }
+    return { width, height, ratio: width / height };
+  }
+
+  private aspectRatioFromPixelSize(width: number, height: number): string {
+    let a = Math.round(width);
+    let b = Math.round(height);
+    const originalWidth = a;
+    const originalHeight = b;
+    while (b !== 0) {
+      const remainder = a % b;
+      a = b;
+      b = remainder;
+    }
+    const divisor = Math.max(1, a);
+    return `${originalWidth / divisor}:${originalHeight / divisor}`;
+  }
+
+  private resolveConfiguredSizeFromAspectRatio(
+    options: ImageModelOptionsResponse,
+    aspectRatio: unknown,
+  ): string | undefined {
+    const requestedRatio = this.parseAspectRatio(aspectRatio);
+    if (!requestedRatio) return undefined;
+    const candidates = (options.sizes ?? []).flatMap((size) => {
+      const parsed = this.parsePixelSize(size);
+      if (!parsed) return [];
+      const relativeError = Math.abs(
+        parsed.width / parsed.height - requestedRatio.ratio,
+      ) / requestedRatio.ratio;
+      return [{ size, relativeError }];
+    }).sort((a, b) => a.relativeError - b.relativeError);
+    return candidates[0] && candidates[0].relativeError <= 0.01
+      ? candidates[0].size
+      : undefined;
+  }
+
   private resolveImageRequestSize(
     model: string,
     size: unknown,
@@ -314,6 +407,11 @@ export class AiService implements OnModuleInit {
       aspectRatio,
     );
     if (ratioSize) return ratioSize;
+    const configuredRatioSize = this.resolveConfiguredSizeFromAspectRatio(
+      options,
+      aspectRatio,
+    );
+    if (configuredRatioSize) return configuredRatioSize;
     if (requested) return requested;
     if (this.isGptImage2(model)) return "auto";
     return options.defaults?.size || "1024x1024";
@@ -382,6 +480,54 @@ export class AiService implements OnModuleInit {
     if (["low", "standard", "1k"].includes(requestedQuality)) return "1K";
     if (requestedQuality === "512" || requestedQuality === "0.5k") return "512";
     return fallback;
+  }
+
+  private resolveNativeGeminiAspectRatio(
+    size: unknown,
+    aspectRatio: unknown,
+  ): string {
+    const validRatios = [
+      "1:1",
+      "1:4",
+      "1:8",
+      "2:3",
+      "3:2",
+      "3:4",
+      "4:1",
+      "4:3",
+      "4:5",
+      "5:4",
+      "8:1",
+      "9:16",
+      "16:9",
+      "21:9",
+    ];
+    const requested = typeof aspectRatio === "string" ? aspectRatio.trim() : "";
+    if (requested && requested.toLowerCase() !== "auto") {
+      const parsed = this.parseAspectRatio(requested);
+      const canonical = validRatios.find((candidate) => {
+        const ratio = this.parseAspectRatio(candidate)!;
+        return parsed && Math.abs(parsed.ratio - ratio.ratio) / ratio.ratio <= 0.005;
+      });
+      if (!canonical) {
+        throw new Error(`Unsupported native Gemini aspect ratio: ${requested}`);
+      }
+      return canonical;
+    }
+
+    const pixelSize = this.parsePixelSize(size);
+    if (!pixelSize) return "1:1";
+    const pixelRatio = pixelSize.width / pixelSize.height;
+    const canonical = validRatios.find((candidate) => {
+      const ratio = this.parseAspectRatio(candidate)!;
+      return Math.abs(pixelRatio - ratio.ratio) / ratio.ratio <= 0.005;
+    });
+    if (!canonical) {
+      throw new Error(
+        `Pixel size ${pixelSize.width}x${pixelSize.height} cannot be represented by native Gemini aspect-ratio presets`,
+      );
+    }
+    return canonical;
   }
 
   async resolveModelMapping(
@@ -1679,30 +1825,13 @@ export class AiService implements OnModuleInit {
           body?.quality,
         );
 
-        // Resolve a valid aspectRatio for native Gemini
-        let aspectRatio = "1:1";
-        if (typeof body?.aspectRatio === "string" && body.aspectRatio.trim()) {
-          const val = body.aspectRatio.trim();
-          const validRatios = new Set([
-            "1:1",
-            "1:4",
-            "1:8",
-            "2:3",
-            "3:2",
-            "3:4",
-            "4:1",
-            "4:3",
-            "4:5",
-            "5:4",
-            "8:1",
-            "9:16",
-            "16:9",
-            "21:9",
-          ]);
-          if (validRatios.has(val)) {
-            aspectRatio = val;
-          }
-        }
+        // Native Gemini uses separate resolution and aspect-ratio controls.
+        // Derive orientation from an explicit pixel size and reject unsupported
+        // geometry instead of silently falling back to a square image.
+        const aspectRatio = this.resolveNativeGeminiAspectRatio(
+          body?.size,
+          body?.aspectRatio,
+        );
 
         const payload = {
           contents: [

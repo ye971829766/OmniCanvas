@@ -8,6 +8,7 @@ import {
   upsertCanvasNode,
 } from '../canvas-state';
 import { applyFinalImageRequestPolicy } from '../image-request-policy';
+import { IMAGE_REQUEST_POLICY_ERROR } from '../image-suite-plan';
 import { resolveReferencesToBase64 } from './image-reference';
 
 /**
@@ -114,9 +115,9 @@ export function getGenerationAspectRatio(width: number, height: number): string 
 export const generateImageTool: AgentTool = {
   name: 'generate_image',
   description:
-    'Generate a finished bitmap and place it on the canvas. Preserve every explicit requirement in a concrete visual brief while normalizing it into a production-ready prompt. ' +
-    'When the user supplied only a high-level task brief, use research and design judgment to author the complete production prompt. Pass attached ' +
-    'or selected images in refImages. Explicit main+detail suites should use coherent, meaningfully different role-specific prompts.',
+    'Generate a finished bitmap and place it on the canvas. Unless the user explicitly asks to optimize or rewrite the prompt, remove only a leading request wrapper such as 请/帮我/please/help me and set prompt to the remaining user task exactly as written. ' +
+    'For a platform 套图/suite, make one structured call per required deliverable. Set platform and deliverable, and put only exact relevant user wording in userConstraints; the server compiles the final prompt. ' +
+    'Do not translate, expand, professionalize, summarize, or append platform/design instructions. Pass attached or selected images in refImages instead of describing them in prompt.',
   parameters: {
     type: 'object',
     properties: {
@@ -124,20 +125,45 @@ export const generateImageTool: AgentTool = {
       prompt: {
         type: 'string',
         description:
-          'Complete image-model prompt. Keep every explicit user detail and constraint; normalize concrete briefs into a focused production spec and expand high-level briefs with the art direction needed for the strongest result. Exact wording is required only when the user asks for verbatim handling. Avoid unsupported facts and empty keyword stuffing.',
+          'Image-model prompt. For an ordinary request, remove only a leading conversational request wrapper and copy the remaining user task exactly. In normal platform-suite mode this field is only a tool-call placeholder: the server ignores its creative wording and deterministically compiles the final prompt from deliverable plus verified userConstraints. Only an explicit prompt-optimization request permits creative expansion.',
+      },
+      platform: {
+        type: 'string',
+        description:
+          'For a platform suite, the marketplace id such as amazon, taobao, jd, shopee, or temu. Omit for an ordinary single image.',
+      },
+      deliverable: {
+        type: 'string',
+        description:
+          'For a platform suite, one short deliverable role id or artifact name, such as main, a_plus, 详情页, or 店铺横幅图. Never place visual direction here.',
+      },
+      userConstraints: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'For a platform suite, only relevant constraint snippets copied exactly from the current user message. Invented snippets are discarded before prompt compilation.',
       },
       model: { type: 'string', description: 'Optional image model id. Usually omit unless the user selected one.' },
       aspectRatio: { type: 'string', description: 'Optional aspect ratio such as 1:1, 16:9, 3:4, or a provider-supported custom ratio.' },
-      size: { type: 'string', description: 'e.g. "1024x1024" (optional)' },
+      size: {
+        type: 'string',
+        description:
+          'Optional provider-supported pixel size in WIDTHxHEIGHT form. Omit when aspect ratio and provider defaults are sufficient.',
+      },
       quality: { type: 'string', description: 'Optional provider quality such as auto, low, medium, high, standard, hd, 1K, 2K.' },
       style: {
         type: 'string',
-        description: 'Optional provider style control. Use only when it materially improves the requested deliverable.',
+        description: 'Optional provider style control. Use only when the user explicitly requested prompt optimization.',
       },
       seriesRole: {
         type: 'string',
         description:
           'Optional semantic role for this image in a multi-image suite (for example main, lifestyle, visible_detail, detail_overview). Use a distinct role per deliverable.',
+      },
+      repairOf: {
+        type: 'string',
+        description:
+          'For the single bounded automatic regeneration after visual verification fails, set this to the failed image refId. Omit for an initial or genuinely distinct deliverable.',
       },
       refImages: {
         type: 'array',
@@ -157,6 +183,9 @@ export const generateImageTool: AgentTool = {
   async execute(input: any, ctx: ToolContext): Promise<ToolResult> {
     if (ctx.directImageRequest === true) {
       input = applyFinalImageRequestPolicy('generate_image', input, ctx.userInput);
+    }
+    if (typeof input?.[IMAGE_REQUEST_POLICY_ERROR] === 'string') {
+      throw new Error(input[IMAGE_REQUEST_POLICY_ERROR]);
     }
     const refId = resolveNewCanvasRefId(ctx, input.refId, 'img');
     const canvasNodes = getCanvasNodeMap(ctx);
@@ -238,7 +267,11 @@ export const generateImageTool: AgentTool = {
       aspectRatio,
       size,
       quality,
+      platform: input.platform,
+      deliverable: input.deliverable,
+      userConstraints: input.userConstraints,
       seriesRole: input.seriesRole,
+      repairOf: input.repairOf,
       x,
       y,
       width,
@@ -305,7 +338,11 @@ export const generateImageTool: AgentTool = {
         aspectRatio,
         size,
         quality,
+        platform: input.platform,
+        deliverable: input.deliverable,
+        userConstraints: input.userConstraints,
         seriesRole: input.seriesRole,
+        repairOf: input.repairOf,
         referenceAssetId,
         billingOperationId: billed.billingOperationId,
         note: 'ImageGen node created and generation started. The canvas will poll for the result.',

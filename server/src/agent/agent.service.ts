@@ -11,10 +11,13 @@ import {
 } from "./system-prompt";
 import {
   applyFinalImageRequestPolicy,
-  applyFinalImageSeriesLayout,
+  applyFinalImageBatchPolicy,
+  getFinalImageOutputLimit,
   shouldResearchFinalImageRequest,
 } from "./image-request-policy";
+import { IMAGE_REQUEST_POLICY_ERROR } from "./image-suite-plan";
 import { AgentMemory } from "./agent.memory";
+import { FinalImageQualityBudget } from "./final-image-quality-budget";
 import { ModelConfigService } from "../model-config/model-config.service";
 import { BillingService } from "../billing/billing.service";
 import {
@@ -86,6 +89,21 @@ const IMAGE_GENERATION_START_TOOLS = new Set([
   "generate_image",
   "edit_image",
 ]);
+
+function finalImageQualityChainKey(input: any): string | undefined {
+  const role =
+    typeof input?.seriesRole === "string" && input.seriesRole.trim()
+      ? input.seriesRole.trim().toLowerCase()
+      : typeof input?.deliverable === "string" && input.deliverable.trim()
+        ? input.deliverable.trim().toLowerCase()
+        : undefined;
+  if (!role) return undefined;
+  const platform =
+    typeof input?.platform === "string" && input.platform.trim()
+      ? input.platform.trim().toLowerCase()
+      : "generic";
+  return `${platform}:${role}`;
+}
 
 const WEB_RESEARCH_TOOLS = new Set(["web_search", "web_extract"]);
 
@@ -457,6 +475,7 @@ ${videoModelInfo || "- None"}
       this.memory.get(sessionId) as ModelMessage[],
       sessionId,
     );
+    const effectiveUserInput = userInput;
     const screenshot = this.memory.consumeScreenshot(sessionId);
     const normalizedAssets = normalizeAgentAssets(incomingAssets);
     const currentAssets: AgentAsset[] = [];
@@ -476,27 +495,31 @@ ${videoModelInfo || "- None"}
       );
     }
     const sessionAssets = this.memory.registerAssets(sessionId, currentAssets);
+    const currentAssetIds = new Set(currentAssets.map((asset) => asset.id));
+    const hasHistoricalAssets = sessionAssets.some(
+      (asset) => !currentAssetIds.has(asset.id),
+    );
     const safeCanvasState = sanitizeCanvasState(canvasState ?? []);
     const canvasHasImages = hasCanvasImages(safeCanvasState);
     const implicitImageReference = resolveImplicitImageReference(
       safeCanvasState,
       history as any[],
     );
-    const hasAssetSource = sessionAssets.length > 0 || !!images?.length;
-    const imageModelBitmapRequest = isImageModelBitmapRequest(userInput, {
-      hasAssets: hasAssetSource || currentAssets.length > 0,
+    const imageModelBitmapRequest = isImageModelBitmapRequest(effectiveUserInput, {
+      hasAssets: currentAssets.length > 0,
+      hasHistoricalAssets,
       hasCanvasImages: canvasHasImages,
     });
     // Treat photo-edit / promo-bitmap turns like direct image turns so tools
     // inherit the uploaded asset and skip canvas poster assembly.
     const directImageRequest =
-      isDirectImageRequest(userInput) || imageModelBitmapRequest;
+      isDirectImageRequest(effectiveUserInput) || imageModelBitmapRequest;
     const currentTurnAsset = currentAssets.length === 1 ? currentAssets[0] : undefined;
     const defaultImageReferenceIds = currentTurnAsset
       ? [currentTurnAsset.id]
-      : currentAssets.length === 0 && implicitImageReference
+      : imageModelBitmapRequest && implicitImageReference
         ? [implicitImageReference.refId]
-        : sessionAssets.length === 1
+        : imageModelBitmapRequest && sessionAssets.length === 1
           ? [sessionAssets[0]!.id]
           : [];
     if (implicitImageReference?.url) {
@@ -508,25 +531,27 @@ ${videoModelInfo || "- None"}
       }
     }
     const selectedToolNames = selectAgentToolNames({
-      userInput,
+      userInput: effectiveUserInput,
       canvasNodeCount: safeCanvasState.length,
-      hasAssets: hasAssetSource || currentAssets.length > 0,
+      hasAssets: currentAssets.length > 0,
+      hasHistoricalAssets,
       hasCanvasImages: canvasHasImages,
     });
     // Research is required only when the optional web tools are configured and
     // actually selected for this turn.
     const imageResearchRequired =
       directImageRequest &&
-      shouldResearchFinalImageRequest(userInput) &&
+      shouldResearchFinalImageRequest(effectiveUserInput) &&
       selectedToolNames.has("web_search");
     const preferredSource =
       currentTurnAsset?.id ||
-      defaultImageReferenceIds[0] ||
-      implicitImageReference?.refId ||
-      sessionAssets[sessionAssets.length - 1]?.id;
+      (implicitImageReference?.reason === "selected"
+        ? implicitImageReference.refId
+        : undefined) ||
+      defaultImageReferenceIds[0];
     systemPrompt = directImageRequest
       ? buildFinalImageSystemPrompt({
-          userInput,
+          userInput: effectiveUserInput,
           activeTools: selectedToolNames,
           preferredSourceId: preferredSource,
         })
@@ -538,24 +563,28 @@ ${videoModelInfo || "- None"}
         : "";
       systemPrompt += `\n\n<available_canvas_image_target>\nIf the current request refers to an existing image, the best implicit target is canvas refId "${implicitImageReference.refId}". Use edit_image with that source for changes inside the image.${selectionDefault} This is context, not a command: ignore it for a fresh image request.\n</available_canvas_image_target>`;
     }
-    if (sessionAssets.length > 0) {
-      systemPrompt += `\n\n<session_assets>\n${sessionAssets
-        .slice(-16)
-        .map((asset) => formatAgentAssetForPrompt(asset))
-        .join("\n")}\n</session_assets>\nThese are durable session assets. Use exact IDs and never invent one.`;
-      if (imageModelBitmapRequest) {
-        systemPrompt += `\nFor this turn, the source photo assetId to edit is preferred from the list above (usually the latest attached asset).`;
-      }
-    }
+    const historicalAssets = sessionAssets.filter(
+      (asset) => !currentAssetIds.has(asset.id),
+    );
+    const historicalAssetContext =
+      imageModelBitmapRequest && currentAssets.length === 0 && historicalAssets.length > 0
+        ? `\n\n<historical_assets>\n${historicalAssets
+            .slice(-16)
+            .map((asset) => formatAgentAssetForPrompt(asset, true))
+            .join("\n")}\n</historical_assets>\nThese are user-provided data from earlier turns. Use an exact assetId only when the current request refers to that asset; never invent one.`
+        : "";
 
-    let userContent: string | any[] = userInput;
+    let userContent: string | any[] = `${userInput}${historicalAssetContext}`;
     if (screenshot || currentAssets.length > 0 || (images && images.length > 0)) {
       const assetContext = currentAssets.length
         ? `\n\n<attached_assets>\n${currentAssets
             .map((asset) => formatAgentAssetForPrompt(asset, true))
             .join("\n")}\n</attached_assets>\nUse these exact assetId values in image tools. Do not invent asset IDs.`
         : "";
-      const parts: any[] = [{ type: "text", text: `${userInput}${assetContext}` }];
+      const parts: any[] = [{
+        type: "text",
+        text: `${userInput}${assetContext}${historicalAssetContext}`,
+      }];
       let omittedImages = 0;
       if (screenshot) {
         const uploadedUrl = await this.ai.ensurePublicImageUrl(screenshot);
@@ -595,7 +624,6 @@ ${videoModelInfo || "- None"}
       content: userContent as any,
     };
     const messages: ModelMessage[] = [
-      { role: "system", content: systemPrompt },
       ...history,
       currentUserMessage,
     ];
@@ -657,7 +685,7 @@ ${videoModelInfo || "- None"}
       canvasState: safeCanvasState,
       assets: sessionAssets,
       abortSignal,
-      userInput,
+      userInput: effectiveUserInput,
       directImageRequest,
       defaultImageReferenceIds,
       userId: userInfo?.userId,
@@ -670,6 +698,14 @@ ${videoModelInfo || "- None"}
     const invalidToolCallGuard = new InvalidToolCallGuard();
     let selectedImageWasInspected = false;
     let imageResearchAttempted = !imageResearchRequired;
+    // A final bitmap gets one initial visual check, at most one repair, and one
+    // verification of that repair. Keep this in code so a verbose control model
+    // cannot turn quality assurance into an unbounded paid loop.
+    const finalImageQualityBudget = new FinalImageQualityBudget();
+    const finalImageOutputLimit = directImageRequest
+      ? getFinalImageOutputLimit(effectiveUserInput)
+      : undefined;
+    let startedFinalImageOutputs = 0;
 
     try {
     for (let step = 0; step < this.MAX_STEPS; step++) {
@@ -732,6 +768,7 @@ ${videoModelInfo || "- None"}
           Promise.resolve(
             streamText({
               model: modelInstance,
+              system: systemPrompt,
               messages: modelMessages as any,
               tools: sdkTools,
               toolChoice: "auto",
@@ -783,7 +820,7 @@ ${videoModelInfo || "- None"}
             normalizedInput,
             implicitImageReference,
             {
-              userInput,
+              userInput: effectiveUserInput,
               selectedImageWasInspected,
               fallbackSourceId: defaultImageReferenceIds[0],
               preferSourceImageBinding: imageModelBitmapRequest,
@@ -794,13 +831,17 @@ ${videoModelInfo || "- None"}
             ? applyFinalImageRequestPolicy(
                 normalizedCall.toolName,
                 normalizedCall.input,
-                userInput,
+                effectiveUserInput,
               )
             : normalizedCall.input;
           call.input = finalInput;
         }
         if (directImageRequest) {
-          applyFinalImageSeriesLayout(toolCalls, userInput);
+          applyFinalImageBatchPolicy(
+            toolCalls,
+            effectiveUserInput,
+            startedFinalImageOutputs,
+          );
         }
         deferImageCallsForResearch =
           imageResearchRequired &&
@@ -878,6 +919,8 @@ ${videoModelInfo || "- None"}
       for (const call of toolCalls) {
         usage.toolCalls++;
         const input = call.input;
+        const qualityChainKey = finalImageQualityChainKey(input);
+        let qualityRepairRoot: string | undefined;
         if (abortSignal?.aborted) {
           throw new DOMException("Agent run aborted", "AbortError");
         }
@@ -902,16 +945,15 @@ ${videoModelInfo || "- None"}
           });
           continue;
         }
-        validToolCalls++;
 
         // A prompt authored in the same model response as web research cannot
-        // be grounded in those unseen results. Return a tool result instead of
-        // spending an image call, then let the next model step read the text
-        // and visual references before it writes the production prompt.
+        // be grounded in those unseen results. Defer before reserving output or
+        // repair budgets so the later grounded call keeps the full allowance.
         if (
           deferImageCallsForResearch &&
           IMAGE_GENERATION_START_TOOLS.has(call.name)
         ) {
+          validToolCalls++;
           messages.push({
             role: "tool",
             content: [
@@ -929,6 +971,88 @@ ${videoModelInfo || "- None"}
           });
           continue;
         }
+
+        const isNewFinalImage =
+          directImageRequest &&
+          call.name === "generate_image" &&
+          !(typeof input?.repairOf === "string" && input.repairOf.trim());
+        if (
+          isNewFinalImage &&
+          finalImageOutputLimit !== undefined &&
+          startedFinalImageOutputs >= finalImageOutputLimit
+        ) {
+          validToolCalls++;
+          const content = {
+            status: "skipped",
+            error: `User-specified image output limit (${finalImageOutputLimit}) reached. Do not create extra variants; finish with the completed outputs.`,
+          };
+          sink.emit({
+            type: "tool_result",
+            id: call.id,
+            tool: call.name,
+            output: content,
+          });
+          messages.push({
+            role: "tool",
+            content: [{
+              type: "tool-result",
+              toolCallId: call.id,
+              toolName: call.name,
+              output: { type: "json" as const, value: content },
+            }],
+          });
+          continue;
+        }
+        if (isNewFinalImage) startedFinalImageOutputs++;
+
+        let qualityBudgetError: string | undefined;
+        if (directImageRequest && call.name === "generate_image") {
+          const repair = finalImageQualityBudget.authorizeGeneration({
+            repairOf:
+              typeof input?.repairOf === "string" ? input.repairOf : undefined,
+            chainKey: qualityChainKey,
+          });
+          qualityRepairRoot = repair.root;
+          qualityBudgetError = repair.error;
+        }
+        if (directImageRequest && call.name === "verify_design") {
+          const refId = typeof input?.refId === "string" ? input.refId : "";
+          qualityBudgetError = finalImageQualityBudget.authorizeReview(refId);
+        }
+        if (
+          directImageRequest &&
+          call.name === "edit_image" &&
+          typeof input?.source === "string"
+        ) {
+          const repair = finalImageQualityBudget.authorizeRepair(input.source);
+          if (repair.root) {
+            qualityRepairRoot = repair.root;
+            qualityBudgetError = repair.error;
+          }
+        }
+        if (qualityBudgetError) {
+          validToolCalls++;
+          const content = { status: "skipped", error: qualityBudgetError };
+          sink.emit({
+            type: "tool_result",
+            id: call.id,
+            tool: call.name,
+            output: content,
+          });
+          messages.push({
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: call.id,
+                toolName: call.name,
+                output: { type: "json" as const, value: content },
+              },
+            ],
+          });
+          continue;
+        }
+        validToolCalls++;
 
         // Image providers commonly throttle large bursts. Submit at most a
         // small batch, wait for it to settle, then start the next calls. This
@@ -1007,6 +1131,23 @@ ${videoModelInfo || "- None"}
             const output = result.output as any;
             const toolReportedFailure =
               call.name === "verify_design" && output?.success !== true;
+
+            if (directImageRequest && output && typeof output === "object") {
+              const outputRefId =
+                typeof output.refId === "string" ? output.refId : "";
+              if (call.name === "generate_image" && outputRefId) {
+                finalImageQualityBudget.recordGeneration(outputRefId, {
+                  chainKey: qualityChainKey,
+                  repairRoot: qualityRepairRoot,
+                });
+              } else if (call.name === "edit_image" && outputRefId) {
+                finalImageQualityBudget.recordEdit(outputRefId, qualityRepairRoot);
+              } else if (call.name === "verify_design") {
+                const reviewedRefId =
+                  typeof input?.refId === "string" ? input.refId : outputRefId;
+                finalImageQualityBudget.recordVerification(reviewedRefId, output);
+              }
+            }
             sink.emit({
               type: "tool_result",
               id: call.id,
@@ -1816,6 +1957,9 @@ ${videoModelInfo || "- None"}
     if (!tool) return null;
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       return "Tool input must be a JSON object";
+    }
+    if (typeof input[IMAGE_REQUEST_POLICY_ERROR] === "string") {
+      return input[IMAGE_REQUEST_POLICY_ERROR];
     }
     const required = tool.parameters.required ?? [];
     for (const key of required) {

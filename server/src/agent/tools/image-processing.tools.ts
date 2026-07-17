@@ -204,7 +204,7 @@ export const editImageTool: AgentTool = {
     'Edit an existing uploaded photo or canvas image with the image generation model (not canvas shapes/text). ' +
     'Preferred for promotional shots, cool/new backgrounds, scene changes, retouching, and any "edit this photo" request. ' +
     'Use for adding, removing, or replacing pictured subjects, or changing product detail, background, lighting, material, or color while preserving identity. ' +
-    'Pass source as the exact assetId or canvas refId. Preserve every explicit edit constraint while normalizing concrete briefs; optimize high-level task briefs. ' +
+    'Pass source as the exact assetId or canvas refId. Remove only a leading request wrapper and use the remaining user task as prompt exactly as written unless prompt optimization was explicitly requested. ' +
     'Do not rebuild posters with add_text/add_rect when this tool applies.',
   parameters: {
     type: 'object',
@@ -213,7 +213,13 @@ export const editImageTool: AgentTool = {
       prompt: {
         type: 'string',
         description:
-          'Complete edit prompt. Keep every explicit change and invariant; normalize a concrete request into a focused edit spec, or author useful art direction for a high-level task. Exact wording is required only when the user asks for verbatim handling. Do not invent factual product attributes.',
+          'Edit prompt. For an ordinary request, copy the cleaned user message exactly with no translation, expansion, or appended instructions. Rewrite only when the user explicitly asks for prompt optimization.',
+      },
+      refImages: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'Optional additional identity, style, or compositing reference assetIds/refIds. source remains the edit target; these images must not replace it.',
       },
       maskRef: { type: 'string', description: 'Optional PNG mask assetId, canvas refId, URL, or data URL for localized edits.' },
       model: { type: 'string' },
@@ -235,6 +241,18 @@ export const editImageTool: AgentTool = {
     const sourceUrl = resolvedSourceUrl || sourceBase64;
     if (!sourceUrl || !sourceBase64) throw new Error(`Unable to resolve source image: ${input.source}`);
 
+    const referenceIds = Array.isArray(input.refImages)
+      ? input.refImages.filter(
+          (ref: unknown): ref is string =>
+            typeof ref === 'string' && ref !== input.source,
+        )
+      : [];
+    const supportingReferences = (
+      await Promise.all(
+        referenceIds.map((ref: string) => resolveReferenceToBase64(ref, ctx)),
+      )
+    ).filter((value): value is string => Boolean(value));
+
     const mask = input.maskRef ? await resolveReferenceToBase64(input.maskRef, ctx) : undefined;
     const refId = createProcessingTarget(input, ctx, sourceUrl, 'edit');
     const billed = await startBilledAgentTask(
@@ -248,6 +266,7 @@ export const editImageTool: AgentTool = {
         aspectRatio: input.aspectRatio,
         source: input.source,
         localized: Boolean(mask),
+        referenceCount: supportingReferences.length,
       },
       (billingContext) => ctx.ai.generateImageFromJson(
         {
@@ -257,7 +276,7 @@ export const editImageTool: AgentTool = {
           size: input.size,
           aspectRatio: input.aspectRatio,
           quality: input.quality,
-          images: [sourceBase64],
+          images: [sourceBase64, ...supportingReferences],
           mask: mask || undefined,
         },
         ctx.origin,
@@ -271,6 +290,9 @@ export const editImageTool: AgentTool = {
       (typeof (result as any)?.model === 'string' && (result as any).model) ||
       (typeof input.model === 'string' && input.model.trim()) ||
       undefined;
+    const referenceAssetId = [input.source, ...referenceIds].find((ref) =>
+      ctx.assets?.some((asset) => asset.id === ref),
+    );
 
     return {
       output: {
@@ -281,9 +303,7 @@ export const editImageTool: AgentTool = {
         operation: 'edit_image',
         localized: Boolean(mask),
         billingOperationId: billed.billingOperationId,
-        referenceAssetId: ctx.assets?.some((asset) => asset.id === input.source)
-          ? input.source
-          : undefined,
+        referenceAssetId,
       },
     };
   },

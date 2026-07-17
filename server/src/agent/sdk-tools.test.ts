@@ -10,8 +10,12 @@ describe("agent AI SDK tools", () => {
 
     expect(tool.inputSchema.jsonSchema.properties.prompt.type).toBe("string");
     expect(tool.inputSchema.jsonSchema.required).toEqual(["prompt"]);
-    expect(tool.inputSchema.jsonSchema.properties.platform).toBeUndefined();
-    expect(tool.inputSchema.jsonSchema.properties.deliverable).toBeUndefined();
+    expect(tool.inputSchema.jsonSchema.properties.platform.type).toBe("string");
+    expect(tool.inputSchema.jsonSchema.properties.deliverable.type).toBe("string");
+    expect(tool.inputSchema.jsonSchema.properties.userConstraints).toMatchObject({
+      type: "array",
+      items: { type: "string" },
+    });
     expect(tool.parameters).toBeUndefined();
   });
 
@@ -46,8 +50,9 @@ describe("agent AI SDK tools", () => {
 
     const schema = requestBody.tools[0].function.parameters;
     expect(schema.properties.prompt.type).toBe("string");
-    expect(schema.properties.platform).toBeUndefined();
-    expect(schema.properties.deliverable).toBeUndefined();
+    expect(schema.properties.platform.type).toBe("string");
+    expect(schema.properties.deliverable.type).toBe("string");
+    expect(schema.properties.userConstraints.items.type).toBe("string");
     expect(schema.required).toEqual(["prompt"]);
   });
 });

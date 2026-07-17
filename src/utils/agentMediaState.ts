@@ -7,6 +7,38 @@ export interface AgentMediaNodeState {
   error?: string;
 }
 
+export interface MediaPixelSize {
+  width: number;
+  height: number;
+}
+
+function positivePixel(value: unknown): number | undefined {
+  const pixel = Number(value);
+  return Number.isFinite(pixel) && pixel > 0 ? Math.round(pixel) : undefined;
+}
+
+/**
+ * Resolve the final canvas box for generated media. Root-level generated
+ * images use their actual bitmap pixels; only an explicitly preserved layout
+ * (for example a fixed frame slot) keeps the placeholder box.
+ */
+export function resolveGeneratedImageCanvasSize(
+  placeholder: Partial<MediaPixelSize> | undefined,
+  natural: Partial<MediaPixelSize> | undefined,
+  preserveLayout: boolean,
+): MediaPixelSize {
+  const fallback = {
+    width: positivePixel(placeholder?.width) ?? 1024,
+    height: positivePixel(placeholder?.height) ?? 1024,
+  };
+  if (preserveLayout) return fallback;
+  const naturalWidth = positivePixel(natural?.width);
+  const naturalHeight = positivePixel(natural?.height);
+  return naturalWidth && naturalHeight
+    ? { width: naturalWidth, height: naturalHeight }
+    : fallback;
+}
+
 const MEDIA_TOOL_NAMES = new Set([
   "generate_image",
   "generate_video",
@@ -14,6 +46,7 @@ const MEDIA_TOOL_NAMES = new Set([
   "remove_background",
   "inpaint_image",
   "upscale_image",
+  "export_node_image",
 ]);
 
 const API_BASE_URL =

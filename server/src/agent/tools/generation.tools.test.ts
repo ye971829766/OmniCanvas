@@ -43,10 +43,10 @@ function generatedNodes(events: any[]): any[] {
 }
 
 describe('generateImageTool prompt policy', () => {
-  test('passes a full agent-authored prompt and provider controls through for a high-level brief', async () => {
+  test('passes a full agent-authored prompt through when prompt optimization is explicit', async () => {
     const { ctx, events, imageRequests } = createContext();
     ctx.directImageRequest = true;
-    ctx.userInput = '帮我生成适合的电商主图，生成 5 张，风格要统一';
+    ctx.userInput = '请优化提示词：帮我生成适合的电商主图，生成 5 张，风格要统一';
     ctx.defaultImageReferenceIds = ['asset_product'];
     const optimizedPrompt =
       '白色厚底运动鞋品牌 campaign 主视觉，夸张低机位透视、深靛蓝空间光场、电光青边缘光与动态切片排版；保持参考鞋款结构与配色，不虚构参数。';
@@ -74,11 +74,11 @@ describe('generateImageTool prompt policy', () => {
       prompt: optimizedPrompt,
       preserveLayout: false,
     });
-    expect(generatedNodes(events)[0].platform).toBeUndefined();
-    expect(generatedNodes(events)[0].deliverable).toBeUndefined();
+    expect(generatedNodes(events)[0].platform).toBe('taobao');
+    expect(generatedNodes(events)[0].deliverable).toBe('main');
   });
 
-  test('keeps the agent production prompt and explicit provider controls', async () => {
+  test('keeps only user-authored provider controls for an ordinary request', async () => {
     const { ctx, imageRequests } = createContext();
     ctx.directImageRequest = true;
     ctx.userInput = '生成 1024x1536、2:3、high 的竖版插画';
@@ -92,15 +92,15 @@ describe('generateImageTool prompt policy', () => {
     }, ctx);
 
     expect(imageRequests[0]).toMatchObject({
-      prompt: 'rewritten prompt',
+      prompt: ctx.userInput,
       size: '1024x1536',
       quality: 'high',
       aspectRatio: '2:3',
-      style: 'invented style suffix',
     });
+    expect(imageRequests[0].style).toBeUndefined();
   });
 
-  test('keeps a concrete user brief authoritative while retaining useful rendering notes', async () => {
+  test('drops useful-looking rendering notes that the user did not write', async () => {
     const { ctx, imageRequests } = createContext();
     ctx.directImageRequest = true;
     ctx.userInput = '黑色背景、蓝色霓虹侧光，产品居中，不要文字，写实商业摄影';
@@ -110,9 +110,81 @@ describe('generateImageTool prompt policy', () => {
       aspectRatio: '1:1',
     }, ctx);
 
-    expect(imageRequests[0].prompt).toContain(ctx.userInput);
-    expect(imageRequests[0].prompt).toContain('controlled specular highlights');
+    expect(imageRequests[0].prompt).toBe(ctx.userInput);
+    expect(imageRequests[0].prompt).not.toContain('controlled specular highlights');
     expect(imageRequests[0].quality).toBe('high');
+  });
+
+  test('sends the bare A+ task without its request wrapper or agent additions', async () => {
+    const { ctx, imageRequests } = createContext();
+    ctx.directImageRequest = true;
+    ctx.userInput = '帮我生成这个产品的A+详情页';
+    ctx.defaultImageReferenceIds = ['asset_product'];
+
+    await generateImageTool.execute({
+      prompt: '专业亚马逊A+长页，包含主视觉、材质、功能和场景模块',
+      size: '1024x3072',
+      aspectRatio: '1:3',
+      style: 'premium ecommerce',
+    }, ctx);
+
+    expect(imageRequests[0]).toMatchObject({
+      prompt: '生成这个产品的A+详情页',
+      images: ['data:image/png;base64,AA=='],
+      quality: 'high',
+    });
+    expect(imageRequests[0].size).toBeUndefined();
+    expect(imageRequests[0].aspectRatio).toBeUndefined();
+    expect(imageRequests[0].style).toBeUndefined();
+  });
+
+  test('sends inferred Amazon suite deliverables as two minimal provider prompts', async () => {
+    const { ctx, events, imageRequests } = createContext();
+    ctx.directImageRequest = true;
+    ctx.userInput = '帮我生成这个产品的亚马逊套图';
+    ctx.defaultImageReferenceIds = ['asset_product'];
+
+    await generateImageTool.execute({
+      prompt: '一段会被服务器忽略的专业主图描述',
+      platform: 'amazon',
+      deliverable: 'main',
+      userConstraints: ['电影级灯光'],
+      style: 'invented catalog style',
+    }, ctx);
+    await generateImageTool.execute({
+      prompt: '一段会被服务器忽略的专业A+描述',
+      platform: 'amazon',
+      deliverable: 'a_plus',
+      aspectRatio: '1:3',
+    }, ctx);
+
+    expect(imageRequests.map((request) => request.prompt)).toEqual([
+      '生成主图',
+      '生成亚马逊A+详情页',
+    ]);
+    expect(imageRequests.every((request) =>
+      request.style === undefined &&
+      request.aspectRatio === undefined &&
+      request.images?.[0] === 'data:image/png;base64,AA=='
+    )).toBe(true);
+    expect(generatedNodes(events).map((node) => node.deliverable)).toEqual([
+      'main',
+      'a_plus',
+    ]);
+  });
+
+  test('rejects an invalid suite deliverable before paid generation', async () => {
+    const { ctx, imageRequests } = createContext();
+    ctx.directImageRequest = true;
+    ctx.userInput = '生成Shopee套图';
+
+    await expect(generateImageTool.execute({
+      prompt: '生成Shopee套图',
+      platform: 'shopee',
+      deliverable: '专业高端视觉，使用电影级灯光',
+    }, ctx)).rejects.toThrow('short structured deliverable name');
+
+    expect(imageRequests).toHaveLength(0);
   });
 
   test('respects an explicit opt-out from an implicit reference', async () => {

@@ -983,6 +983,8 @@ export function useCanvas(
                   url,
                   editable: true,
                 });
+                imageNode.preserveGeneratedLayout =
+                  node.preserveGeneratedLayout === true;
                 if (itemIndex === 0 && node.refId) imageNode.refId = node.refId;
                 parent.addAt(imageNode, index + itemIndex);
                 return imageNode;

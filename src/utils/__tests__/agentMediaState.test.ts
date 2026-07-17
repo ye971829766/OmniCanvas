@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveTerminalMediaNodeState,
+  resolveGeneratedImageCanvasSize,
   resolveMediaDisplayUrl,
 } from "../agentMediaState";
 
@@ -55,5 +56,44 @@ describe("deriveTerminalMediaNodeState", () => {
     });
     expect(state?.status).toBe("done");
     expect(state?.url).toContain("/files/b.png");
+  });
+
+  it("treats a saved canvas slice export as terminal image media", () => {
+    const state = deriveTerminalMediaNodeState("export_node_image", {
+      refId: "a-plus-desktop-01",
+      status: "done",
+      url: "/files/a-plus-desktop-01.png",
+    });
+    expect(state).toMatchObject({
+      refId: "a-plus-desktop-01",
+      status: "done",
+      type: "image",
+    });
+  });
+});
+
+describe("resolveGeneratedImageCanvasSize", () => {
+  it("uses the finished bitmap dimensions instead of the square placeholder", () => {
+    expect(resolveGeneratedImageCanvasSize(
+      { width: 1024, height: 1024 },
+      { width: 736, height: 2138 },
+      false,
+    )).toEqual({ width: 736, height: 2138 });
+  });
+
+  it("keeps a fixed frame slot when layout preservation is explicit", () => {
+    expect(resolveGeneratedImageCanvasSize(
+      { width: 800, height: 600 },
+      { width: 736, height: 2138 },
+      true,
+    )).toEqual({ width: 800, height: 600 });
+  });
+
+  it("falls back to the placeholder when image metadata cannot be loaded", () => {
+    expect(resolveGeneratedImageCanvasSize(
+      { width: 640, height: 480 },
+      undefined,
+      false,
+    )).toEqual({ width: 640, height: 480 });
   });
 });

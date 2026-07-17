@@ -16,7 +16,10 @@ describe('image processing canvas task state', () => {
         width: 320,
         height: 480,
       }],
-      assets: [],
+      assets: [{
+        id: 'identity_asset',
+        url: 'data:image/png;base64,AQ==',
+      }],
       origin: 'http://localhost:3000',
       newRefId: () => 'edit_1',
       sink: {
@@ -36,6 +39,7 @@ describe('image processing canvas task state', () => {
       style: 'natural editorial photography',
       aspectRatio: '2:3',
       quality: 'high',
+      refImages: ['identity_asset'],
     }, ctx);
 
     expect(imageRequests).toHaveLength(1);
@@ -45,6 +49,7 @@ describe('image processing canvas task state', () => {
       aspectRatio: '2:3',
       quality: 'high',
     });
+    expect(imageRequests[0].images).toHaveLength(2);
     expect(canvasOps).toContainEqual({
       op: 'generation_started',
       refId: 'edit_1',

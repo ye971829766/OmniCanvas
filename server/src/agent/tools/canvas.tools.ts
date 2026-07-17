@@ -4,6 +4,7 @@ import {
   getFrame,
   listCanvasNodes,
   removeCanvasNode,
+  reserveRootGridPlacement,
   resolveCanvasContainerParentId,
   resolveNewCanvasRefId,
   setFrame,
@@ -315,12 +316,29 @@ export const focusNodeTool: AgentTool = {
 
 export const exportNodeImageTool: AgentTool = {
   name: 'export_node_image',
-  description: 'Export a specific element or container by its refId as a PNG image. Returns the image as a base64 Data URI, allowing you to "see" what it looks like.',
+  description:
+    'Export a specific element or container as PNG. For production slicing, target a transparent rectangle guide, set slice=true to export every visible canvas element inside its bounds while hiding the guide itself, and set saveToCanvas=true to save a compact URL-backed result instead of returning base64. This is an export operation, not visual verification.',
   parameters: {
     type: 'object',
     properties: {
       refId: { type: 'string', description: 'The refId of the element or container to capture.' },
-      waitForGeneration: { type: 'boolean', description: 'Whether to wait for pending image/video generation to finish. Default is true.' }
+      waitForGeneration: { type: 'boolean', description: 'Whether to wait for pending image/video generation to finish. Default is true.' },
+      slice: {
+        type: 'boolean',
+        description:
+          'When true, treat refId as a slice guide and export all visible canvas content inside its bounds while excluding the guide itself.',
+      },
+      saveToCanvas: {
+        type: 'boolean',
+        description:
+          'Save the exported PNG under /files, add it as a canvas image, and return its URL instead of base64. Defaults to true when slice=true.',
+      },
+      outputRefId: {
+        type: 'string',
+        description: 'Optional stable refId for the saved exported image.',
+      },
+      x: { type: 'number', description: 'Optional root-canvas X for the saved exported image.' },
+      y: { type: 'number', description: 'Optional root-canvas Y for the saved exported image.' },
     },
     required: ['refId'],
   },
@@ -386,7 +404,12 @@ export const exportNodeImageTool: AgentTool = {
     }
 
     const requestId = `export_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
-    ctx.sink.canvas({ op: 'export_node', refId: input.refId, requestId });
+    ctx.sink.canvas({
+      op: 'export_node',
+      refId: input.refId,
+      requestId,
+      ...(input.slice === true ? { slice: true } : {}),
+    });
 
     // Poll the registry for the result
     const timeoutMs = 15000; // Increase to 15 seconds to allow frontend rendering
@@ -397,6 +420,64 @@ export const exportNodeImageTool: AgentTool = {
       if (exportRegistry.has(requestId)) {
         const imageBase64 = exportRegistry.get(requestId)!;
         exportRegistry.delete(requestId); // Clean up
+
+        const saveToCanvas = input.saveToCanvas === true || input.slice === true;
+        if (saveToCanvas) {
+          const match = imageBase64.match(
+            /^data:image\/(png|jpeg|jpg|webp);base64,([\s\S]+)$/i,
+          );
+          if (!match) {
+            return {
+              output: {
+                refId: input.refId,
+                status: 'error',
+                error: 'Canvas export did not return a supported image data URL.',
+              },
+            };
+          }
+          const extension = match[1]!.toLowerCase() === 'jpeg'
+            ? 'jpg'
+            : match[1]!.toLowerCase();
+          const filename = await ctx.files.saveImageFromBase64(
+            match[2]!,
+            extension,
+          );
+          const sourceNode = getCanvasNodeMap(ctx).get(input.refId);
+          const width = Math.max(1, Number(sourceNode?.width) || 1024);
+          const height = Math.max(1, Number(sourceNode?.height) || 1024);
+          const placement = reserveRootGridPlacement(ctx, width, height);
+          const outputRefId = resolveNewCanvasRefId(
+            ctx,
+            input.outputRefId,
+            'export',
+          );
+          const url = `${ctx.origin.replace(/\/$/, '')}/files/${filename}`;
+          const node = {
+            refId: outputRefId,
+            type: 'image' as const,
+            url,
+            x: Number.isFinite(Number(input.x)) ? Number(input.x) : placement.x,
+            y: Number.isFinite(Number(input.y)) ? Number(input.y) : placement.y,
+            width,
+            height,
+            preserveLayout: true,
+          };
+          ctx.sink.canvas({ op: 'add_node', node });
+          upsertCanvasNode(ctx, outputRefId, node);
+
+          return {
+            output: {
+              refId: outputRefId,
+              sourceRefId: input.refId,
+              status: 'done',
+              url,
+              width,
+              height,
+              slice: input.slice === true,
+              note: 'Canvas export saved as a final image asset.',
+            },
+          };
+        }
         
         // Cache the exported image in session memory
         ctx.memory.setLastExportedNodeImage(ctx.sessionId, imageBase64);

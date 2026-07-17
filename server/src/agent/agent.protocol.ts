@@ -92,7 +92,7 @@ export type CanvasOp =
       error?: string;
     }
   | { op: 'focus_node'; refId: string }
-  | { op: 'export_node'; refId: string; requestId: string };
+  | { op: 'export_node'; refId: string; requestId: string; slice?: boolean };
 
 /** Unified SSE event stream sent to the frontend. */
 export type AgentEvent =

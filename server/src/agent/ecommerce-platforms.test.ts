@@ -1,93 +1,36 @@
 import { describe, expect, test } from 'bun:test';
-import { buildEcommerceDeliverables } from './ecommerce-platforms';
+import {
+  getDefaultSuiteDeliverables,
+  normalizeCustomDeliverableLabel,
+  resolveEcommerceDeliverable,
+  resolveEcommercePlatform,
+} from './ecommerce-platforms';
 
-describe('buildEcommerceDeliverables', () => {
-  test('creates stable platform-specific root-image positions and dimensions', () => {
-    const deliverables = buildEcommerceDeliverables({
-      platforms: ['amazon', 'taobao', 'jd'],
-      sourceAssetId: 'asset_product',
-      imagesPerPlatform: 2,
-    });
-
-    expect(deliverables).toHaveLength(6);
-    expect(new Set(deliverables.map((item) => item.id)).size).toBe(6);
-    expect(deliverables.find((item) => item.id === 'amazon_main')).toMatchObject({
-      width: 2000,
-      height: 2000,
-      x: 0,
-      y: 0,
-    });
-    expect(deliverables.find((item) => item.id === 'taobao_main')).toMatchObject({
-      width: 1000,
-      height: 1000,
-      x: 0,
-      y: 2360,
-    });
-  });
-
-  test('defaults Amazon suites to six images and caps explicit output at eight', () => {
-    const defaults = buildEcommerceDeliverables({
-      platforms: ['amazon'],
-      sourceAssetId: 'asset_product',
-    });
-    const deliverables = buildEcommerceDeliverables({
-      platforms: ['amazon'],
-      sourceAssetId: 'asset_product',
-      imagesPerPlatform: 99,
-    });
-    expect(defaults).toHaveLength(6);
-    expect(deliverables).toHaveLength(8);
-    expect(defaults.map((item) => item.role)).toEqual([
+describe('minimal ecommerce platform registry', () => {
+  test('keeps the bare Amazon default in one authoritative registry', () => {
+    const platform = resolveEcommercePlatform('帮我生成亚马逊套图');
+    expect(platform.id).toBe('amazon');
+    expect(getDefaultSuiteDeliverables(platform).map((item) => item.id)).toEqual([
       'main',
-      'lifestyle',
-      'secondary_angle',
-      'infographic',
-      'material',
-      'detail',
+      'a_plus',
     ]);
-    expect(defaults.find((item) => item.role === 'main')?.copyMode).toBe('none');
-    expect(defaults.find((item) => item.role === 'main')?.promptSeed).toContain(
-      'Amazon-compliant main listing image',
-    );
-    expect(defaults.find((item) => item.role === 'material')?.promptSeed).toContain(
-      'real visible product material',
-    );
+    expect(getDefaultSuiteDeliverables(platform).map((item) => item.promptLabel)).toEqual([
+      '主图',
+      '亚马逊A+详情页',
+    ]);
   });
 
-  test('defaults Chinese marketplace suites to a six-image purchase narrative', () => {
-    const deliverables = buildEcommerceDeliverables({
-      platforms: ['taobao'],
-      sourceAssetId: 'asset_product',
-    });
-
-    expect(deliverables.map((item) => item.role)).toEqual([
-      'main',
-      'selling_point',
-      'scenario',
-      'detail',
-      'specification',
-      'trust',
-    ]);
-    expect(deliverables.find((item) => item.role === 'detail')).toMatchObject({
-      width: 750,
-      height: 1000,
-      copyMode: 'verified_labels',
-    });
+  test('recognizes common and newer marketplaces without giving them hidden art direction', () => {
+    expect(resolveEcommercePlatform('Shopee商品套图').id).toBe('shopee');
+    expect(resolveEcommercePlatform('TikTok Shop image suite').id).toBe('tiktok_shop');
+    expect(resolveEcommercePlatform('未知平台套图').id).toBe('generic');
+    expect(resolveEcommercePlatform('淘宝套图').defaultSuite).toEqual([]);
   });
 
-  test('offsets the full grid from a supplied root-canvas origin', () => {
-    const deliverables = buildEcommerceDeliverables({
-      platforms: ['amazon'],
-      sourceAssetId: 'asset_product',
-      imagesPerPlatform: 3,
-      originX: -400,
-      originY: 2240,
-    });
-
-    expect(deliverables.map(({ x, y }) => ({ x, y }))).toEqual([
-      { x: -400, y: 2240 },
-      { x: 1720, y: 2240 },
-      { x: 3840, y: 2240 },
-    ]);
+  test('normalizes canonical deliverables while allowing safe new names', () => {
+    expect(resolveEcommerceDeliverable('生成亚马逊A+详情页')?.id).toBe('a_plus');
+    expect(resolveEcommerceDeliverable('hero_image')?.id).toBe('main');
+    expect(normalizeCustomDeliverableLabel('生成店铺横幅图')).toBe('店铺横幅图');
+    expect(normalizeCustomDeliverableLabel('生成专业高端主图，采用电影级灯光')).toBeUndefined();
   });
 });

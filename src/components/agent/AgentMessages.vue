@@ -183,7 +183,15 @@ interface ToolRenderBlock {
 }
 
 function getVisibleTools(tools: ToolCallItem[] = []): ToolCallItem[] {
-  return tools.filter((tool) => !isInternalAgentTool(tool.name));
+  return tools.filter((tool) => {
+    const rawOutput = tool.output as any;
+    const output = rawOutput && typeof rawOutput === "object" && "value" in rawOutput
+      ? rawOutput.value
+      : rawOutput;
+    const savedSliceExport = tool.name === "export_node_image" &&
+      typeof output?.url === "string" && Boolean(output.url.trim());
+    return savedSliceExport || !isInternalAgentTool(tool.name);
+  });
 }
 
 function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
@@ -198,6 +206,7 @@ function groupTools(tools: ToolCallItem[]): ToolRenderBlock[] {
     "remove_background",
     "inpaint_image",
     "upscale_image",
+    "export_node_image",
     "plan_ecommerce_suite",
   ]);
 

@@ -27,6 +27,7 @@ import { createFitImage } from "@/utils/leaferImage";
 import {
   deriveTerminalMediaNodeState,
   mediaReadyNodeState,
+  resolveGeneratedImageCanvasSize,
   resolveMediaDisplayUrl,
 } from "@/utils/agentMediaState";
 import { resolveAgentCanvasParent } from "@/utils/agentCanvasParent";
@@ -44,6 +45,30 @@ import { safeRandomId } from "@/utils/safeId";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 const AGENT_BASE_URL = `${API_BASE_URL}`;
+
+function probeImagePixelSize(
+  url: string,
+): Promise<{ width: number; height: number } | undefined> {
+  if (typeof window === "undefined" || !url) return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    const probe = new window.Image();
+    let settled = false;
+    const finish = (size?: { width: number; height: number }) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve(size);
+    };
+    const timeout = window.setTimeout(() => finish(), 15_000);
+    probe.onload = () => finish(
+      probe.naturalWidth > 0 && probe.naturalHeight > 0
+        ? { width: probe.naturalWidth, height: probe.naturalHeight }
+        : undefined,
+    );
+    probe.onerror = () => finish();
+    probe.src = url;
+  });
+}
 
 export interface ToolCallItem {
   id: string;
@@ -158,7 +183,7 @@ type CanvasOp =
       error?: string;
     }
   | { op: "focus_node"; refId: string }
-  | { op: "export_node"; refId: string; requestId: string };
+  | { op: "export_node"; refId: string; requestId: string; slice?: boolean };
 
 export interface NodeState {
   refId: string;
@@ -560,57 +585,73 @@ export function useAgent(
     }
   };
 
-  const applyMediaReadyToCanvas = (
+  const applyMediaReadyToCanvas = async (
     refId: string,
     kind: "image" | "video",
     url: string,
     thumbnailUrl?: string,
-  ) => {
+  ): Promise<void> => {
     const app = canvasApp.value;
     if (!app?.tree || !url) return;
-    const existing = nodeMap.get(refId);
-    const tag = existing?.tag || existing?.__tag;
-    // Already a finished Image / VideoNode — just refresh URL.
-    if (tag === "Image" && kind === "image") {
-      existing.set?.({ url });
-      trackNode(existing);
+    const initialNode = nodeMap.get(refId);
+    const initialTag = initialNode?.tag || initialNode?.__tag;
+    // Show the terminal pixels immediately while their intrinsic size is read.
+    if (initialTag === "Image" && kind === "image") initialNode.set?.({ url });
+    if ((initialTag === "VideoNode" || initialTag === "Video") && kind === "video") {
+      initialNode.set?.({ videoUrl: url, thumbnailUrl });
+      trackNode(initialNode);
       return;
     }
-    if ((tag === "VideoNode" || tag === "Video") && kind === "video") {
-      existing.set?.({ videoUrl: url, thumbnailUrl });
+    if (kind !== "image") return;
+
+    const naturalSize = await probeImagePixelSize(url);
+    // Polling and the backend terminal event may race. Always act on the node
+    // currently registered for the refId after the asynchronous image probe.
+    const existing = nodeMap.get(refId);
+    const tag = existing?.tag || existing?.__tag;
+    const preserveLayout = existing?.preserveGeneratedLayout === true;
+    const width = Number(existing?.width) || 1024;
+    const height = Number(existing?.height) || 1024;
+    const finalSize = resolveGeneratedImageCanvasSize(
+      { width, height },
+      naturalSize,
+      preserveLayout,
+    );
+
+    // Polling may already have replaced the placeholder with a finished Image.
+    if (tag === "Image") {
+      existing.set?.({ url, ...finalSize });
       trackNode(existing);
+      runCanvasChanged = true;
+      recordHistory?.(true);
       return;
     }
     // Replace ImageGen / VideoGen placeholder with the finished media node.
-    if (tag === "ImageGen" || tag === "VideoGen" || !existing) {
+    if (tag === "ImageGen" || !existing) {
       const parent = existing?.parent || app.tree;
       const index = existing?.parent
         ? existing.parent.children.indexOf(existing)
         : parent.children.length;
       const x = Number(existing?.x) || 0;
       const y = Number(existing?.y) || 0;
-      const width = Number(existing?.width) || (kind === "video" ? 480 : 1024);
-      const height = Number(existing?.height) || (kind === "video" ? 270 : 1024);
-      const preserveLayout = existing?.preserveGeneratedLayout === true;
-      if (kind === "image") {
-        const imageNode = createFitImage({
-          x,
-          y,
-          width: preserveLayout ? width : width,
-          height: preserveLayout ? height : height,
-          url,
-          editable: true,
-        });
-        imageNode.refId = refId;
-        if (existing) {
-          parent.addAt(imageNode, Math.max(0, index));
-          existing.remove?.();
-        } else {
-          parent.add(imageNode);
-        }
-        trackNode(imageNode);
+      const imageNode = createFitImage({
+        x,
+        y,
+        ...finalSize,
+        url,
+        editable: true,
+      });
+      imageNode.refId = refId;
+      imageNode.preserveGeneratedLayout = preserveLayout;
+      if (existing) {
+        parent.addAt(imageNode, Math.max(0, index));
+        existing.remove?.();
+      } else {
+        parent.add(imageNode);
       }
-      // Video replacement stays on the poll path for now (needs VideoNode class).
+      trackNode(imageNode);
+      runCanvasChanged = true;
+      recordHistory?.(true);
     }
   };
 
@@ -641,7 +682,7 @@ export function useAgent(
       thumbnailUrl: state.thumbnailUrl,
       status: "success",
     });
-    applyMediaReadyToCanvas(refId, kind, state.url!, state.thumbnailUrl);
+    void applyMediaReadyToCanvas(refId, kind, state.url!, state.thumbnailUrl);
   };
 
   const onCanvasMediaReady = (event: Event) => {
@@ -1077,7 +1118,7 @@ export function useAgent(
           // Backend settled first — keep chat/canvas in sync from any known URL.
           const existing = nodeStates.value[op.refId];
           if (existing?.status === "done" && existing.url) {
-            applyMediaReadyToCanvas(op.refId, op.kind, existing.url, existing.thumbnailUrl);
+            void applyMediaReadyToCanvas(op.refId, op.kind, existing.url, existing.thumbnailUrl);
           }
           break;
         }
@@ -1149,7 +1190,7 @@ export function useAgent(
         const node = nodeMap.get(op.refId);
         if (node) {
           if (typeof node.export === "function") {
-            node.export("png").then((res: any) => {
+            node.export("png", op.slice === true ? { slice: true } : undefined).then((res: any) => {
               if (res && res.data) {
                 fetch(`${AGENT_BASE_URL}/agent/export-result`, {
                   method: "POST",
@@ -1366,7 +1407,7 @@ export function useAgent(
           }
           nodeStates.value[terminalState.refId] = terminalState;
           if (terminalState.status === "done" && terminalState.url) {
-            applyMediaReadyToCanvas(
+            void applyMediaReadyToCanvas(
               terminalState.refId,
               terminalState.type === "video" ? "video" : "image",
               terminalState.url,
