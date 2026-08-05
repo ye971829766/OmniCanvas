@@ -7,14 +7,14 @@
       "dependencies": {
         "@incremark/theme": "^1.0.2",
         "@incremark/vue": "^1.0.2",
-        "@leafer-in/animate": "^2.1.8",
-        "@leafer-in/editor": "^2.1.8",
-        "@leafer-in/export": "^2.1.8",
-        "@leafer-in/flow": "^2.1.8",
-        "@leafer-in/resize": "^2.1.8",
-        "@leafer-in/text-editor": "^2.1.8",
-        "@leafer-in/view": "^2.1.8",
-        "@leafer-in/viewport": "^2.1.8",
+        "@leafer-in/animate": "^2.2.9",
+        "@leafer-in/editor": "^2.2.9",
+        "@leafer-in/export": "^2.2.9",
+        "@leafer-in/flow": "^2.2.9",
+        "@leafer-in/resize": "^2.2.9",
+        "@leafer-in/text-editor": "^2.2.9",
+        "@leafer-in/view": "^2.2.9",
+        "@leafer-in/viewport": "^2.2.9",
         "@lobehub/icons-static-svg": "^1.91.0",
         "@primeuix/themes": "^2.0.3",
         "@tiptap/extension-mention": "^3.27.1",
@@ -25,7 +25,7 @@
         "axios": "^1.18.1",
         "gsap": "^3.15.0",
         "katex": "^0.17.0",
-        "leafer-ui": "^2.1.8",
+        "leafer-ui": "^2.2.9",
         "leafer-x-easy-snap": "^1.11.0",
         "lucide-vue-next": "^0.395.0",
         "marked": "^18.0.5",
@@ -166,119 +166,119 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "https://registry.npmmirror.com/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@leafer-in/animate": ["@leafer-in/animate@2.1.8", "https://registry.npmmirror.com/@leafer-in/animate/-/animate-2.1.8.tgz", { "peerDependencies": { "@leafer-in/color": "^2.1.8", "@leafer-in/interface": "^2.1.8", "@leafer-ui/draw": "^2.1.8", "@leafer-ui/interface": "^2.1.8" } }, "sha512-vxlmuzOet+yV0N6COlv9SnhvbXVbdGwOua2/T2HBKwiQ4HIjdKdVzezlU2ZBwoytM/CsOlGEWxYeW/Ajrg/8hA=="],
+    "@leafer-in/animate": ["@leafer-in/animate@2.2.9", "https://registry.npmmirror.com/@leafer-in/animate/-/animate-2.2.9.tgz", { "peerDependencies": { "@leafer-in/color": "^2.2.9", "@leafer-in/interface": "^2.2.9", "@leafer-ui/draw": "^2.2.9", "@leafer-ui/interface": "^2.2.9" } }, "sha512-e4klP9D/8okPq03EZiOfcfZ2UI8DMV8QU0abIWEMn2X7NxYiMRUozYaX4jqC21fIbJBRmuJ8MjYace1PdIfs6A=="],
 
     "@leafer-in/color": ["@leafer-in/color@2.1.4", "https://registry.npmmirror.com/@leafer-in/color/-/color-2.1.4.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.1.4", "@leafer-ui/draw": "^2.1.4", "@leafer-ui/interface": "^2.1.4" } }, "sha512-zR/bcaC+7MmHH6OnUseOsNu7GfbvMM/SLvQaJQmFluVZrsPYRjGyaP0qjA2fJrrznzi0eOFuPXbVU+W2A0nOrw=="],
 
-    "@leafer-in/editor": ["@leafer-in/editor@2.1.8", "https://registry.npmmirror.com/@leafer-in/editor/-/editor-2.1.8.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.1.8", "@leafer-in/resize": "^2.1.8", "@leafer-ui/core": "^2.1.8", "@leafer-ui/draw": "^2.1.8", "@leafer-ui/interface": "^2.1.8" } }, "sha512-KFGrk9Da+gI/nks2/IotcwJhs/PPy4R+rle9+qJkpcJ9l6eqPuasWjzwgj7F/lAG18fCmkmJlIc6Ah1+VDC+YQ=="],
+    "@leafer-in/editor": ["@leafer-in/editor@2.2.9", "https://registry.npmmirror.com/@leafer-in/editor/-/editor-2.2.9.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.2.9", "@leafer-in/resize": "^2.2.9", "@leafer-ui/core": "^2.2.9", "@leafer-ui/draw": "^2.2.9", "@leafer-ui/interface": "^2.2.9" } }, "sha512-Ld/cSlenWR0pZN+q16Rzjly7FDCmR3ptO7JLGTJXmSaUcNikHmXOhyzZPBOtb8aI8uNHF7m9wk9wpfPz8k3J9Q=="],
 
-    "@leafer-in/export": ["@leafer-in/export@2.1.8", "https://registry.npmmirror.com/@leafer-in/export/-/export-2.1.8.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.1.8", "@leafer-ui/draw": "^2.1.8", "@leafer-ui/interface": "^2.1.8" } }, "sha512-igHx8o1tcxN4dM70m40bHENVtotwQ0Dy8WUn9BHVaZ2+wfWvBABLGgMPIJAFUij/mly8T6v8gFI2wC6l1beCzA=="],
+    "@leafer-in/export": ["@leafer-in/export@2.2.9", "https://registry.npmmirror.com/@leafer-in/export/-/export-2.2.9.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.2.9", "@leafer-ui/draw": "^2.2.9", "@leafer-ui/interface": "^2.2.9" } }, "sha512-18kOtU7vqfTjBAENc20TcB9aAYOpEzcvuaMTZPpMQS3PvX/1HddPijU/2vmzZhj+SvWwKtPnPUDOzsD2goePAw=="],
 
-    "@leafer-in/flow": ["@leafer-in/flow@2.1.8", "https://registry.npmmirror.com/@leafer-in/flow/-/flow-2.1.8.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.1.8", "@leafer-in/resize": "^2.1.8", "@leafer-ui/draw": "^2.1.8", "@leafer-ui/interface": "^2.1.8" } }, "sha512-Mb8r/SNMstSe958eEK4vd2CNVP7SL2+nd3CnVbG8mQXvsEGhKoRtAj0kiO8fiCHQRUdKftDYLwajdCsuluSyRA=="],
+    "@leafer-in/flow": ["@leafer-in/flow@2.2.9", "https://registry.npmmirror.com/@leafer-in/flow/-/flow-2.2.9.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.2.9", "@leafer-in/resize": "^2.2.9", "@leafer-ui/draw": "^2.2.9", "@leafer-ui/interface": "^2.2.9" } }, "sha512-StdEvv05BeyqN6+9Ko5HkXSJyok1FWQnnGlqBSV5SyJlk1B2s45ZnhPj/F7DmTQTSIXM9dQTNiLBjaviugqGPA=="],
 
-    "@leafer-in/interface": ["@leafer-in/interface@2.1.8", "https://registry.npmmirror.com/@leafer-in/interface/-/interface-2.1.8.tgz", { "peerDependencies": { "@leafer-ui/interface": "^2.1.8", "@leafer/interface": "^2.1.8" } }, "sha512-+sjo7e+orseQs6+q7D0DDu31J6jMjl6Ei+M0nqznO8ln5kDYazaOLomb2OmG72WGFqhd28kOxoa65eurjS3P3w=="],
+    "@leafer-in/interface": ["@leafer-in/interface@2.2.9", "https://registry.npmmirror.com/@leafer-in/interface/-/interface-2.2.9.tgz", { "peerDependencies": { "@leafer-ui/interface": "^2.2.9", "@leafer/interface": "^2.2.9" } }, "sha512-6T0Gf1EDKxS4a8sZCT8Q2PZ0a5JhHWswyWfsSXNHrvdJvapHcUE4YordpzXFQeki0KcCiAy2HIrOZ7mvFJ9spQ=="],
 
-    "@leafer-in/resize": ["@leafer-in/resize@2.1.8", "https://registry.npmmirror.com/@leafer-in/resize/-/resize-2.1.8.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.1.8", "@leafer-ui/draw": "^2.1.8", "@leafer-ui/interface": "^2.1.8" } }, "sha512-FKzOTgxg45TJCVKTMzmBU4o5Bv1H5To6uRWp6WuNmnIOOPPwC4Iuk4AMIo01sgn9PvXYASR9Nhi2hX308JSb4A=="],
+    "@leafer-in/resize": ["@leafer-in/resize@2.2.9", "https://registry.npmmirror.com/@leafer-in/resize/-/resize-2.2.9.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.2.9", "@leafer-ui/draw": "^2.2.9", "@leafer-ui/interface": "^2.2.9" } }, "sha512-QQ1qPxHcrKybvlm2STbGiZbBLMFDslj5A9FovvTUgF6Lawtf/fvrNtdQEazTBuTIGlG06JuB/a6R2ORuguOPJA=="],
 
-    "@leafer-in/text-editor": ["@leafer-in/text-editor@2.1.8", "https://registry.npmmirror.com/@leafer-in/text-editor/-/text-editor-2.1.8.tgz", { "peerDependencies": { "@leafer-in/editor": "^2.1.8", "@leafer-in/interface": "^2.1.8", "@leafer-ui/core": "^2.1.8", "@leafer-ui/interface": "^2.1.8" } }, "sha512-0LRODHGE8Ro1GAxAU8knbsYCQOvBfAY62GaT5ofv1xz/e9Z2mS2ahrrPiEoemzjpKlnQBc3KFyDhwCFk7OvjSA=="],
+    "@leafer-in/text-editor": ["@leafer-in/text-editor@2.2.9", "https://registry.npmmirror.com/@leafer-in/text-editor/-/text-editor-2.2.9.tgz", { "peerDependencies": { "@leafer-in/editor": "^2.2.9", "@leafer-in/interface": "^2.2.9", "@leafer-ui/core": "^2.2.9", "@leafer-ui/interface": "^2.2.9" } }, "sha512-r0XD6JYHAS7kCas5x/hOtbwZ6KO8NFZNKoMFWc8UeGMoBlHTKVw/pd7cVGHb+L3oO3E/KRApadpJvJTOEyJ74g=="],
 
-    "@leafer-in/view": ["@leafer-in/view@2.1.8", "https://registry.npmmirror.com/@leafer-in/view/-/view-2.1.8.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.1.8", "@leafer-ui/draw": "^2.1.8", "@leafer-ui/interface": "^2.1.8" } }, "sha512-2l8hTscNNTLYueS3J2U1Mljuk7W4fuBNZHnVgpKDgco7BjJC1d+aBQCKn1b0vEzL7zeXv/ttK1RAKZkeXZG+hA=="],
+    "@leafer-in/view": ["@leafer-in/view@2.2.9", "https://registry.npmmirror.com/@leafer-in/view/-/view-2.2.9.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.2.9", "@leafer-ui/draw": "^2.2.9", "@leafer-ui/interface": "^2.2.9" } }, "sha512-J8FArVIeYQdd+8G7wGZLFucp2fjTOoDFLObbKAy/lbRhDcE458DhHmzHP5J81sNSsLuZTKLYu23Q4qdojY0HAQ=="],
 
-    "@leafer-in/viewport": ["@leafer-in/viewport@2.1.8", "https://registry.npmmirror.com/@leafer-in/viewport/-/viewport-2.1.8.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.1.8", "@leafer-ui/core": "^2.1.8", "@leafer-ui/interface": "^2.1.8" } }, "sha512-OLDsQnHqd1KdtunRK7tof4H43lU6K4QABFWjjnnrkZvBHFG4QFvkEnYd0Bjzj9FcvqsWwFoepbpc7H/aacJEUg=="],
+    "@leafer-in/viewport": ["@leafer-in/viewport@2.2.9", "https://registry.npmmirror.com/@leafer-in/viewport/-/viewport-2.2.9.tgz", { "peerDependencies": { "@leafer-in/interface": "^2.2.9", "@leafer-ui/core": "^2.2.9", "@leafer-ui/interface": "^2.2.9" } }, "sha512-p6vRZnl2uwOddDm8zcKytSQ9mnMTtmFUbNhRNJdHv6D4jm3x8s0EfoXvEol8IYfQjh2oWsXY2Rx+O7XOxFsePQ=="],
 
-    "@leafer-ui/app": ["@leafer-ui/app@2.1.8", "https://registry.npmmirror.com/@leafer-ui/app/-/app-2.1.8.tgz", { "dependencies": { "@leafer-ui/data": "2.1.8", "@leafer-ui/display": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-oOxmObO1TEfm4ZVJP0k95BU42MuYh4Que8PkJs5LKxIgofqmS1kF5SGGkbGBM/5he8KGVzsYQJXPC2MiFkqJ9Q=="],
+    "@leafer-ui/app": ["@leafer-ui/app@2.2.9", "https://registry.npmmirror.com/@leafer-ui/app/-/app-2.2.9.tgz", { "dependencies": { "@leafer-ui/data": "2.2.9", "@leafer-ui/display": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-SIxCEIx09LQBSSuj7qPGlpY7kIZfRvn6gGaa2dqAzeB4unn05eBFdU8rcM+R1pM8k0VEDGQZpDOyGqe02Kn9CQ=="],
 
-    "@leafer-ui/bounds": ["@leafer-ui/bounds@2.1.8", "https://registry.npmmirror.com/@leafer-ui/bounds/-/bounds-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-5nkGhhW+Yszk1eZ9NKAa45CLV6kJb8kcKsANo2eZC201I1JZw110kpAMuq5PMKWgGotqa54L5+DLc9Ide8tALg=="],
+    "@leafer-ui/bounds": ["@leafer-ui/bounds@2.2.9", "https://registry.npmmirror.com/@leafer-ui/bounds/-/bounds-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-BjZxWPQcPf/SQ+L6Edk7PNyiy3LXbsbQZp6kuC1uN0fgOiQtyib2i0M+zKa1+WTrP7aNFQWkZwSk6+QS6m0vmQ=="],
 
-    "@leafer-ui/color": ["@leafer-ui/color@2.1.8", "https://registry.npmmirror.com/@leafer-ui/color/-/color-2.1.8.tgz", { "dependencies": { "@leafer-ui/draw": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-P2sBXdJsYVHE6p2SG0MZ4EOsutC2DpQdZNOoeYPDp+XWLHzdpQHtSPUgVnSSNi0mBAlEhgHHhjhI5PYTlGQG9w=="],
+    "@leafer-ui/color": ["@leafer-ui/color@2.2.9", "https://registry.npmmirror.com/@leafer-ui/color/-/color-2.2.9.tgz", { "dependencies": { "@leafer-ui/draw": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-xBvAmKgRR6YRlkRUG6i5Qmav0WUy/EuydzLv6GM1VkATSkU9W42KDcPp9mkg3P7w2Bwc+sJGj4q6LzsuGr5QtQ=="],
 
-    "@leafer-ui/core": ["@leafer-ui/core@2.1.8", "https://registry.npmmirror.com/@leafer-ui/core/-/core-2.1.8.tgz", { "dependencies": { "@leafer-ui/app": "2.1.8", "@leafer-ui/draw": "2.1.8", "@leafer-ui/event": "2.1.8", "@leafer-ui/hit": "2.1.8", "@leafer-ui/interaction": "2.1.8" } }, "sha512-doGksWvNXhALXl8DCWJAl4MI9Z7UDegwfaPAqsYZ+FnDkK7nFwBh3j+7vYnLnhTik5boXC0UU0yof445Q1Iluw=="],
+    "@leafer-ui/core": ["@leafer-ui/core@2.2.9", "https://registry.npmmirror.com/@leafer-ui/core/-/core-2.2.9.tgz", { "dependencies": { "@leafer-ui/app": "2.2.9", "@leafer-ui/draw": "2.2.9", "@leafer-ui/event": "2.2.9", "@leafer-ui/hit": "2.2.9", "@leafer-ui/interaction": "2.2.9" } }, "sha512-N1qwviYnISzWf9vjLClRFqOkGQBqDTdwiURbNpwmQJqMfP0LMfn4+9yQ6cixoVVg+jRVt0K6izsGbzzNAEiLnw=="],
 
-    "@leafer-ui/data": ["@leafer-ui/data@2.1.8", "https://registry.npmmirror.com/@leafer-ui/data/-/data-2.1.8.tgz", { "dependencies": { "@leafer-ui/external": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-tsKLGnjDu892Vh6BxObypSq8W1gf/I5gbyRFV28u4z6HYxvjYdGtqmBmPAo/k5JlrotS0vZqlDHCuPsQ+TyasQ=="],
+    "@leafer-ui/data": ["@leafer-ui/data@2.2.9", "https://registry.npmmirror.com/@leafer-ui/data/-/data-2.2.9.tgz", { "dependencies": { "@leafer-ui/external": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-omNVf2e+Gt6baKqXsHlch0PVQwIyowjMSHlyPyNIsL74PkAceYfsrRDBVztsX/EzDVvF22ecdb2w/VmAhu1nyw=="],
 
-    "@leafer-ui/decorator": ["@leafer-ui/decorator@2.1.8", "https://registry.npmmirror.com/@leafer-ui/decorator/-/decorator-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-0y6vGRI/oP9VCRr5ZKjPDG9N7/nOWPLMyt+EbEi9+MVOR6WHLNomUaBhzSUg3soNnYqfndRvoxClLOVH4VCATQ=="],
+    "@leafer-ui/decorator": ["@leafer-ui/decorator@2.2.9", "https://registry.npmmirror.com/@leafer-ui/decorator/-/decorator-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-98v7ib76MbilkP+QLd6G8IKs7eHnn2LOAEd08kjOqkwTfnZ0Hj3s8AKqYWEAr1rfwp6IjBEM9Rmp2Gr1vR+AGA=="],
 
-    "@leafer-ui/display": ["@leafer-ui/display@2.1.8", "https://registry.npmmirror.com/@leafer-ui/display/-/display-2.1.8.tgz", { "dependencies": { "@leafer-ui/data": "2.1.8", "@leafer-ui/decorator": "2.1.8", "@leafer-ui/display-module": "2.1.8", "@leafer-ui/external": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-1Vq2fBhtbBReiVgu3CYDZD7fjF9gfdKpDTzKYZeKFgnXDOnuVedKc1/VMm8GIkHu4HpRfmXuqmBxM4/D35HXdQ=="],
+    "@leafer-ui/display": ["@leafer-ui/display@2.2.9", "https://registry.npmmirror.com/@leafer-ui/display/-/display-2.2.9.tgz", { "dependencies": { "@leafer-ui/data": "2.2.9", "@leafer-ui/decorator": "2.2.9", "@leafer-ui/display-module": "2.2.9", "@leafer-ui/external": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-3sM8N3j6E+EZcrGXuGhilTCpH2pYs5Med5hZs+xfxWstw3V4TOJdTHnqCI8weCJAQ9o7QLH6I7+akSs7urz35A=="],
 
-    "@leafer-ui/display-module": ["@leafer-ui/display-module@2.1.8", "https://registry.npmmirror.com/@leafer-ui/display-module/-/display-module-2.1.8.tgz", { "dependencies": { "@leafer-ui/bounds": "2.1.8", "@leafer-ui/data": "2.1.8", "@leafer-ui/render": "2.1.8" } }, "sha512-R4rCfqIHEsYc15fmuF9Bz4Y38M9EV2P0b6UcN09PPvDDIYybuALDM+DdrWD5xaR32C02oHNYYoRUJs2WG8Y0xg=="],
+    "@leafer-ui/display-module": ["@leafer-ui/display-module@2.2.9", "https://registry.npmmirror.com/@leafer-ui/display-module/-/display-module-2.2.9.tgz", { "dependencies": { "@leafer-ui/bounds": "2.2.9", "@leafer-ui/data": "2.2.9", "@leafer-ui/render": "2.2.9" } }, "sha512-ZpsuJ5L0QT/d2ZuTxsSj0dOGE4n1B0xvm9qJXQ5ThuWlQ0Opm8ySIPQrvIDas35pwyEjBcru6IF6a9KdwC8J7Q=="],
 
-    "@leafer-ui/draw": ["@leafer-ui/draw@2.1.8", "https://registry.npmmirror.com/@leafer-ui/draw/-/draw-2.1.8.tgz", { "dependencies": { "@leafer-ui/decorator": "2.1.8", "@leafer-ui/display": "2.1.8", "@leafer-ui/display-module": "2.1.8", "@leafer-ui/external": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-fIFjwt9rsCPq2RNNJaLyPgN6cpGBb0rzPUxWpdontQS24JioRBEcV/xJ/rG5uiZIsMPB26wF2yvZNl464UAq1g=="],
+    "@leafer-ui/draw": ["@leafer-ui/draw@2.2.9", "https://registry.npmmirror.com/@leafer-ui/draw/-/draw-2.2.9.tgz", { "dependencies": { "@leafer-ui/decorator": "2.2.9", "@leafer-ui/display": "2.2.9", "@leafer-ui/display-module": "2.2.9", "@leafer-ui/external": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-76FF8teAGnTk8Y+irWOuHrfsR0hJSBMu87a6UlfNU3eda8ZnkKUg0c6lRzO2aUD9gatVgmOh9XaHY3VP8iRTFQ=="],
 
-    "@leafer-ui/effect": ["@leafer-ui/effect@2.1.8", "https://registry.npmmirror.com/@leafer-ui/effect/-/effect-2.1.8.tgz", { "dependencies": { "@leafer-ui/draw": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-JwcXaaHaUlH+IgDH0qg5WRPPxfrNdk92VRC2dOldwZPRFaWdHaNbY9t0+nJioB7uxJbqbi1LkJdkvpgB6t0R/w=="],
+    "@leafer-ui/effect": ["@leafer-ui/effect@2.2.9", "https://registry.npmmirror.com/@leafer-ui/effect/-/effect-2.2.9.tgz", { "dependencies": { "@leafer-ui/draw": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-k/9tBYWy8VLkDufkvohKATTX0joSlh4v0zi/I/jZ+XP4AVYbIDViYkU+Nt5bpeQnXi2LBGT1t/ipDsqLLlUvPA=="],
 
-    "@leafer-ui/event": ["@leafer-ui/event@2.1.8", "https://registry.npmmirror.com/@leafer-ui/event/-/event-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-eAQe8Y5xwnCaK553D2zQ7jdvr8e1UiZLzy+aMiuQkfTavbPOCPkwVceOi1enn15gLTmQhYIIxRGqfsy3o416Pg=="],
+    "@leafer-ui/event": ["@leafer-ui/event@2.2.9", "https://registry.npmmirror.com/@leafer-ui/event/-/event-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-WbX3DMmo3JrGHLVWigNz7NPQwduSM5PFLakYlIpy8QbnGYMcRRml/1vlPQUvnYDXi4rRMOlO82EbMvnt736qsg=="],
 
-    "@leafer-ui/external": ["@leafer-ui/external@2.1.8", "https://registry.npmmirror.com/@leafer-ui/external/-/external-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-Zdxi5lfYCPvdVioFbe09aTBz3wNQI/V6QHZVQNDPR9h6yfqG7JBN16penRr3cdS1WAhyRiNZyiBFfhpMBscyPg=="],
+    "@leafer-ui/external": ["@leafer-ui/external@2.2.9", "https://registry.npmmirror.com/@leafer-ui/external/-/external-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-Vp6VGhKTo07y0M1BGlfOg3CxHj1Svd9ad5mGj0+J8h4eqQQarT5GhH7uaF46WtD4di5JVbwruKj62SFq6uzPeQ=="],
 
-    "@leafer-ui/hit": ["@leafer-ui/hit@2.1.8", "https://registry.npmmirror.com/@leafer-ui/hit/-/hit-2.1.8.tgz", { "dependencies": { "@leafer-ui/draw": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-HmvVh+Jj+mITmdg44RD0uGXqWjug0fZeZXyQagXkHkCc7Ba1KhnbzJuml5XHTDkbWRw1FoUiIxUI4Mfu8sVcyA=="],
+    "@leafer-ui/hit": ["@leafer-ui/hit@2.2.9", "https://registry.npmmirror.com/@leafer-ui/hit/-/hit-2.2.9.tgz", { "dependencies": { "@leafer-ui/draw": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-Qmmz1gCzWOGrGvkt4v6kfnddqp2o9FEiokuj4/zgUoo8Q+0C0D1Y44wzrSGbgC6aQBxa6B8XJ44HLIWf09FVSg=="],
 
-    "@leafer-ui/interaction": ["@leafer-ui/interaction@2.1.8", "https://registry.npmmirror.com/@leafer-ui/interaction/-/interaction-2.1.8.tgz", { "dependencies": { "@leafer-ui/draw": "2.1.8", "@leafer-ui/event": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-0MMwTuFBoEr+xuT9Srh86kd6GqKsE/5HrXvNbuGcg2UUlMB+QWX7+LXATTRzNutj2KoLAipWALkDsZ2Usijcug=="],
+    "@leafer-ui/interaction": ["@leafer-ui/interaction@2.2.9", "https://registry.npmmirror.com/@leafer-ui/interaction/-/interaction-2.2.9.tgz", { "dependencies": { "@leafer-ui/draw": "2.2.9", "@leafer-ui/event": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-MPtScWDfD0rEiXaJ5qdIfJPNupOT+g3ieQywG1Lu6RVfmf+Vwn3RaxKvGk/R94rEJKSL9FQSWoQLuSXGBh/6Og=="],
 
-    "@leafer-ui/interaction-web": ["@leafer-ui/interaction-web@2.1.8", "https://registry.npmmirror.com/@leafer-ui/interaction-web/-/interaction-web-2.1.8.tgz", { "dependencies": { "@leafer-ui/core": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-N4cpJNWVaEM0Yk/W5lVdNTflFVBK5Ac/UTS0yYmxuUcd08J2+udIKldRWUbNb6V+R7VDNA1vNLYRCh02FY6E7A=="],
+    "@leafer-ui/interaction-web": ["@leafer-ui/interaction-web@2.2.9", "https://registry.npmmirror.com/@leafer-ui/interaction-web/-/interaction-web-2.2.9.tgz", { "dependencies": { "@leafer-ui/core": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-QLBk68qpXbdBrwtTERmc+Mb4z7ZOXKZf1KCj+OANlO2dsajnxRvc6Sf2RvwT+kzq5ic9Czk0N+UrGudPG1HR7Q=="],
 
-    "@leafer-ui/interface": ["@leafer-ui/interface@2.1.8", "https://registry.npmmirror.com/@leafer-ui/interface/-/interface-2.1.8.tgz", { "dependencies": { "@leafer/interface": "2.1.8" } }, "sha512-XGqalzpt2wlDenIZoQuLk1Ykm+fGMfsElKrTTDHtXtz/4mt5DsfCiBjorbUmbdT/6pBbX7rQfwynmhdA9LqdCw=="],
+    "@leafer-ui/interface": ["@leafer-ui/interface@2.2.9", "https://registry.npmmirror.com/@leafer-ui/interface/-/interface-2.2.9.tgz", { "dependencies": { "@leafer/interface": "2.2.9" } }, "sha512-AWnRhnQOaMk8kNOJwzymuZpNb4b28CsMUxvr4pVjGwmlXWG1qINJrlWYWrXbV3R44+zhK0VIJ8T7szsoO2qj7Q=="],
 
-    "@leafer-ui/paint": ["@leafer-ui/paint@2.1.8", "https://registry.npmmirror.com/@leafer-ui/paint/-/paint-2.1.8.tgz", { "dependencies": { "@leafer-ui/draw": "2.1.8", "@leafer/core": "2.1.8" } }, "sha512-XSO4WdkqOJX6eElYjQX5hJay87PD1Jtv07UlhCVQvCIn2SR6svLWk+AMsx2UuOkBe2IRfy/semjTW5D96Uermg=="],
+    "@leafer-ui/paint": ["@leafer-ui/paint@2.2.9", "https://registry.npmmirror.com/@leafer-ui/paint/-/paint-2.2.9.tgz", { "dependencies": { "@leafer-ui/draw": "2.2.9", "@leafer/core": "2.2.9" } }, "sha512-/scOodHPSs3hJo73Scvk556ntXn9dJI8/7GlaWRMbprruvB+ujc/vyWUc5DInOqikxxAQb9eEfnKX3GoFUGiSA=="],
 
-    "@leafer-ui/partner": ["@leafer-ui/partner@2.1.8", "https://registry.npmmirror.com/@leafer-ui/partner/-/partner-2.1.8.tgz", { "dependencies": { "@leafer-ui/color": "2.1.8", "@leafer-ui/draw": "2.1.8", "@leafer-ui/effect": "2.1.8", "@leafer-ui/paint": "2.1.8", "@leafer-ui/text": "2.1.8" } }, "sha512-RlgZ7Qly0NMJdrqSMm4NVBwOe2gTAUonl9Xmcu4vg0++e+LSlikG3JPGcEV/Yii21Nlr4eFpuwhKwtvxOIWKmQ=="],
+    "@leafer-ui/partner": ["@leafer-ui/partner@2.2.9", "https://registry.npmmirror.com/@leafer-ui/partner/-/partner-2.2.9.tgz", { "dependencies": { "@leafer-ui/color": "2.2.9", "@leafer-ui/draw": "2.2.9", "@leafer-ui/effect": "2.2.9", "@leafer-ui/paint": "2.2.9", "@leafer-ui/text": "2.2.9" } }, "sha512-Z88858CvaHmg0w0oyESHaOCeHyPUScjNSi6Z8sadKU6QV3gYrNxZ85eWfv2mtf+h1D6TyEe3SQCTQc6xdnV27A=="],
 
-    "@leafer-ui/render": ["@leafer-ui/render@2.1.8", "https://registry.npmmirror.com/@leafer-ui/render/-/render-2.1.8.tgz", { "dependencies": { "@leafer-ui/external": "2.1.8" } }, "sha512-GX8HPKqEmdyRE6CJ7NKnHOBJ6LERBPu8jRZADR8mzrE9taojFS1iFyv/Aui9ElUJOMdY1muwzJTucAgJJvsDuA=="],
+    "@leafer-ui/render": ["@leafer-ui/render@2.2.9", "https://registry.npmmirror.com/@leafer-ui/render/-/render-2.2.9.tgz", { "dependencies": { "@leafer-ui/external": "2.2.9" } }, "sha512-hi15h0nGHQpmSVxBY1ReLUD9vbHOnZYtRJsvaBOlZZEHwvsvRWWTVlwGrwMpGpbDWdy5FcwHmPp4GezaPa18QQ=="],
 
-    "@leafer-ui/text": ["@leafer-ui/text@2.1.8", "https://registry.npmmirror.com/@leafer-ui/text/-/text-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-paYRDs8sH6wLgDCz9S/F0hmFKOf2Kxa2OknGJk2X1Yg9lWFXyS8D8Q3daZAN+nZCQzXMlzRn3ZAHamed02Y7Gg=="],
+    "@leafer-ui/text": ["@leafer-ui/text@2.2.9", "https://registry.npmmirror.com/@leafer-ui/text/-/text-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-pKUUhxnkrdM+5ul6xI7nM9yr9jwj9AuIu18oVKIba3/gekrZRWBanpCeCwMR1IaQa5X97MI3bd/eVIZ892FX5g=="],
 
-    "@leafer-ui/web": ["@leafer-ui/web@2.1.8", "https://registry.npmmirror.com/@leafer-ui/web/-/web-2.1.8.tgz", { "dependencies": { "@leafer-in/interface": "2.1.8", "@leafer-ui/core": "2.1.8", "@leafer-ui/draw": "2.1.8", "@leafer-ui/interaction-web": "2.1.8", "@leafer-ui/interface": "2.1.8", "@leafer-ui/partner": "2.1.8", "@leafer/interface": "2.1.8", "@leafer/partner": "2.1.8", "@leafer/web-core": "2.1.8" } }, "sha512-sKyO5lfMxmh2W5A9sZ+AnxLFawn13UVzxSGuNTI2tVmxGtq9akgE0zrQwJ2xY92RDU2gRczykyrYjsWcMhz1yg=="],
+    "@leafer-ui/web": ["@leafer-ui/web@2.2.9", "https://registry.npmmirror.com/@leafer-ui/web/-/web-2.2.9.tgz", { "dependencies": { "@leafer-in/interface": "2.2.9", "@leafer-ui/core": "2.2.9", "@leafer-ui/draw": "2.2.9", "@leafer-ui/interaction-web": "2.2.9", "@leafer-ui/interface": "2.2.9", "@leafer-ui/partner": "2.2.9", "@leafer/interface": "2.2.9", "@leafer/partner": "2.2.9", "@leafer/web-core": "2.2.9" } }, "sha512-0QgYEK3wuUFWHz0BM6HPMboh0uiRR5fRLqrPEopO+ofJLygWi0v6FIjU3OE4pOsHRdqrbBIuhOioRmIasBBgmg=="],
 
-    "@leafer/canvas": ["@leafer/canvas@2.1.8", "https://registry.npmmirror.com/@leafer/canvas/-/canvas-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/debug": "2.1.8", "@leafer/file": "2.1.8", "@leafer/list": "2.1.8", "@leafer/math": "2.1.8", "@leafer/path": "2.1.8", "@leafer/platform": "2.1.8" } }, "sha512-hPwh9Za2TC6dkAAG7YbLsNW+T/6GB5ccuYp0gRhZHcBaI6YkO/5iqIQcFIx9l1bSr8+NGMEglQ5kA/s3itHO3Q=="],
+    "@leafer/canvas": ["@leafer/canvas@2.2.9", "https://registry.npmmirror.com/@leafer/canvas/-/canvas-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/debug": "2.2.9", "@leafer/file": "2.2.9", "@leafer/list": "2.2.9", "@leafer/math": "2.2.9", "@leafer/path": "2.2.9", "@leafer/platform": "2.2.9" } }, "sha512-bWSqq2ty/khi/qDVK7UCGIZOcmsEycAYPCZkXZFWOxXXCmRxI86CA5SXBJa5UFLeAXKT9I30E+UiDc3+jAONNg=="],
 
-    "@leafer/canvas-web": ["@leafer/canvas-web@2.1.8", "https://registry.npmmirror.com/@leafer/canvas-web/-/canvas-web-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-Eu8IDZWkELgGhINdZRPR7503PocXv0RrBqqj3t5/ztkd2AyMOswo/uTpS32Gdc+UoFf/DaEGkbYrdwyz8X/AIw=="],
+    "@leafer/canvas-web": ["@leafer/canvas-web@2.2.9", "https://registry.npmmirror.com/@leafer/canvas-web/-/canvas-web-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-kj58yyHdqXq7VnZm18aYzXBTX8HrGooPOunBsQwbEnUn8bVe4JtkNaUgAWIjaDIJT0TuMwQ5kH/9E+6hpwHEPA=="],
 
-    "@leafer/core": ["@leafer/core@2.1.8", "https://registry.npmmirror.com/@leafer/core/-/core-2.1.8.tgz", { "dependencies": { "@leafer/canvas": "2.1.8", "@leafer/data": "2.1.8", "@leafer/debug": "2.1.8", "@leafer/decorator": "2.1.8", "@leafer/display": "2.1.8", "@leafer/display-module": "2.1.8", "@leafer/event": "2.1.8", "@leafer/file": "2.1.8", "@leafer/helper": "2.1.8", "@leafer/image": "2.1.8", "@leafer/layout": "2.1.8", "@leafer/list": "2.1.8", "@leafer/math": "2.1.8", "@leafer/path": "2.1.8", "@leafer/platform": "2.1.8", "@leafer/task": "2.1.8" } }, "sha512-n07lhOHN/HwjwTeJS14XKZFPWywKYZXMOiayLDpuGsBbiEdI05MbeZHKFkqoz2vd4LRlGHLxooyK9+b2taIwpw=="],
+    "@leafer/core": ["@leafer/core@2.2.9", "https://registry.npmmirror.com/@leafer/core/-/core-2.2.9.tgz", { "dependencies": { "@leafer/canvas": "2.2.9", "@leafer/data": "2.2.9", "@leafer/debug": "2.2.9", "@leafer/decorator": "2.2.9", "@leafer/display": "2.2.9", "@leafer/display-module": "2.2.9", "@leafer/event": "2.2.9", "@leafer/file": "2.2.9", "@leafer/helper": "2.2.9", "@leafer/image": "2.2.9", "@leafer/layout": "2.2.9", "@leafer/list": "2.2.9", "@leafer/math": "2.2.9", "@leafer/path": "2.2.9", "@leafer/platform": "2.2.9", "@leafer/task": "2.2.9" } }, "sha512-zXQv21ydpeELHBRj8fF770AQj3Ma0Dz81QfX5ERjZUQ2C1LcQCXSWHbc0fQwKeKy+PS+4FZDn8VRZSlM/FC2Ww=="],
 
-    "@leafer/data": ["@leafer/data@2.1.8", "https://registry.npmmirror.com/@leafer/data/-/data-2.1.8.tgz", {}, "sha512-SyRtc6osCuN49o4vWepybLv8dRdgW4DQvt6XnY1erJGXrhh6RANCvTvvltc8vD0sWkjA/PjNTa4bUyxxSrc5DA=="],
+    "@leafer/data": ["@leafer/data@2.2.9", "https://registry.npmmirror.com/@leafer/data/-/data-2.2.9.tgz", {}, "sha512-BcCRDYH2+jYqdWv8saQXZZ4X80GlBI6H51bTR1FqdRHXTuGCaF3QMWFhyTyb7/+CTtvMU6Isk0qUaEXaSLEZLw=="],
 
-    "@leafer/debug": ["@leafer/debug@2.1.8", "https://registry.npmmirror.com/@leafer/debug/-/debug-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/math": "2.1.8" } }, "sha512-6JZO8YusDx3a/ZJJzGrUSJnTPQSA0M9PTda7qPGzD9TdRarHtcCcWOU2bA0pfGJUq/GRTaT11h20NFjnlan0xw=="],
+    "@leafer/debug": ["@leafer/debug@2.2.9", "https://registry.npmmirror.com/@leafer/debug/-/debug-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/math": "2.2.9" } }, "sha512-YQGZcCCDZ888JvidE/HpN9eqw4KxV5oVKQVTSkWAaWcARt9IX8RU4QTyF+JC4P8OXwstOZP0Y6a0IqMzAijUig=="],
 
-    "@leafer/decorator": ["@leafer/decorator@2.1.8", "https://registry.npmmirror.com/@leafer/decorator/-/decorator-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/debug": "2.1.8", "@leafer/platform": "2.1.8" } }, "sha512-04O976JU4pPMOFhLU2m99pj+tRsmO8fiC40P1OoVS3tWNHlVd5omjtQllxKQigdG2OMG17CKao0hFYawr3OsgA=="],
+    "@leafer/decorator": ["@leafer/decorator@2.2.9", "https://registry.npmmirror.com/@leafer/decorator/-/decorator-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/debug": "2.2.9", "@leafer/platform": "2.2.9" } }, "sha512-reA3NafAm0PSYkSG44QuX8sYXOf/4hdlR3IfhpHwovNf+g3M/R1ibQ+2kROhRe28APUvpaN5N/0tzj5zeOFMqA=="],
 
-    "@leafer/display": ["@leafer/display@2.1.8", "https://registry.npmmirror.com/@leafer/display/-/display-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/debug": "2.1.8", "@leafer/decorator": "2.1.8", "@leafer/display-module": "2.1.8", "@leafer/event": "2.1.8", "@leafer/helper": "2.1.8", "@leafer/image": "2.1.8", "@leafer/layout": "2.1.8", "@leafer/math": "2.1.8", "@leafer/platform": "2.1.8" } }, "sha512-Z7EO7OVim7ubAIaci7tnNCDKKctrsxYgRqHv26yCVQMnZIFrbxJOTnott3zSr/c5qsmbTk1Sl7yMvxaa7pg3zA=="],
+    "@leafer/display": ["@leafer/display@2.2.9", "https://registry.npmmirror.com/@leafer/display/-/display-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/debug": "2.2.9", "@leafer/decorator": "2.2.9", "@leafer/display-module": "2.2.9", "@leafer/event": "2.2.9", "@leafer/helper": "2.2.9", "@leafer/image": "2.2.9", "@leafer/layout": "2.2.9", "@leafer/math": "2.2.9", "@leafer/platform": "2.2.9" } }, "sha512-FiZ0Vq9G3achrldVHDuiVa9Phr0AWhyWRJhfXuDN829CVbrS7liJYysJ+Y//SGdq3sI7igyKHJbsT1V6OAk2EQ=="],
 
-    "@leafer/display-module": ["@leafer/display-module@2.1.8", "https://registry.npmmirror.com/@leafer/display-module/-/display-module-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/debug": "2.1.8", "@leafer/event": "2.1.8", "@leafer/helper": "2.1.8", "@leafer/math": "2.1.8" } }, "sha512-69ZeF7hp5S+RZIE4EF6mSN0aWeCqz6lffmZInZxHGMrIQupe02ysA3x5l6yUZ0W1+Fin9afNztU0nKpbc7Kcjg=="],
+    "@leafer/display-module": ["@leafer/display-module@2.2.9", "https://registry.npmmirror.com/@leafer/display-module/-/display-module-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/debug": "2.2.9", "@leafer/event": "2.2.9", "@leafer/helper": "2.2.9", "@leafer/math": "2.2.9" } }, "sha512-aBL/ciSFgYWKRAd1jmPq3qkxW5vn8Njp61li4pO4jwy6pQvbznT0ENX145cp+nIzfp8lxbYfiY79E2SFB7sLTA=="],
 
-    "@leafer/event": ["@leafer/event@2.1.8", "https://registry.npmmirror.com/@leafer/event/-/event-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/decorator": "2.1.8", "@leafer/math": "2.1.8", "@leafer/platform": "2.1.8" } }, "sha512-aCRsYdjEdHSINh56IjVfbC+XZiYr7DmOY2ywJ7E1b0x06PAXnIfe3cLJq5r4t2kSGjc81MZs4gvD0WuPP7CTGQ=="],
+    "@leafer/event": ["@leafer/event@2.2.9", "https://registry.npmmirror.com/@leafer/event/-/event-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/decorator": "2.2.9", "@leafer/math": "2.2.9", "@leafer/platform": "2.2.9" } }, "sha512-jbjcaSxG6ifFyaQtoRFVfhvcWuChCCxGQJSRqVQvXLDEZfQHACdjrZNWkfgRWkMxsNRGTGo4r+A/0Cjgz6eiRw=="],
 
-    "@leafer/file": ["@leafer/file@2.1.8", "https://registry.npmmirror.com/@leafer/file/-/file-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/debug": "2.1.8", "@leafer/platform": "2.1.8", "@leafer/task": "2.1.8" } }, "sha512-raEyVLDQFH2JsNhmFQAvHhqPkvTjFASUzWDvkA8wZu6En0I7WttPnxhPmZesIzbjoXi8Td5Oi8N+5sMD4UgW5Q=="],
+    "@leafer/file": ["@leafer/file@2.2.9", "https://registry.npmmirror.com/@leafer/file/-/file-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/debug": "2.2.9", "@leafer/platform": "2.2.9", "@leafer/task": "2.2.9" } }, "sha512-6kZLM4mmDa3qNMrG2A8MxiVVgHJo+5Yjd/yy6yNEweDoKg9QzNacf8mrILdj2CUjuZ3IPBoRIRGFASZpEmUycg=="],
 
-    "@leafer/helper": ["@leafer/helper@2.1.8", "https://registry.npmmirror.com/@leafer/helper/-/helper-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/math": "2.1.8", "@leafer/platform": "2.1.8" } }, "sha512-1caBz6x6ksoPAO+ErNhkE1aFlEfqAK9L38OBtPfBshzmrP++MjGgvKtT/9jg9jzif4peXCgaYHJ0v1BARsu9OQ=="],
+    "@leafer/helper": ["@leafer/helper@2.2.9", "https://registry.npmmirror.com/@leafer/helper/-/helper-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/math": "2.2.9", "@leafer/platform": "2.2.9" } }, "sha512-OVMB9k3IP5w2ARrKIzrDhrc2PTjFppIKtZpvLIFf24tH6Itq0/Hn6J8pa7gKEzdltpgOJD5lYT7IQNtVbJQVXg=="],
 
-    "@leafer/image": ["@leafer/image@2.1.8", "https://registry.npmmirror.com/@leafer/image/-/image-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/file": "2.1.8", "@leafer/math": "2.1.8", "@leafer/platform": "2.1.8", "@leafer/task": "2.1.8" } }, "sha512-s4iTUhlYiEhD0V1fe0NXPDaexm/6NzDA4aX69QehgYKqrwiuKZQ85f12iMVyRaaEevhY8KEgQtjV9GeGAEjSbQ=="],
+    "@leafer/image": ["@leafer/image@2.2.9", "https://registry.npmmirror.com/@leafer/image/-/image-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/file": "2.2.9", "@leafer/math": "2.2.9", "@leafer/platform": "2.2.9", "@leafer/task": "2.2.9" } }, "sha512-hnl7pLM1kOVUo/qdR9Sonvt40ywt9796JDyinV3BQkVh1lfiWQXJY2wb/iQXCUPyDvhiD0cSC+sDR3x9VIFyCw=="],
 
-    "@leafer/image-web": ["@leafer/image-web@2.1.8", "https://registry.npmmirror.com/@leafer/image-web/-/image-web-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-/i2MjoAU0blKGDof+6q9XnFSNEHDvnOMXdloNk7yUFXrPp6tzJRcVQUifHZ+gIgPBpD9RfEYLG/uRHUon/mDJQ=="],
+    "@leafer/image-web": ["@leafer/image-web@2.2.9", "https://registry.npmmirror.com/@leafer/image-web/-/image-web-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-ctMDVYoDi16rniIOffrqXGfOR1qWJe+lm185l+mjsqfcQo//QZ9cml4m+FfChnzwUqB6yuJvhaP3idg59ARFVA=="],
 
-    "@leafer/interface": ["@leafer/interface@2.1.8", "https://registry.npmmirror.com/@leafer/interface/-/interface-2.1.8.tgz", {}, "sha512-XGpJh6N9wc4ZywHbC7DCruPTXsrJkz5ZDiPx0p/Fz7F9swDItncJUjoYuFThuy2W8GRYErJ2boWgwpYshChUcg=="],
+    "@leafer/interface": ["@leafer/interface@2.2.9", "https://registry.npmmirror.com/@leafer/interface/-/interface-2.2.9.tgz", {}, "sha512-XmwjsgV2u1AeAFdjeKOSAlo4zj1ascUKnlEhi0SGL+01iBomDeORjcNm50AoFMZRxY0SqQSIjvDWe6CdxrDcNw=="],
 
-    "@leafer/layout": ["@leafer/layout@2.1.8", "https://registry.npmmirror.com/@leafer/layout/-/layout-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/helper": "2.1.8", "@leafer/math": "2.1.8", "@leafer/platform": "2.1.8" } }, "sha512-qXqao9NOK7opJ4TKZkS1k03jTBDPj40UblJWksWzgesoUQ8fUodBK17/QHY3BWUqJc16Qt50Li3jrZF0OxnksQ=="],
+    "@leafer/layout": ["@leafer/layout@2.2.9", "https://registry.npmmirror.com/@leafer/layout/-/layout-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/helper": "2.2.9", "@leafer/math": "2.2.9", "@leafer/platform": "2.2.9" } }, "sha512-y/22wyyRVR8OQf9tQe+7Koqmmw5fUZkxUxJKzaeDUf1R6xauK6FtDaPDiDJlxBEgIYXFvVpUfQNEzFdyyMS2jw=="],
 
-    "@leafer/layouter": ["@leafer/layouter@2.1.8", "https://registry.npmmirror.com/@leafer/layouter/-/layouter-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-VBx+TsMxwLQKzkSfJ+wwnyFYqWcUv1pAnFDs5fGYf+qwT9LhkG9m7qPntv2xRd9dMxs4vP/CyM6fVhGi9cOViA=="],
+    "@leafer/layouter": ["@leafer/layouter@2.2.9", "https://registry.npmmirror.com/@leafer/layouter/-/layouter-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-JFHCtoUI4ELBTwVow6Nd+cxJxvR2H0zg8lq/1lTqgdppeOD1PRU7bP7L1JN5QrmtJ/yxDUi3iGeYg7z9VnWS9w=="],
 
-    "@leafer/list": ["@leafer/list@2.1.8", "https://registry.npmmirror.com/@leafer/list/-/list-2.1.8.tgz", {}, "sha512-ognSCuN2N7uuMrmDVzD8dEyYqntosvsuv4xvAUtSRFyNiu5+Ob0MO248uT8z9rYcslruH6+/VxK7/QRirrhJjw=="],
+    "@leafer/list": ["@leafer/list@2.2.9", "https://registry.npmmirror.com/@leafer/list/-/list-2.2.9.tgz", {}, "sha512-B9H7ydvE5I7jhdnnML8kox0q+r5/uwF/t0xNHZc3FzvynpHtvpAYTpuzE5zjK0E9C2UkfQi0T9DuUr9CsguMCA=="],
 
-    "@leafer/math": ["@leafer/math@2.1.8", "https://registry.npmmirror.com/@leafer/math/-/math-2.1.8.tgz", {}, "sha512-mYwMCPlA7OJ9alKJl2N9VfT/LQP6mzDlCcK6uS1aDwWxsZJQDoWgvnHr5OetJMlVVinOd33pC6/5MySwQJDwXA=="],
+    "@leafer/math": ["@leafer/math@2.2.9", "https://registry.npmmirror.com/@leafer/math/-/math-2.2.9.tgz", {}, "sha512-kkybyaR+76e0dsgAxk0Mpeb1coMNM3/mR/JvDBNzcF2iFCemYcOFCiI8+uhJyqUKLfYzLjD7CW5gFa0NmtbgDQ=="],
 
-    "@leafer/partner": ["@leafer/partner@2.1.8", "https://registry.npmmirror.com/@leafer/partner/-/partner-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8", "@leafer/layouter": "2.1.8", "@leafer/renderer": "2.1.8", "@leafer/selector": "2.1.8", "@leafer/watcher": "2.1.8" } }, "sha512-EO1QyzUrkv/nbWI/j2UfYwembyMmQV4SbkoKdWv8LQtVuVjexd9pxQo3uNlJlHjDwzHqmzu291ll1/rXVBLHog=="],
+    "@leafer/partner": ["@leafer/partner@2.2.9", "https://registry.npmmirror.com/@leafer/partner/-/partner-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9", "@leafer/layouter": "2.2.9", "@leafer/renderer": "2.2.9", "@leafer/selector": "2.2.9", "@leafer/watcher": "2.2.9" } }, "sha512-W2CcbVPoGomvVQNve1CWdhq1B5zOmUKUJqKssO8eBZF6cIXtFW9Ab1CxZR1CcLCi+OelDUvcYFhjU3keLCnNdg=="],
 
-    "@leafer/path": ["@leafer/path@2.1.8", "https://registry.npmmirror.com/@leafer/path/-/path-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/debug": "2.1.8", "@leafer/math": "2.1.8" } }, "sha512-PkuMXXYlKG5Qj0LV1naJhHpL5/F9wFQL7wmiVrmd3Ssh5bGBDPKs+iOJmF3rPVPU5knKD+o5rE7yeqPmoVklkg=="],
+    "@leafer/path": ["@leafer/path@2.2.9", "https://registry.npmmirror.com/@leafer/path/-/path-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/debug": "2.2.9", "@leafer/math": "2.2.9" } }, "sha512-GP3IXKNUkUGZuZI/V2IkcJc+uU6Rs2mAvu1xtgyh73iRbkvdlk3T/MbxgOkGFmQ5cO7KKCiwizWRYyW5Z7Fb0g=="],
 
-    "@leafer/platform": ["@leafer/platform@2.1.8", "https://registry.npmmirror.com/@leafer/platform/-/platform-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/debug": "2.1.8" } }, "sha512-9AS/nl7IJ8OplQ65lomoKv9KOX7d76wEsL76A9LGKRxftC/aAol1VNDonTzOa7YnSj3i85x04x82WPYNBEn5Dg=="],
+    "@leafer/platform": ["@leafer/platform@2.2.9", "https://registry.npmmirror.com/@leafer/platform/-/platform-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/debug": "2.2.9" } }, "sha512-wSDawGKgam20Mrl10VWP4UcYrrrWU7wlKi4/T/0j0ljvu29ZSKcLA2o4//WYJxVcuDEqSwMl3EXdpkl7pYdHlg=="],
 
-    "@leafer/renderer": ["@leafer/renderer@2.1.8", "https://registry.npmmirror.com/@leafer/renderer/-/renderer-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-uVF1H3TLk9RbdcrGAlvVSbqIhqth4TT9tKaAw0aO/PpSjecHo5Cc1gfZR+WAyGjXZ7I0ShcXetRhHQvvRYTqSA=="],
+    "@leafer/renderer": ["@leafer/renderer@2.2.9", "https://registry.npmmirror.com/@leafer/renderer/-/renderer-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-CxCT5p/VMJDlbX1rBpSoc9gKrFmOIRygqMT6u1vYZynJY4XM2aqWMCItBGEUzCutRaGRRg8fK3I0J4Hux2qhCA=="],
 
-    "@leafer/selector": ["@leafer/selector@2.1.8", "https://registry.npmmirror.com/@leafer/selector/-/selector-2.1.8.tgz", { "dependencies": { "@leafer/core": "2.1.8" } }, "sha512-vyM8DF3F+yKdAuZOJqos2klwj7cCzzVUAYT74utP5ZUNM+o/FELehshqSZYMFtvFYVXM8gQcmFmtNK4GSxnUYg=="],
+    "@leafer/selector": ["@leafer/selector@2.2.9", "https://registry.npmmirror.com/@leafer/selector/-/selector-2.2.9.tgz", { "dependencies": { "@leafer/core": "2.2.9" } }, "sha512-YeMxiIlCfFNbCkNGwx7mIccwHlBQTROw9T/zXwhd34GZ52ESVsqPETY9Ot5YuVcExJAM9mEjA6MTQuTEHYjNWw=="],
 
-    "@leafer/task": ["@leafer/task@2.1.8", "https://registry.npmmirror.com/@leafer/task/-/task-2.1.8.tgz", { "dependencies": { "@leafer/debug": "2.1.8", "@leafer/math": "2.1.8" } }, "sha512-rJheRjeLu2fYlsD5e0u80mgjti0EmreC/cfMdgGwLf4L1DGxZyttMaQIvdRHDKGdyb5/8nq4/NnraSO67JGNeg=="],
+    "@leafer/task": ["@leafer/task@2.2.9", "https://registry.npmmirror.com/@leafer/task/-/task-2.2.9.tgz", { "dependencies": { "@leafer/debug": "2.2.9", "@leafer/math": "2.2.9" } }, "sha512-NrbrofDssz8erxoOBZ3TQEQI9pl3tAPnPtqceOtOpCFC3cGDr8HJWb7F4ZZNRhN0qutPGj+BevOWC9BYoHgMlg=="],
 
-    "@leafer/watcher": ["@leafer/watcher@2.1.8", "https://registry.npmmirror.com/@leafer/watcher/-/watcher-2.1.8.tgz", { "dependencies": { "@leafer/data": "2.1.8", "@leafer/event": "2.1.8", "@leafer/list": "2.1.8" } }, "sha512-JGN/aSPBcOlJ1XGyiy+JUn6BY0+OIiIFNvg+cnaqMXvHWhhr5RctYbJnpVo9YX7PYqPqByqbAarja8c6SkvkOw=="],
+    "@leafer/watcher": ["@leafer/watcher@2.2.9", "https://registry.npmmirror.com/@leafer/watcher/-/watcher-2.2.9.tgz", { "dependencies": { "@leafer/data": "2.2.9", "@leafer/event": "2.2.9", "@leafer/list": "2.2.9" } }, "sha512-v6nRfHh3+2DZs94MItG2i+WrLMHNOqnWD7cPQ8cxo1MVX/BghjWEE8LGy7hOcLIYIppDZ9ZHeVNEhtNTCRffug=="],
 
-    "@leafer/web-core": ["@leafer/web-core@2.1.8", "https://registry.npmmirror.com/@leafer/web-core/-/web-core-2.1.8.tgz", { "dependencies": { "@leafer/canvas-web": "2.1.8", "@leafer/core": "2.1.8", "@leafer/image-web": "2.1.8", "@leafer/interface": "2.1.8", "@leafer/partner": "2.1.8" } }, "sha512-DYpwEnJm4bef8BBSl6ErUXTzpNlj65HcHG+JpPiG5PMdfx9eQf6I6MhnUXz9WMoM44xZd3B0gvqXBDbAuVBU/A=="],
+    "@leafer/web-core": ["@leafer/web-core@2.2.9", "https://registry.npmmirror.com/@leafer/web-core/-/web-core-2.2.9.tgz", { "dependencies": { "@leafer/canvas-web": "2.2.9", "@leafer/core": "2.2.9", "@leafer/image-web": "2.2.9", "@leafer/interface": "2.2.9", "@leafer/partner": "2.2.9" } }, "sha512-d/m46qw6zjAjf+X/MBx4q0ztd5SxSs/mYORdaNjiOZRg6qFXsBGtUUSUyN5dIprCjKFkdVge4ow3yLxv2RvdMw=="],
 
     "@lobehub/icons-static-svg": ["@lobehub/icons-static-svg@1.91.0", "https://registry.npmmirror.com/@lobehub/icons-static-svg/-/icons-static-svg-1.91.0.tgz", {}, "sha512-ZDflEq0uUvAkH4WK4h3qNvvY09ts4OqUb5azD7A0xKfcuYhffGwB1Q/As2RguZYq4Gh4v925CJ8iodiClzc4zw=="],
 
@@ -790,7 +790,7 @@
 
     "katex": ["katex@0.17.0", "https://registry.npmmirror.com/katex/-/katex-0.17.0.tgz", { "dependencies": { "commander": "^8.3.0" }, "bin": { "katex": "cli.js" } }, "sha512-Vdw0ATsQ9V+LuegM/BTwQqV/6cTl5lbGcIrU+BCgLxyf6bo38ybOr372tuSIxir3CN720flu1meYR6XzNMwQnw=="],
 
-    "leafer-ui": ["leafer-ui@2.1.8", "https://registry.npmmirror.com/leafer-ui/-/leafer-ui-2.1.8.tgz", { "dependencies": { "@leafer-in/interface": "2.1.8", "@leafer-ui/core": "2.1.8", "@leafer-ui/draw": "2.1.8", "@leafer-ui/interaction-web": "2.1.8", "@leafer-ui/interface": "2.1.8", "@leafer-ui/partner": "2.1.8", "@leafer-ui/web": "2.1.8", "@leafer/core": "2.1.8", "@leafer/interface": "2.1.8", "@leafer/partner": "2.1.8" } }, "sha512-SWxvMB580uRLaLsmjeG6Ww12TavSUlPF11RT7etsOj0iklG47QpAzzylSVym0N4ucKh6M3eJMRBUOFRCTNSxpA=="],
+    "leafer-ui": ["leafer-ui@2.2.9", "https://registry.npmmirror.com/leafer-ui/-/leafer-ui-2.2.9.tgz", { "dependencies": { "@leafer-in/interface": "2.2.9", "@leafer-ui/core": "2.2.9", "@leafer-ui/draw": "2.2.9", "@leafer-ui/interaction-web": "2.2.9", "@leafer-ui/interface": "2.2.9", "@leafer-ui/partner": "2.2.9", "@leafer-ui/web": "2.2.9", "@leafer/core": "2.2.9", "@leafer/interface": "2.2.9", "@leafer/partner": "2.2.9" } }, "sha512-z6GklKuOMV8gMCAxWvvRUDXOZdSLzOkBzJBFEiDMcjVuTMpceQD/HPsV+Sq7Dk8I1xqY6OcF+3yTLEWYMOauxA=="],
 
     "leafer-x-easy-snap": ["leafer-x-easy-snap@1.11.0", "https://registry.npmmirror.com/leafer-x-easy-snap/-/leafer-x-easy-snap-1.11.0.tgz", {}, "sha512-gR/G+6iVbzCz8MLOf9WjGFF5IEkObDjKMbmBiiHSh4vyQoZsoaukV26ETJcfmtmqKf47Hx4ZOxiyZazSuXMZVw=="],
 
