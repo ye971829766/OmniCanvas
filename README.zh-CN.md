@@ -23,6 +23,19 @@
 
 <img src="public/示例2.gif" alt="OmniCanvas 交互演示" width="100%" />
 
+<br />
+
+### AI 创作与编辑工作流程示例
+
+<p align="center">
+  <img src="public/demo-step1.png" alt="1. 提交任务与生成中" width="49%" />
+  <img src="public/demo-step2.png" alt="2. AI 图像生成完成" width="49%" />
+</p>
+<p align="center">
+  <img src="public/demo-step3.png" alt="3. 画布图像编辑与处理" width="49%" />
+  <img src="public/demo-step4.png" alt="4. 智能一键抠图/消除背景" width="49%" />
+</p>
+
 </div>
 
 ---

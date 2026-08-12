@@ -23,6 +23,19 @@ Turn natural-language intent into inspectable canvas operations. OmniCanvas lets
 
 <img src="public/示例2.gif" alt="OmniCanvas interaction demo" width="100%" />
 
+<br />
+
+### AI Creation & Editing Workflow Examples
+
+<p align="center">
+  <img src="public/demo-step1.png" alt="1. Submit task & start generation" width="49%" />
+  <img src="public/demo-step2.png" alt="2. AI image generation result" width="49%" />
+</p>
+<p align="center">
+  <img src="public/demo-step3.png" alt="3. Canvas image editing & processing" width="49%" />
+  <img src="public/demo-step4.png" alt="4. Automatic background removal" width="49%" />
+</p>
+
 </div>
 
 ---
