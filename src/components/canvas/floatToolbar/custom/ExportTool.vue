@@ -381,16 +381,27 @@ const doExport = async (ext: "png" | "jpg" | "webp" | "svg") => {
           img.onerror = reject;
         });
 
+        // 获取节点在画布上的实际显示尺寸（包含 scaleX / scaleY 缩放）
+        const scaleX = Math.abs(el.scaleX ?? 1);
+        const scaleY = Math.abs(el.scaleY ?? 1);
+        const parentBounds = typeof el.getBounds === "function" ? el.getBounds("box", "parent") : null;
+        
+        const rawW = parentBounds?.width || (el.width ? el.width * scaleX : img.naturalWidth * scaleX);
+        const rawH = parentBounds?.height || (el.height ? el.height * scaleY : img.naturalHeight * scaleY);
+
+        const targetWidth = Math.max(1, Math.round(rawW));
+        const targetHeight = Math.max(1, Math.round(rawH));
+
         const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
         const ctx = canvas.getContext("2d");
         if (ctx) {
           if (ext === "jpg") {
             ctx.fillStyle = "#ffffff";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
           }
-          ctx.drawImage(img, 0, 0);
+          ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
           canvas.toBlob((convertedBlob) => {
             if (convertedBlob) {
               const blobUrl = URL.createObjectURL(convertedBlob);
