@@ -263,6 +263,12 @@ export interface ModelConfigState {
     /** 局部重绘模型；空字符串表示自动使用第一个启用的图片模型 */
     inpaintModel?: string;
   };
+  featureFlags?: {
+    agent: boolean;
+    imageGen: boolean;
+    videoGen: boolean;
+    removeBg: boolean;
+  };
 }
 
 export interface TaskResponse {

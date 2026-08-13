@@ -4,10 +4,11 @@ import { AgentService } from './agent.service';
 import { AgentMemory } from './agent.memory';
 import { exportRegistry } from './export-registry';
 import { AuthGuard } from '../auth/auth.guard';
+import { AgentEnabledGuard } from './agent-enabled.guard';
 import type { AgentAssetInput } from './agent-assets';
 
 @Controller('agent')
-@UseGuards(AuthGuard)
+@UseGuards(AgentEnabledGuard, AuthGuard)
 export class AgentController {
   constructor(
     private readonly agent: AgentService,

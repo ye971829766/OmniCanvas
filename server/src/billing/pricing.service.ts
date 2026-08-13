@@ -52,19 +52,33 @@ export class PricingService {
     );
 
     const config = this.parseConfig(rule.config);
-    amount *= this.lookupMultiplier(config.qualityMultipliers, params.quality);
-    amount *= this.lookupMultiplier(config.sizeMultipliers, params.size);
-    amount *= this.lookupMultiplier(config.scaleMultipliers, params.scale);
+    const qualityKey = this.normalizeSpecKey(params.quality);
+    const qualityIsResolution = this.isResolutionKey(qualityKey);
+    if (qualityIsResolution) {
+      amount = this.applyMultiplier(
+        amount,
+        this.resolveResolutionMultiplier(
+          config.qualityMultipliers,
+          config.sizeMultipliers,
+          params.quality,
+        ),
+      );
+    } else {
+      amount = this.applyMultiplier(amount, this.lookupMultiplier(config.qualityMultipliers, params.quality));
+      amount = this.applyMultiplier(amount, this.resolveSizeMultiplier(config.sizeMultipliers, params.size));
+    }
+    amount = this.applyMultiplier(amount, this.lookupMultiplier(config.scaleMultipliers, params.scale));
 
-    if (operation === "image_generation") {
+    if (operation === "image_generation" || operation === "image_edit") {
       const count = Math.max(1, this.nonNegativeInteger(params.n ?? 1));
-      amount *= count;
+      amount = this.applyMultiplier(amount, count);
     }
 
     if (operation === "video_generation") {
-      const seconds = Math.max(0, Number(params.seconds || 0));
       const included = Math.max(0, Number(config.includedSeconds || 0));
       const extraRate = Math.max(0, Number(config.additionalMicrosPerSecond || 0));
+      const parsedSeconds = Number(params.seconds);
+      const seconds = Number.isFinite(parsedSeconds) && parsedSeconds > 0 ? parsedSeconds : included;
       if (seconds > included) amount += Math.ceil((seconds - included) * extraRate);
     }
 
@@ -90,13 +104,105 @@ export class PricingService {
     }
   }
 
+  private applyMultiplier(amount: number, multiplier: number): number {
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    const factor = Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1;
+    if (factor === 1) return amount;
+    return Math.ceil(amount * factor);
+  }
+
+  private normalizeSpecKey(value: unknown): string {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[×✕*]/g, "x")
+      .replace(/\s+/g, "");
+  }
+
   private lookupMultiplier(map: unknown, key: unknown): number {
-    if (!map || typeof map !== "object" || key === undefined || key === null) return 1;
-    const normalizedKey = String(key).trim().toLowerCase();
-    const entry = Object.entries(map as Record<string, unknown>).find(
-      ([candidate]) => candidate.trim().toLowerCase() === normalizedKey,
+    const matched = this.findMultiplier(map, key);
+    return matched ?? 1;
+  }
+
+  private findMultiplier(map: unknown, key: unknown): number | null {
+    if (!map || typeof map !== "object" || key === undefined || key === null) return null;
+    const normalizedKey = this.normalizeSpecKey(key);
+    if (!normalizedKey) return null;
+    const aliases = this.keyAliases(normalizedKey);
+    const entry = Object.entries(map as Record<string, unknown>).find(([candidate]) =>
+      aliases.has(this.normalizeSpecKey(candidate)),
     );
-    const value = Number(entry?.[1] ?? 1);
-    return Number.isFinite(value) && value > 0 ? value : 1;
+    if (!entry) return null;
+    const value = Number(entry[1]);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  private keyAliases(normalizedKey: string): Set<string> {
+    const aliases = new Set<string>([normalizedKey]);
+    const compact = normalizedKey.replace(/-/g, "");
+    aliases.add(compact);
+    const pixels = this.parsePixelSize(normalizedKey);
+    if (pixels) {
+      aliases.add(`${pixels.width}x${pixels.height}`);
+      aliases.add(`${pixels.height}x${pixels.width}`);
+    }
+    const resolution = this.resolutionAlias(normalizedKey, pixels);
+    if (resolution) aliases.add(resolution);
+    return aliases;
+  }
+
+  private resolutionAlias(
+    normalizedKey: string,
+    pixels?: { width: number; height: number },
+  ): string | null {
+    if (/^(1k|2k|4k)$/.test(normalizedKey)) return normalizedKey;
+    if (!pixels) return null;
+    const longest = Math.max(pixels.width, pixels.height);
+    if (longest <= 1280) return "1k";
+    if (longest <= 2560) return "2k";
+    return "4k";
+  }
+
+  private parsePixelSize(value: unknown): { width: number; height: number } | undefined {
+    const match = this.normalizeSpecKey(value).match(/^(\d{2,5})x(\d{2,5})$/);
+    if (!match) return undefined;
+    const width = Number(match[1]);
+    const height = Number(match[2]);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return undefined;
+    }
+    return { width, height };
+  }
+
+  private isResolutionKey(normalizedKey: string): boolean {
+    return /^(1k|2k|4k)$/.test(normalizedKey) || Boolean(this.parsePixelSize(normalizedKey));
+  }
+
+  private resolveResolutionMultiplier(
+    qualityMap: unknown,
+    sizeMap: unknown,
+    quality: unknown,
+  ): number {
+    return this.findMultiplier(qualityMap, quality)
+      ?? this.findMultiplier(sizeMap, quality)
+      ?? this.resolveSizeMultiplier(sizeMap, quality);
+  }
+
+  private resolveSizeMultiplier(map: unknown, size: unknown): number {
+    const direct = this.findMultiplier(map, size);
+    if (direct != null) return direct;
+
+    const pixels = this.parsePixelSize(size);
+    const bucket = this.resolutionAlias(this.normalizeSpecKey(size), pixels);
+    if (bucket) {
+      const fromBucket = this.findMultiplier(map, bucket);
+      if (fromBucket != null) return fromBucket;
+    }
+
+    if (!pixels || !map || typeof map !== "object") return 1;
+    const longest = Math.max(pixels.width, pixels.height);
+    if (longest <= 1280) return this.findMultiplier(map, "1k") ?? 1;
+    if (longest <= 2560) return this.findMultiplier(map, "2k") ?? this.findMultiplier(map, "2048x2048") ?? 2;
+    return this.findMultiplier(map, "4k") ?? this.findMultiplier(map, "4096x4096") ?? 4;
   }
 }

@@ -68,6 +68,42 @@ describe("BillingService", () => {
     expect(billing.getBalance(userId).lifetimeSpentCredits).toBe(8);
   });
 
+  it("caps an oversized capture at the reserved quote instead of failing settlement", () => {
+    const operation = billing.reserve({
+      userId,
+      idempotencyKey: "image-over-capture",
+      operation: "image_generation",
+      params: { quality: "standard" },
+    });
+    const completed = billing.capture(operation.id, 99_000_000);
+    expect(completed.status).toBe("captured");
+    expect(completed.finalMicros).toBe(operation.quotedMicros);
+    expect(billing.getBalance(userId).lifetimeSpentCredits).toBe(10);
+  });
+
+  it("treats the same prompt with different image payloads as one idempotent request", () => {
+    const first = billing.reserve({
+      userId,
+      idempotencyKey: "same-image-key",
+      operation: "image_generation",
+      params: { prompt: "a shoe", quality: "1K", images: ["data:image/png;base64,aaa"] },
+    });
+    const replay = billing.reserve({
+      userId,
+      idempotencyKey: "same-image-key",
+      operation: "image_generation",
+      params: { prompt: "a shoe", quality: "1K", images: ["data:image/png;base64,bbb"] },
+    });
+    expect(replay.reused).toBe(true);
+    expect(replay.id).toBe(first.id);
+    expect(() => billing.reserve({
+      userId,
+      idempotencyKey: "same-image-key",
+      operation: "image_generation",
+      params: { prompt: "a different shoe", quality: "1K" },
+    })).toThrow();
+  });
+
   it("rejects reuse of the same key with a different request", () => {
     billing.reserve({
       userId,

@@ -4,6 +4,12 @@ import { DatabaseService } from "../database/database.service";
 import { join } from "path";
 import type { YunwuApiPurpose, YunwuModel } from "../types";
 import { SYSTEM_PROMPT } from "../agent/system-prompt";
+import {
+  envFeatureDefaults,
+  normalizeFeatureFlags,
+  setFeatureFlagsCache,
+  type AppFeatureFlags,
+} from "../utils/feature-flags";
 
 export interface ModelMapping {
   id: string;
@@ -90,6 +96,8 @@ export interface ModelConfigState {
     /** Image model id for canvas local inpaint / 局部重绘. Empty = first enabled image mapping. */
     inpaintModel?: string;
   };
+  /** Runtime product switches. Admin can toggle without rebuilding the frontend. */
+  featureFlags?: AppFeatureFlags;
 }
 
 export type AgentConfigState = NonNullable<ModelConfigState["agentConfig"]>;
@@ -108,6 +116,7 @@ export class ModelConfigService implements OnModuleInit {
   async onModuleInit() {
     // Check and run legacy JSON data migration
     await this.migrateLegacyData();
+    await this.getConfig();
   }
 
   private async migrateLegacyData(): Promise<void> {
@@ -190,7 +199,8 @@ export class ModelConfigService implements OnModuleInit {
         visionModel: "gpt-4o",
         imageModel: "",
         inpaintModel: "",
-      }
+      },
+      featureFlags: envFeatureDefaults(),
     };
   }
 
@@ -518,22 +528,28 @@ export class ModelConfigService implements OnModuleInit {
           : ["16x9", "9x16", "1x1", "4x3", "3x4", "21x9"]
       };
       const agentConfig = this.normalizeAgentConfig(parsed.agentConfig);
+      const featureFlags = normalizeFeatureFlags(parsed.featureFlags);
       // Only auto-seed from mappings when logoLibrary was never stored (undefined).
       // An explicit empty array means the admin cleared the library.
       const logoLibrary = Array.isArray(parsed.logoLibrary)
         ? this.normalizeLogoLibrary(parsed.logoLibrary)
         : this.seedLogoLibraryFromMappings([], mappings as ModelMapping[]);
-      return {
+      const state: ModelConfigState = {
         mappings: mappings as ModelMapping[],
         imageConfigs: imageConfigs as ImageConfig[],
         videoConfigs: videoConfigs as VideoConfig[],
         logoLibrary,
         dictionaries,
         agentConfig,
+        featureFlags,
       };
+      setFeatureFlagsCache(featureFlags);
+      return state;
     } catch (err) {
       console.error("Failed to query model config from database:", err);
-      return this.getDefaultState();
+      const fallback = this.getDefaultState();
+      setFeatureFlagsCache(fallback.featureFlags ?? envFeatureDefaults());
+      return fallback;
     }
   }
 
@@ -624,6 +640,13 @@ export class ModelConfigService implements OnModuleInit {
           ? this.mergeAgentConfig(nextState.agentConfig, existing.agentConfig)
           : this.normalizeAgentConfig(existing.agentConfig);
 
+      const sanitizedFlags = normalizeFeatureFlags(
+        nextState?.featureFlags !== undefined && nextState?.featureFlags !== null
+          ? nextState.featureFlags
+          : existing.featureFlags,
+        existing.featureFlags ?? envFeatureDefaults(),
+      );
+
       // logoLibrary: explicit array replaces; omit keeps existing
       const sanitizedLogoLibrary = Array.isArray(nextState?.logoLibrary)
         ? this.normalizeLogoLibrary(nextState.logoLibrary)
@@ -646,6 +669,7 @@ export class ModelConfigService implements OnModuleInit {
         logoLibrary: sanitizedLogoLibrary,
         dictionaries: sanitizedDictionaries,
         agentConfig: sanitizedAgent,
+        featureFlags: sanitizedFlags,
       };
 
       const stmt = this.db.prepare(`
@@ -656,6 +680,7 @@ export class ModelConfigService implements OnModuleInit {
         $key: this.CONFIG_KEY,
         $data: JSON.stringify(state)
       });
+      setFeatureFlagsCache(sanitizedFlags);
       return state;
     } catch (err) {
       if (err instanceof BadRequestException) {

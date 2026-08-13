@@ -13,6 +13,29 @@
       />
     </div>
 
+    <div class="panel flags-panel">
+      <div class="panel__head">
+        <div>
+          <h3>功能开关</h3>
+          <p>即时对所有用户生效，无需改 env 或重启前端</p>
+        </div>
+      </div>
+      <div class="flag-grid">
+        <div v-for="item in featureItems" :key="item.key" class="flag-card">
+          <div class="flag-card__text">
+            <strong>{{ item.label }}</strong>
+            <span>{{ item.hint }}</span>
+          </div>
+          <el-switch
+            :model-value="featureFlags[item.key]"
+            :loading="savingFlag === item.key"
+            :disabled="savingFlag !== null"
+            @change="(on: boolean) => toggleFeature(item.key, on)"
+          />
+        </div>
+      </div>
+    </div>
+
     <!-- KPI row -->
     <el-row :gutter="14">
       <el-col v-for="card in kpiCards" :key="card.label" :xs="12" :sm="12" :md="6">
@@ -294,6 +317,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { ElMessage } from "element-plus";
 import {
   Coin,
   CreditCard,
@@ -307,6 +331,7 @@ import {
   getBillingOverview,
   getModelConfig,
   getTokenStats,
+  updateModelConfig,
   type AdminUser,
   type BillingAccountAdmin,
   type BillingOrderAdmin,
@@ -339,6 +364,21 @@ const agentConfig = ref<{
   imageModel?: string;
   inpaintModel?: string;
 }>({});
+
+type FeatureKey = "agent" | "imageGen" | "videoGen" | "removeBg";
+const featureFlags = ref<Record<FeatureKey, boolean>>({
+  agent: true,
+  imageGen: true,
+  videoGen: true,
+  removeBg: true,
+});
+const savingFlag = ref<FeatureKey | null>(null);
+const featureItems: { key: FeatureKey; label: string; hint: string }[] = [
+  { key: "agent", label: "Agent 对话", hint: "右侧助手面板与画布参考图入口" },
+  { key: "imageGen", label: "图片生成", hint: "工具栏、右键图生图与 Agent 生图" },
+  { key: "videoGen", label: "视频生成", hint: "工具栏、右键图生视频与 Agent 生视频" },
+  { key: "removeBg", label: "背景移除", hint: "图片浮动工具栏去背景" },
+];
 
 const logoLibraryCount = computed(() => props.logoLibrary?.length || 0);
 const enabledChannels = computed(() => props.channels.filter((c) => c.status).length);
@@ -587,8 +627,30 @@ async function loadDashboard() {
       imageModel: modelCfg?.agentConfig?.imageModel,
       inpaintModel: modelCfg?.agentConfig?.inpaintModel,
     };
+    if (modelCfg?.featureFlags) {
+      featureFlags.value = { ...featureFlags.value, ...modelCfg.featureFlags };
+    }
   } finally {
     loading.value = false;
+  }
+}
+
+async function toggleFeature(key: FeatureKey, on: boolean) {
+  const previous = featureFlags.value[key];
+  featureFlags.value = { ...featureFlags.value, [key]: on };
+  savingFlag.value = key;
+  try {
+    const saved = await updateModelConfig({ featureFlags: featureFlags.value } as any);
+    if (saved.featureFlags) {
+      featureFlags.value = { ...featureFlags.value, ...saved.featureFlags };
+    }
+    ElMessage.success(`${featureItems.find((item) => item.key === key)?.label || "功能"}已${on ? "开启" : "关闭"}`);
+  } catch (err) {
+    console.error(err);
+    featureFlags.value = { ...featureFlags.value, [key]: previous };
+    ElMessage.error("保存功能开关失败");
+  } finally {
+    savingFlag.value = null;
   }
 }
 
@@ -607,6 +669,52 @@ onMounted(loadDashboard);
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.flags-panel {
+  padding: 16px 18px 18px;
+}
+
+.flag-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.flag-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+}
+
+.flag-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.flag-card__text strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.flag-card__text span {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
+@media (max-width: 1100px) {
+  .flag-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .kpi {

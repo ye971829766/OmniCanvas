@@ -5,6 +5,7 @@ import { AiService } from "../ai/ai.service";
 import { EventSink } from "./event-sink";
 import type { ToolContext, ToolResult } from "./tool.interface";
 import { TOOL_MAP } from "./tool.registry";
+import { isAgentToolEnabled } from "../utils/feature-flags";
 import {
   buildFinalImageSystemPrompt,
   compactAgentSystemPrompt,
@@ -24,6 +25,7 @@ import {
   HiddenReasoningStreamFilter,
   stripHiddenReasoning,
 } from "./text-sanitizer";
+import { estimatePromptTokenReserve } from "../billing/token-estimate";
 // No planner imports
 
 /** Extract a meaningful root-cause message from AI SDK wrapped errors. */
@@ -537,6 +539,9 @@ ${videoModelInfo || "- None"}
       hasHistoricalAssets,
       hasCanvasImages: canvasHasImages,
     });
+    for (const name of [...selectedToolNames]) {
+      if (!isAgentToolEnabled(name)) selectedToolNames.delete(name);
+    }
     // Research is required only when the optional web tools are configured and
     // actually selected for this turn.
     const imageResearchRequired =
@@ -734,20 +739,15 @@ ${videoModelInfo || "- None"}
       try {
         const maxOutputTokens = 4_096;
         if (this.billingService && userInfo?.userId) {
-          const promptTokenUpperBound =
-            Buffer.byteLength(JSON.stringify(modelMessages), "utf8") +
-            Buffer.byteLength(
-              JSON.stringify(
-                [...selectedToolNames].map((name) => {
-                  const tool = TOOL_MAP.get(name);
-                  return tool
-                    ? { name: tool.name, description: tool.description, parameters: tool.parameters }
-                    : { name };
-                }),
-              ),
-              "utf8",
-            ) +
-            8_192;
+          const promptTokenUpperBound = estimatePromptTokenReserve(
+            modelMessages,
+            [...selectedToolNames].map((name) => {
+              const tool = TOOL_MAP.get(name);
+              return tool
+                ? { name: tool.name, description: tool.description, parameters: tool.parameters }
+                : { name };
+            }),
+          );
           const billingOperation = this.billingService.reserve({
             userId: userInfo.userId,
             idempotencyKey: `${ctx.billingNamespace}:llm:${step}`,
@@ -858,12 +858,22 @@ ${videoModelInfo || "- None"}
         usage.promptTokens += currentPromptTokens;
         usage.completionTokens += currentCompletionTokens;
         if (llmBillingOperationId && this.billingService) {
-          const actual = this.billingService.quoteForOperation(llmBillingOperationId, {
-            model: chatModel,
-            promptTokens: currentPromptTokens,
-            completionTokens: currentCompletionTokens,
-          });
-          this.billingService.capture(llmBillingOperationId, actual.amountMicros);
+          try {
+            if (currentPromptTokens > 0 || currentCompletionTokens > 0) {
+              const actual = this.billingService.quoteForOperation(llmBillingOperationId, {
+                model: chatModel,
+                promptTokens: currentPromptTokens,
+                completionTokens: currentCompletionTokens,
+              });
+              this.billingService.capture(llmBillingOperationId, actual.amountMicros);
+            } else {
+              this.billingService.capture(llmBillingOperationId);
+            }
+          } catch (billingError: any) {
+            this.logger.error(
+              `Failed to capture Agent LLM billing for ${llmBillingOperationId}: ${billingError?.message || billingError}`,
+            );
+          }
         }
         this.logger.debug(
           `[session=${sessionId}] step=${step + 1} ` +
@@ -1103,8 +1113,11 @@ ${videoModelInfo || "- None"}
         }
         const tool = TOOL_MAP.get(call.name);
         let content: any;
-        if (!tool) {
-          content = { status: "error", error: `Unknown tool: ${call.name}` };
+        if (!tool || !isAgentToolEnabled(call.name)) {
+          content = {
+            status: "error",
+            error: !tool ? `Unknown tool: ${call.name}` : "该功能已关闭",
+          };
           sink.emit({
             type: "tool_result",
             id: call.id,

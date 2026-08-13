@@ -33,6 +33,7 @@ import {
 import { resolveAgentCanvasParent } from "@/utils/agentCanvasParent";
 import type { CanvasImageGenerationType } from "@/utils/imageTask";
 import { safeRandomId } from "@/utils/safeId";
+import { features } from "@/config";
 
 /**
  * useAgent — drives the Lovart-style chat panel.
@@ -710,7 +711,7 @@ export function useAgent(
 
   // Load history once on mount
   const loadHistory = async () => {
-    if (!sessionId.value) return;
+    if (!features.agent || !sessionId.value) return;
     loadingHistory.value = true;
     try {
       messages.value = []; // Clear current history before loading the new one
@@ -1506,6 +1507,7 @@ export function useAgent(
     input: string,
     attachments?: Array<AgentAttachmentInput | string>,
   ) {
+    if (!features.agent) return;
     const text = input.trim();
     if ((!text && (!attachments || attachments.length === 0)) || running.value) return;
 

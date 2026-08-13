@@ -455,8 +455,8 @@ export class DatabaseService implements OnModuleInit {
     // upstream ≈ ¥0.7–1.5/s → charge ~100 credits/s (≈ ¥2.0–3.0/s depending on pack).
     const rules = [
       { id: "v1-llm", operation: "llm_chat", base: 0, input: 1_000_000_000, output: 1_000_000_000, config: {} },
-      { id: "v1-image", operation: "image_generation", base: 10_000_000, input: 0, output: 0, config: { qualityMultipliers: { high: 2, hd: 2 }, sizeMultipliers: { "2048x2048": 2, "4096x4096": 4, "4k": 4 } } },
-      { id: "v1-edit", operation: "image_edit", base: 10_000_000, input: 0, output: 0, config: { qualityMultipliers: { high: 2, hd: 2 } } },
+      { id: "v1-image", operation: "image_generation", base: 10_000_000, input: 0, output: 0, config: { qualityMultipliers: { auto: 1, low: 1, medium: 1, standard: 1, high: 2, hd: 2, upscaled: 2, "1k": 1, "2k": 2, "4k": 4 }, sizeMultipliers: { "1k": 1, "2k": 2, "4k": 4, "1024x1024": 1, "2048x2048": 2, "4096x4096": 4 } } },
+      { id: "v1-edit", operation: "image_edit", base: 10_000_000, input: 0, output: 0, config: { qualityMultipliers: { auto: 1, low: 1, medium: 1, standard: 1, high: 2, hd: 2, upscaled: 2, "1k": 1, "2k": 2, "4k": 4 }, sizeMultipliers: { "1k": 1, "2k": 2, "4k": 4, "1024x1024": 1, "2048x2048": 2, "4096x4096": 4 } } },
       { id: "v1-video", operation: "video_generation", base: 500_000_000, input: 0, output: 0, config: { includedSeconds: 5, additionalMicrosPerSecond: 100_000_000 } },
       { id: "v1-remove-bg", operation: "remove_background", base: 5_000_000, input: 0, output: 0, config: {} },
       { id: "v1-upscale", operation: "upscale_image", base: 8_000_000, input: 0, output: 0, config: { scaleMultipliers: { "2": 1, "4": 1.5 } } },
@@ -500,6 +500,40 @@ export class DatabaseService implements OnModuleInit {
         $input: videoRule.input,
         $output: videoRule.output,
         $config: JSON.stringify(videoRule.config),
+      });
+    }
+
+    // Expand stock image/edit multipliers so 1K/2K/4K and common pixel sizes
+    // actually match live model options. Skip rows admins have already edited.
+    const stockImageConfigs: Record<string, unknown[]> = {
+      "v1-image": [
+        { qualityMultipliers: { high: 2, hd: 2 }, sizeMultipliers: { "2048x2048": 2, "4096x4096": 4, "4k": 4 } },
+      ],
+      "v1-edit": [
+        { qualityMultipliers: { high: 2, hd: 2 } },
+      ],
+    };
+    for (const rule of rules) {
+      const previous = stockImageConfigs[rule.id];
+      if (!previous) continue;
+      const row = this.dbInstance.query(
+        "SELECT config FROM billing_price_rules WHERE id = $id AND versionId = $versionId AND model IS NULL",
+      ).get({ $id: rule.id, $versionId: versionId }) as { config?: string } | null;
+      if (!row?.config) continue;
+      let current: unknown;
+      try {
+        current = JSON.parse(String(row.config));
+      } catch {
+        continue;
+      }
+      const matchesOld = previous.some((candidate) => JSON.stringify(candidate) === JSON.stringify(current));
+      if (!matchesOld) continue;
+      this.dbInstance.query(
+        "UPDATE billing_price_rules SET config = $config WHERE id = $id AND versionId = $versionId AND model IS NULL",
+      ).run({
+        $config: JSON.stringify(rule.config),
+        $id: rule.id,
+        $versionId: versionId,
       });
     }
   }

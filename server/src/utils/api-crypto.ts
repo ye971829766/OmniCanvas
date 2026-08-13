@@ -132,7 +132,7 @@ export function parseAndValidateEnvelope(encrypted: string): RpcEnvelope {
 export function isCryptoAllowlistedPath(pathname: string): boolean {
   const p = pathname.split("?")[0] || "/";
   if (p === "/api/rpc" || p === "/api/rpc/") return true;
-  if (p === "/" || p === "/health" || p === "/api/health") return true;
+  if (p === "/" || p === "/health" || p === "/api/health" || p === "/features") return true;
   // Stripe / payment webhooks must stay plain for third-party callbacks
   if (p.startsWith("/billing/webhooks/")) return true;
   // Public file assets

@@ -111,7 +111,7 @@
       <button
         type="button"
         class="generate-action-btn"
-        :disabled="!promptText.trim() || isGenerating"
+        :disabled="!features.imageGen || !promptText.trim() || isGenerating"
         @click="handleGenerate"
       >
         <span v-if="isGenerating" class="spinner"></span>
@@ -150,6 +150,7 @@ import { Sparkles, Plus, X } from "lucide-vue-next";
 import ModelSelector from "@/components/ModelSelector.vue";
 import { type ImageModelOptionsResponse } from "@/utils/api";
 import { startImageGenBatch } from "@/utils/startImageGenBatch";
+import { features } from "@/config";
 import { ref, watch, type PropType, onUnmounted, computed } from "vue";
 import type {
   ToolbarChangePayload,
@@ -363,7 +364,7 @@ const togglePanel = (event: Event) => {
 };
 
 const handleGenerate = async () => {
-  if (!promptText.value.trim() || isGenerating.value) return;
+  if (!features.imageGen || !promptText.value.trim() || isGenerating.value) return;
 
   isGenerating.value = true;
   errorMessage.value = "";

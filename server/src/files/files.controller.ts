@@ -19,6 +19,8 @@ import { join, resolve } from 'node:path';
 import { FilesService } from './files.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { BillingService } from '../billing/billing.service';
+import { FeatureEnabledGuard } from '../utils/feature-enabled.guard';
+import { isRemoveBgEnabled } from '../utils/feature-flags';
 import type { BillingOperationType } from '../billing/billing.types';
 
 @Controller()
@@ -89,7 +91,7 @@ export class FilesController {
   }
 
   @Post('remove-bg')
-  @UseGuards(AuthGuard)
+  @UseGuards(FeatureEnabledGuard(isRemoveBgEnabled, '背景移除功能已关闭'), AuthGuard)
   async removeBg(
     @Body() body: { imageUrl: string },
     @Headers() headers: Record<string, string>,

@@ -308,7 +308,7 @@ export class BillingService {
     this.expireAvailableCredits(input.userId);
     const params = input.params || {};
     const quote = this.quote(input.operation, params);
-    const requestHash = this.hash({ operation: input.operation, params });
+    const requestHash = this.hash(this.requestFingerprint(input.operation, params));
     const db = this.dbService.db;
 
     return db.transaction(() => {
@@ -589,11 +589,8 @@ export class BillingService {
 
       const quoted = Number(operation.quotedMicros);
       const finalMicros = outcome === "captured"
-        ? Math.max(0, Math.ceil(requestedFinalMicros ?? quoted))
+        ? Math.min(quoted, Math.max(0, Math.ceil(requestedFinalMicros ?? quoted)))
         : 0;
-      if (finalMicros > quoted) {
-        throw new ConflictException("Final charge cannot exceed the reserved quote");
-      }
 
       const now = new Date().toISOString();
       const allocations = db.query(`
@@ -812,6 +809,18 @@ export class BillingService {
   private taskError(data: unknown): string | undefined {
     const parsed = this.parseJson(data);
     return parsed?.error ? String(parsed.error) : undefined;
+  }
+
+  private requestFingerprint(
+    operation: BillingOperationType,
+    params: BillingQuoteParams,
+  ): Record<string, unknown> {
+    return {
+      operation,
+      quote: this.quoteContext(params),
+      prompt: typeof params.prompt === "string" ? params.prompt : undefined,
+      source: typeof params.source === "string" ? params.source : undefined,
+    };
   }
 
   private quoteContext(params: BillingQuoteParams): Record<string, unknown> {

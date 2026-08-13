@@ -21,6 +21,7 @@ import {
   PointerEvent,
 } from "leafer-ui";
 import { applyImagePaintMode, createFitImage } from "@/utils/leaferImage";
+import { features } from "@/config";
 
 // Suppress EventCreator repeat warnings from plugins
 Debug.showWarn = false;
@@ -655,7 +656,7 @@ export function useCanvas(
 
     // Listen to Ctrl+Left Click to send element to agent dialogue panel as reference image
     app.on(PointerEvent.TAP, (e: PointerEvent) => {
-      if (e.ctrlKey || e.metaKey) {
+      if (features.agent && (e.ctrlKey || e.metaKey)) {
         const target = e.target as any;
         const invalidTags = new Set([
           "Leafer",
@@ -1665,6 +1666,7 @@ export function useCanvas(
   });
 
   const addImageGenNode = (posX?: number, posY?: number) => {
+    if (!features.imageGen) return;
     const app = canvasApp.value;
     if (!app?.tree) return;
 
@@ -1719,6 +1721,7 @@ export function useCanvas(
   };
 
   const addVideoGenNode = (posX?: number, posY?: number) => {
+    if (!features.videoGen) return;
     const app = canvasApp.value;
     if (!app?.tree) return;
 

@@ -1,5 +1,6 @@
 import request from "./request";
 import type { AgentPlan } from "@/types/agent";
+import { features } from "@/config";
 
 export { API_BASE_URL } from "./request";
 
@@ -243,6 +244,9 @@ export async function generateImage(
 export async function generateImage(
   req: GenerateImageRequest,
 ): Promise<GenerateImageResponse> {
+  if (!features.imageGen) {
+    throw new Error("图片生成功能已关闭");
+  }
   const payload: any = {
     prompt: req.prompt,
     model: req.model,
@@ -288,6 +292,9 @@ export async function generateVideo(
     watermark?: string;
   }
 ): Promise<any> {
+  if (!features.videoGen) {
+    throw new Error("视频生成功能已关闭");
+  }
   const payload: any = {
     prompt: req.prompt,
     model: req.model,
@@ -512,6 +519,9 @@ export interface TaskResponse {
 }
 
 export async function removeBg(imageUrl: string): Promise<TaskResponse> {
+  if (!features.removeBg) {
+    throw new Error("背景移除功能已关闭");
+  }
   const res = await request.post<TaskResponse>("/remove-bg", { imageUrl });
   return res.data;
 }

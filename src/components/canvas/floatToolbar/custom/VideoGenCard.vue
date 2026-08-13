@@ -150,7 +150,7 @@
         :loading="isGenerating"
         @click="handleGenerate"
         :label="isGenerating ? '生成中' : '生成'"
-        :disabled="!promptText.trim()"
+        :disabled="!features.videoGen || !promptText.trim()"
       >
       </Button>
     </div>
@@ -188,6 +188,7 @@ import Textarea from "primevue/textarea";
 import Button from "primevue/button";
 import ModelSelector from "@/components/ModelSelector.vue";
 import { generateVideo, getVideoModelOptions, type VideoModelOptionsResponse } from "@/utils/api";
+import { features } from "@/config";
 import { ref, watch, type PropType, onUnmounted, computed } from "vue";
 import type { ToolbarChangePayload, ToolbarTarget } from "../types";
 
@@ -458,7 +459,7 @@ watch([selectedModel, selectedSize, selectedSeconds, refImage, refTailImage], ()
 });
 
 const handleGenerate = async () => {
-  if (!promptText.value.trim() || isGenerating.value) return;
+  if (!features.videoGen || !promptText.value.trim() || isGenerating.value) return;
 
   isGenerating.value = true;
   errorMessage.value = "";

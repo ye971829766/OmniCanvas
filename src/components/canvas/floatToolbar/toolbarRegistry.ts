@@ -12,6 +12,7 @@ import ImageGenTool from "./custom/ImageGenTool.vue";
 import RemoveBgTool from "./custom/RemoveBgTool.vue";
 import UpscaleTool from "./custom/UpscaleTool.vue";
 import EraserTool from "./custom/EraserTool.vue";
+import { features } from "@/config";
 
 const isEditableNumber = (key: string) => {
   return (target: ToolbarTarget) => typeof target[key] !== "undefined";
@@ -331,7 +332,22 @@ export const toolbarRegistry: Record<string, ToolbarItem[]> = {
   VideoGen: videoGenTools,
 };
 
+function isToolbarItemEnabled(item: ToolbarItem): boolean {
+  if (item.type === "custom" && item.key === "removeBg") return features.removeBg;
+  if (item.type === "custom" && item.key === "imageGen") return features.imageGen;
+  return true;
+}
+
 export const getToolbarItems = (target?: ToolbarTarget) => {
   if (!target?.tag) return [];
-  return toolbarRegistry[target.tag] ?? [];
+  const items = (toolbarRegistry[target.tag] ?? []).filter(isToolbarItemEnabled);
+  const compact: ToolbarItem[] = [];
+  for (const item of items) {
+    if (item.type === "divider" && (compact.length === 0 || compact[compact.length - 1]?.type === "divider")) {
+      continue;
+    }
+    compact.push(item);
+  }
+  if (compact[compact.length - 1]?.type === "divider") compact.pop();
+  return compact;
 };

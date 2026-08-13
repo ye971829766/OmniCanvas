@@ -8,13 +8,14 @@ import AgentPanel from "../components/AgentPanel.vue";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.vue";
 import { getWorkspaces } from "@/utils/api";
 import { useUser } from "@/composables/useUser";
+import { features } from "@/config";
 
 const route = useRoute();
 const router = useRouter();
 const { isLoggedIn } = useUser();
 
 const canvasRef = ref<any>(null);
-const agentPanelCollapsed = ref(false);
+const agentPanelCollapsed = ref(!features.agent);
 const activeWorkspaceId = ref<string | number | null>(null);
 const workspaces = ref<any[]>([]);
 const isInitializing = ref(true);
@@ -46,6 +47,7 @@ const validateAndSetWorkspace = async () => {
 };
 
 const handleOpenAgentPanel = () => {
+  if (!features.agent) return;
   agentPanelCollapsed.value = false;
 };
 
@@ -115,7 +117,7 @@ watch(activeWorkspaceId, (newId) => {
   <div
     class="board-shell w-full h-full relative flex"
     :class="{
-      'agent-panel-open': Boolean(activeWorkspaceId) && !agentPanelCollapsed,
+      'agent-panel-open': features.agent && Boolean(activeWorkspaceId) && !agentPanelCollapsed,
     }"
   >
     <ConfirmDialog></ConfirmDialog>
@@ -162,7 +164,7 @@ watch(activeWorkspaceId, (newId) => {
       </div>
 
       <AgentPanel
-        v-if="activeWorkspaceId && canvasRef?.canvasApp"
+        v-if="features.agent && activeWorkspaceId && canvasRef?.canvasApp"
         v-model:collapsed="agentPanelCollapsed"
         :workspace-id="activeWorkspaceId"
         :canvas-app="canvasRef.canvasApp"

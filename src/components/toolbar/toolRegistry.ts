@@ -12,6 +12,7 @@ import MarkerPanel from "./panels/MarkerPanel.vue";
 import TextPanel from "./panels/TextPanel.vue";
 import ShapePanel from "./panels/ShapePanel.vue";
 import { selectedShapeType } from "../../composables/useShapeState";
+import { features } from "@/config";
 
 export interface ToolDefinition {
   name: string;
@@ -83,20 +84,28 @@ export const defaultTools = computed<ToolDefinition[]>(() => [
     panel: markRaw(ShapePanel),
     panelWidth: "480px",
   },
-  {
-    name: "image-gen",
-    shortcut: "i",
-    theme: "blue",
-    icon: "icon-tupianshengcheng",
-    label: "图片生成器",
-  },
-  {
-    name: "video-gen",
-    shortcut: "o",
-    theme: "blue",
-    icon: "icon-a-shipinshengchengshipinzhizuoshipinchuangjianshipinshengchengzhizuoshipinhechengshipinshengchengchuangzuoyingpianshengchengyingpianzhizuoyingpianchuangjianshi",
-    label: "视频生成器",
-  },
+  ...(features.imageGen
+    ? [
+        {
+          name: "image-gen",
+          shortcut: "i",
+          theme: "blue",
+          icon: "icon-tupianshengcheng",
+          label: "图片生成器",
+        } satisfies ToolDefinition,
+      ]
+    : []),
+  ...(features.videoGen
+    ? [
+        {
+          name: "video-gen",
+          shortcut: "o",
+          theme: "blue",
+          icon: "icon-a-shipinshengchengshipinzhizuoshipinchuangjianshipinshengchengzhizuoshipinhechengshipinshengchengchuangzuoyingpianshengchengyingpianzhizuoyingpianchuangjianshi",
+          label: "视频生成器",
+        } satisfies ToolDefinition,
+      ]
+    : []),
   {
     name: "link",
     shortcut: "l",

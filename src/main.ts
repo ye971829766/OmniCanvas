@@ -13,6 +13,7 @@ import router from '@/router';
 import { ConfirmationService } from 'primevue';
 import ToastService from 'primevue/toastservice';
 import { initTheme } from '@/composables/useTheme';
+import { loadFeatureFlags } from '@/config';
 
 // Apply saved / OS theme before mount to avoid a flash of the wrong theme.
 initTheme();
@@ -187,4 +188,7 @@ app.use(PrimeVue, {
 app.use(router);
 app.use(ConfirmationService);
 app.use(ToastService);
-app.mount('#app');
+
+void loadFeatureFlags().finally(() => {
+  app.mount('#app');
+});

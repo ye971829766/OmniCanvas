@@ -89,6 +89,7 @@
       <Button
         class="generate-pill"
         :loading="isGenerating"
+        :disabled="!features.imageGen || isGenerating"
         @click="handleGenerate"
         :label="isGenerating ? '生成中' : '生成'"
       >
@@ -119,6 +120,7 @@ import Popover from "primevue/popover";
 import ModelSelector from "@/components/ModelSelector.vue";
 import { type ImageModelOptionsResponse } from "@/utils/api";
 import { startImageGenBatch } from "@/utils/startImageGenBatch";
+import { features } from "@/config";
 import { ref, watch, type PropType, onUnmounted, computed } from "vue";
 import type { ToolbarChangePayload, ToolbarTarget } from "../types";
 
@@ -320,7 +322,7 @@ watch(referenceImages, async (newFiles) => {
 });
 
 const handleGenerate = async () => {
-  if (!promptText.value.trim() || isGenerating.value) return;
+  if (!features.imageGen || !promptText.value.trim() || isGenerating.value) return;
 
   isGenerating.value = true;
   errorMessage.value = "";

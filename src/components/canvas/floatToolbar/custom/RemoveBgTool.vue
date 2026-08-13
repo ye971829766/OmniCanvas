@@ -3,7 +3,7 @@
     type="button"
     class="remove-bg-trigger"
     title="去背景"
-    :disabled="disabled || isProcessing"
+    :disabled="!features.removeBg || disabled || isProcessing"
     @click="startRemoveBg"
   >
     <Loader2 v-if="isProcessing" class="animate-spin" :size="18" />
@@ -31,6 +31,7 @@ import { computed, toRaw, type PropType } from "vue";
 import { Loader2 } from "lucide-vue-next";
 import { Image } from "leafer-ui";
 import { removeBg } from "@/utils/api";
+import { features } from "@/config";
 import type {
   ToolbarChangePayload,
   ToolbarItem,
@@ -69,6 +70,7 @@ const isProcessing = computed(
 );
 
 const startRemoveBg = async () => {
+  if (!features.removeBg) return;
   const imageUrl = props.target.url;
   const parent = props.target.parent;
   if (!imageUrl) {

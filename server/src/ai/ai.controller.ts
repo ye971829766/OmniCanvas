@@ -19,6 +19,9 @@ import { AiService } from './ai.service';
 import type { GenerateImageJsonRequest, GenerateVideoJsonRequest } from '../types';
 import { AuthGuard } from '../auth/auth.guard';
 import { BillingService } from '../billing/billing.service';
+import { FeatureEnabledGuard } from '../utils/feature-enabled.guard';
+import { isImageGenEnabled, isVideoGenEnabled } from '../utils/feature-flags';
+import { estimatePromptTokenReserve } from '../billing/token-estimate';
 
 @Controller()
 export class AiController {
@@ -67,7 +70,7 @@ export class AiController {
     @Req() req: Request,
   ) {
     const user = (req as any).user;
-    const promptUpperBound = Buffer.byteLength(JSON.stringify(body?.messages || []), "utf8") + 2_048;
+    const promptUpperBound = estimatePromptTokenReserve(body?.messages || []);
     const completionUpperBound = Math.max(1, Math.min(32_768, Number(body?.maxTokens || 4_096)));
     const operation = this.billing.reserve({
       userId: user.sub,
@@ -89,12 +92,25 @@ export class AiController {
         username: user.username,
       });
       const usage: any = result.usage || {};
-      const actual = this.billing.quoteForOperation(operation.id, {
-        model: result.model || body?.model,
-        promptTokens: usage.prompt_tokens || usage.inputTokens || 0,
-        completionTokens: usage.completion_tokens || usage.outputTokens || 0,
-      });
-      this.billing.capture(operation.id, actual.amountMicros);
+      const promptTokens = Number(usage.prompt_tokens || usage.inputTokens || 0);
+      const completionTokens = Number(usage.completion_tokens || usage.outputTokens || 0);
+      try {
+        if (promptTokens > 0 || completionTokens > 0) {
+          const actual = this.billing.quoteForOperation(operation.id, {
+            model: result.model || body?.model,
+            promptTokens,
+            completionTokens,
+          });
+          this.billing.capture(operation.id, actual.amountMicros);
+        } else {
+          this.billing.capture(operation.id);
+        }
+      } catch (billingError: any) {
+        console.error(
+          `Failed to capture chat billing for ${operation.id}:`,
+          billingError?.message || billingError,
+        );
+      }
       return result;
     } catch (error: any) {
       this.billing.release(operation.id, error?.message || "Chat request failed");
@@ -103,7 +119,7 @@ export class AiController {
   }
 
   @Post("generate-image")
-  @UseGuards(AuthGuard)
+  @UseGuards(FeatureEnabledGuard(isImageGenEnabled, "图片生成功能已关闭"), AuthGuard)
   async generateImage(
     @Body() body: GenerateImageJsonRequest,
     @Headers() headers: Record<string, string>,
@@ -121,7 +137,7 @@ export class AiController {
   }
 
   @Post("generate-video")
-  @UseGuards(AuthGuard)
+  @UseGuards(FeatureEnabledGuard(isVideoGenEnabled, "视频生成功能已关闭"), AuthGuard)
   async generateVideo(
     @Body() body: GenerateVideoJsonRequest,
     @Headers() headers: Record<string, string>,

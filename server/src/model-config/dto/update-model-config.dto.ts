@@ -37,4 +37,13 @@ export class UpdateModelConfigDto {
     imageModel?: string;
     inpaintModel?: string;
   };
+
+  @IsOptional()
+  @IsObject()
+  featureFlags?: {
+    agent?: boolean;
+    imageGen?: boolean;
+    videoGen?: boolean;
+    removeBg?: boolean;
+  };
 }

@@ -129,7 +129,7 @@
       <button
         class="agent-launcher-btn cursor-pointer flex items-center justify-center"
         title="打开 AI 助手"
-        v-show="agentPanelCollapsed"
+        v-show="features.agent && agentPanelCollapsed"
         @click="emit('toggle-agent')"
         :style="{
           transition:
@@ -169,6 +169,7 @@
       <!-- Blank canvas -->
       <template v-if="contextMenuKind === 'empty'">
         <div
+          v-if="features.imageGen"
           class="custom-context-menu-item"
           @click="
             handleItemClick(() =>
@@ -183,6 +184,7 @@
           <span>图片生成</span>
         </div>
         <div
+          v-if="features.videoGen"
           class="custom-context-menu-item"
           @click="
             handleItemClick(() =>
@@ -221,6 +223,7 @@
       <!-- Image node -->
       <template v-else-if="contextMenuKind === 'image'">
         <div
+          v-if="features.imageGen"
           class="custom-context-menu-item"
           @click="handleItemClick(handleImageToImage)"
         >
@@ -231,6 +234,7 @@
           <span>图生图</span>
         </div>
         <div
+          v-if="features.videoGen"
           class="custom-context-menu-item"
           @click="handleItemClick(handleImageToVideo)"
         >
@@ -240,7 +244,10 @@
           ></i>
           <span>图生视频</span>
         </div>
-        <div class="custom-context-menu-sep"></div>
+        <div
+          v-if="features.imageGen || features.videoGen"
+          class="custom-context-menu-sep"
+        ></div>
         <div
           class="custom-context-menu-item"
           @click="handleItemClick(() => copy())"
@@ -383,6 +390,7 @@ import {
   onUnmounted,
 } from "vue";
 import logoImg from "@/assets/logo.png";
+import { features } from "@/config";
 import { useToast } from "primevue/usetoast";
 import CanvasBackground from "@/components/canvas/CanvasBackground.vue";
 import CanvasLoader from "@/components/canvas/CanvasLoader.vue";
@@ -477,10 +485,10 @@ const {
 
 watch(activeTool, (newTool) => {
   if (newTool === "image-gen") {
-    addImageGenNode();
+    if (features.imageGen) addImageGenNode();
     activeTool.value = "select";
   } else if (newTool === "video-gen") {
-    addVideoGenNode();
+    if (features.videoGen) addVideoGenNode();
     activeTool.value = "select";
   }
 });
@@ -800,6 +808,7 @@ const getElementBase64 = async (el: any): Promise<string> => {
 };
 
 const handleImageToImage = async () => {
+  if (!features.imageGen) return;
   const el = selectTarget.value;
   if (!el) return;
 
@@ -864,6 +873,7 @@ const handleImageToImage = async () => {
 };
 
 const handleImageToVideo = async () => {
+  if (!features.videoGen) return;
   const el = selectTarget.value;
   if (!el) return;
 

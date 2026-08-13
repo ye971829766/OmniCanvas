@@ -25,6 +25,8 @@ function shouldBypassTunnel(config: InternalAxiosRequestConfig): boolean {
   if (path.includes("/stream")) return true;
   // Public files
   if (path.startsWith("/files/")) return true;
+  // Public feature flags (read before auth)
+  if (path === "/features" || path.endsWith("/features")) return true;
   // Webhooks never from browser
   if (path.startsWith("/billing/webhooks/")) return true;
   // Already the tunnel
